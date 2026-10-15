@@ -65,14 +65,14 @@ fun IconNameDialog(
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
-    var icon by remember { mutableStateOf(initialIcon) }
+    var icon by remember { mutableStateOf(if (initialIcon in atlas.bookmarkIcons) initialIcon else "pin") }
     val images = rememberBookmarkImages(atlas)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column {
-                TextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+                TextField(value = name, onValueChange = { name = it.take(app.minemaps.data.SavedPlaceNames.MAX_LENGTH) }, singleLine = true, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(12.dp))
                 LazyVerticalGrid(columns = GridCells.Adaptive(48.dp), modifier = Modifier.fillMaxWidth().height(232.dp)) {
                     items(atlas.bookmarkIcons) { n ->
@@ -89,7 +89,7 @@ fun IconNameDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(name.trim(), icon) }) { Text(confirmLabel) } },
+        confirmButton = { TextButton(onClick = { onConfirm(app.minemaps.data.SavedPlaceNames.clean(name), icon) }) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

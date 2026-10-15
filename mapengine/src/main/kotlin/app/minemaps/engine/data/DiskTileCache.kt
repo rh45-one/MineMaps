@@ -28,26 +28,47 @@ class DiskTileCache(
         val file = fileFor(name)
         return try {
             val raw = file.readBytes()
-            if (raw.size < HEADER) return null
-            val ts = ByteBuffer.wrap(raw, 0, HEADER).getLong()
+            if (raw.size < HEADER) {
+                file.delete()
+                return null
+            }
+            val buf = ByteBuffer.wrap(raw, 0, HEADER)
+            val ts = buf.getLong()
+            val len = buf.getInt()
+            if (len < 0 || len != raw.size - HEADER) {
+                synchronized(lock) {
+                    if (file.delete() && totalBytes >= 0) totalBytes = maxOf(0L, totalBytes - raw.size)
+                }
+                return null
+            }
             file.setLastModified(clock())
             Entry(raw.copyOfRange(HEADER, raw.size), ts)
         } catch (e: IOException) {
             null
+        } catch (e: RuntimeException) {
+            null
         }
     }
 
+    /** Best effort: any failure (disk full, read-only dir, ...) is swallowed and leaves no temp file behind. */
     fun put(name: String, bytes: ByteArray) {
         val file = fileFor(name)
         val tmp = File(dir, "${file.name}.${System.nanoTime()}.tmp")
-        val payload = ByteBuffer.allocate(HEADER + bytes.size).putLong(clock()).put(bytes).array()
-        synchronized(lock) {
-            ensureTotal()
-            val previous = if (file.exists()) file.length() else 0L
-            Files.write(tmp.toPath(), payload, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
-            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-            totalBytes += payload.size - previous
-            if (totalBytes > maxBytes) evict()
+        try {
+            val payload = ByteBuffer.allocate(HEADER + bytes.size).putLong(clock()).putInt(bytes.size).put(bytes).array()
+            synchronized(lock) {
+                ensureTotal()
+                dir.mkdirs()
+                val previous = if (file.exists()) file.length() else 0L
+                Files.write(tmp.toPath(), payload, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
+                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                totalBytes += payload.size - previous
+                if (totalBytes > maxBytes) evict()
+            }
+        } catch (e: IOException) {
+            tmp.delete()
+        } catch (e: RuntimeException) {
+            tmp.delete()
         }
     }
 
@@ -81,7 +102,7 @@ class DiskTileCache(
     private fun fileFor(name: String): File = File(dir, name.replace(Regex("[^A-Za-z0-9._-]"), "_") + EXT)
 
     private companion object {
-        const val HEADER = 8
+        const val HEADER = 12
         const val EXT = ".tile"
     }
 }

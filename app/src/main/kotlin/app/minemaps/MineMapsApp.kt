@@ -19,6 +19,18 @@ import kotlinx.coroutines.async
 import okhttp3.OkHttpClient
 
 class AppContainer(app: Application) {
+    private val renderers = java.util.Collections.newSetFromMap(java.util.WeakHashMap<app.minemaps.map.MapRenderer, Boolean>())
+
+    fun register(renderer: app.minemaps.map.MapRenderer) {
+        synchronized(renderers) { renderers.add(renderer) }
+    }
+
+    /** Clears the caches of every live renderer (called on low-memory callbacks). */
+    fun trimMemory() {
+        val live = synchronized(renderers) { renderers.toList() }
+        live.forEach { it.trimMemory() }
+    }
+
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val httpClient: Deferred<OkHttpClient> = appScope.async(Dispatchers.IO) { OkHttpClient() }
     val engine: Deferred<MapEngine> = appScope.async(Dispatchers.IO) { MapEngine(app, httpClient.await()) }
@@ -32,6 +44,16 @@ class AppContainer(app: Application) {
 class MineMapsApp : Application() {
     lateinit var container: AppContainer
         private set
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) container.trimMemory()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        container.trimMemory()
+    }
 
     override fun onCreate() {
         super.onCreate()

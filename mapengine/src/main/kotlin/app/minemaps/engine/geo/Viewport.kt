@@ -17,6 +17,11 @@ class Viewport(
     val heightPx: Int,
     val pixelRatio: Float,
 ) {
+    init {
+        require(centerX.isFinite() && centerY.isFinite() && zoom.isFinite()) { "viewport centre/zoom must be finite" }
+        require(widthPx > 0 && heightPx > 0 && pixelRatio.isFinite() && pixelRatio > 0f) { "viewport size/ratio must be positive" }
+    }
+
     val worldSizePx: Double get() = 256.0 * pixelRatio * 2.0.pow(zoom)
 
     fun worldToScreenX(wx: Double): Double = widthPx / 2.0 + (wx - centerX) * worldSizePx

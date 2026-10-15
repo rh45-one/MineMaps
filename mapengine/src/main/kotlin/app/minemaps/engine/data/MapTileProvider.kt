@@ -10,7 +10,9 @@ import app.minemaps.engine.raster.BlockGrid
 import app.minemaps.engine.raster.GridRasterizer
 import app.minemaps.engine.render.TileCompositor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -68,14 +70,39 @@ class Timings {
 class MapTileProvider(
     private val repo: TileRepository,
     atlas: TextureAtlas,
-    private val scope: CoroutineScope,
+    parentScope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
     private val maxAttempts: Int = MAX_ATTEMPTS,
     private val onTileReady: (key: TileKey, night: Boolean, argb: IntArray) -> Unit,
 ) {
     private data class RenderKey(val tile: TileKey, val night: Boolean)
 
+    private val scope: CoroutineScope = parentScope + CoroutineExceptionHandler { _, e ->
+        if (!loggedUncaught) {
+            loggedUncaught = true
+            System.err.println("MapTileProvider: swallowed uncaught ${e.javaClass.simpleName}")
+        }
+    }
+
+    @Volatile
+    private var loggedUncaught = false
+
     var onLabelsReady: ((TileKey) -> Unit)? = null
+
+    /** Called (once per occurrence) when an OutOfMemoryError was caught; platform code should trim its own caches. */
+    @Volatile
+    var onLowMemory: (() -> Unit)? = null
+
+    /** Drops the provider's internal caches (block grids and label results). */
+    fun trimMemory() {
+        grids.clear()
+        labelCache.clear()
+    }
+
+    private fun handleOutOfMemory() {
+        trimMemory()
+        onLowMemory?.invoke()
+    }
 
     val timings = Timings()
 
@@ -166,7 +193,11 @@ class MapTileProvider(
                             return@launch
                         }
                         delay(backoffMs(attempt++))
-                    } catch (e: Exception) {
+                    } catch (e: OutOfMemoryError) {
+                        handleOutOfMemory()
+                        synchronized(lock) { failedLabels[vtKey] = clock() + IO_FAILURE_WINDOW_MS }
+                        return@launch
+                    } catch (e: Throwable) {
                         synchronized(lock) { failedLabels[vtKey] = clock() + ERROR_FAILURE_WINDOW_MS }
                         return@launch
                     }
@@ -201,7 +232,11 @@ class MapTileProvider(
                     return
                 }
                 delay(backoffMs(attempt++))
-            } catch (e: Exception) {
+            } catch (e: OutOfMemoryError) {
+                handleOutOfMemory()
+                synchronized(lock) { failedTiles[rk] = clock() + IO_FAILURE_WINDOW_MS }
+                return
+            } catch (e: Throwable) {
                 synchronized(lock) { failedTiles[rk] = clock() + ERROR_FAILURE_WINDOW_MS }
                 return
             }

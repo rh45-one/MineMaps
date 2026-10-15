@@ -101,7 +101,7 @@ class CarMapController(
     init {
         following.value = container.location.hasPermission()
         scope.launch {
-            val saved = withContext(Dispatchers.IO) { container.mapState.current ?: container.mapState.load() }
+            val saved = withContext(Dispatchers.IO) { container.mapState.current ?: container.mapState.load() }?.let { Camera.sanitized(it.lat, it.lon, it.zoom) }
             if (!cameraLoaded && saved != null) {
                 cx = Mercator.lonToX(saved.lon)
                 cy = Mercator.latToY(saved.lat)
@@ -125,6 +125,7 @@ class CarMapController(
             val density = dpi / 160f
             val r = MapRenderer(engine, RenderProfile.CAR, density, max(1f, density), texturePack) { requestRender() }
             r.arrowColor = arrowColor
+            container.register(r)
             renderer = r
             launch { r.networkState.collect { networkState.value = it } }
             requestRender()
@@ -179,7 +180,7 @@ class CarMapController(
     private fun onLocation(state: LocationState) {
         val first = !gotFix && state.location != null
         location = state
-        val l = state.location
+        val l = state.location?.takeIf { it.latitude.isFinite() && it.longitude.isFinite() }
         if (l != null) {
             gotFix = true
             if (following.value) {
@@ -195,6 +196,7 @@ class CarMapController(
     private fun wrap(x: Double) = x - Math.floor(x)
 
     private fun animateTo(tx: Double, ty: Double, tz: Double, durationMs: Long = 500L) {
+        if (!tx.isFinite() || !ty.isFinite() || !tz.isFinite()) return
         var dx = tx - cx
         if (dx > 0.5) dx -= 1.0 else if (dx < -0.5) dx += 1.0
         anim = Anim(System.nanoTime(), durationMs * 1_000_000L, cx, cy, zoom, cx + dx, ty.coerceIn(0.0, 1.0), tz.coerceIn(MIN_ZOOM, MAX_ZOOM))
@@ -220,6 +222,7 @@ class CarMapController(
     }
 
     override fun flyTo(lat: Double, lon: Double) {
+        if (!lat.isFinite() || !lon.isFinite()) return
         following.value = false
         animateTo(Mercator.lonToX(lon), Mercator.latToY(lat), FOLLOW_ZOOM, 700L)
     }
@@ -257,6 +260,7 @@ class CarMapController(
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
+        if (!distanceX.isFinite() || !distanceY.isFinite()) return
         following.value = false
         stopMotion()
         val size = worldSize()
@@ -266,6 +270,7 @@ class CarMapController(
     }
 
     override fun onFling(velocityX: Float, velocityY: Float) {
+        if (!velocityX.isFinite() || !velocityY.isFinite()) return
         following.value = false
         anim = null
         flingVx = -velocityX.toDouble()
@@ -274,6 +279,7 @@ class CarMapController(
     }
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
+        if (!scaleFactor.isFinite() || scaleFactor <= 0f || focusX.isNaN() || focusY.isNaN()) return
         anim = null
         val newZoom = (zoom + ln(scaleFactor.toDouble()) / ln(2.0)).coerceIn(MIN_ZOOM, MAX_ZOOM)
         if (focusX < 0f || focusY < 0f) {

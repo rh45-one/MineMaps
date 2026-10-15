@@ -68,4 +68,13 @@ class ViewportTest {
         val tiles = Viewport(0.5, 0.5, 0.0, 1000, 256, 1f).visibleTiles(0)
         assertEquals(listOf(TileKey(0, 0, 0)), tiles)
     }
+
+    @Test
+    fun nonFiniteOrEmptyViewportsAreRejected() {
+        kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(Double.NaN, 0.5, 3.0, 100, 100, 1f) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, Double.POSITIVE_INFINITY, 3.0, 100, 100, 1f) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, 0.5, Double.NaN, 100, 100, 1f) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, 0.5, 3.0, 0, 100, 1f) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, 0.5, 3.0, 100, 100, 0f) }
+    }
 }

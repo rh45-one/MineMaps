@@ -110,7 +110,9 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 val before = viewport().screenToWorld(lastFocusX.toDouble(), lastFocusY.toDouble())
-                zoom = (zoom + ln(detector.scaleFactor.toDouble()) / ln(2.0)).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                val factor = detector.scaleFactor.toDouble()
+                if (!factor.isFinite() || factor <= 0.0) return true
+                zoom = (zoom + ln(factor) / ln(2.0)).coerceIn(MIN_ZOOM, MAX_ZOOM)
                 placeWorldAt(before.x, before.y, detector.focusX.toDouble(), detector.focusY.toDouble())
                 lastFocusX = detector.focusX
                 lastFocusY = detector.focusY
@@ -126,11 +128,14 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
 
     fun viewport(): Viewport = Viewport(centerX, centerY, zoom, max(width, 1), max(height, 1), renderer.pixelRatio)
 
+    private fun finite(vararg v: Double) = v.all { it.isFinite() }
+
     fun setCamera(camera: Camera) {
+        val safe = Camera.sanitized(camera.lat, camera.lon, camera.zoom) ?: return
         cancelAnimation()
-        centerX = Mercator.lonToX(camera.lon)
-        centerY = Mercator.latToY(camera.lat)
-        zoom = camera.zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
+        centerX = Mercator.lonToX(safe.lon)
+        centerY = Mercator.latToY(safe.lat)
+        zoom = safe.zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
         cameraChanged()
     }
 
@@ -176,6 +181,7 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     fun zoomAround(sx: Float, sy: Float, target: Double) = animateZoomAround(sx, sy, target)
 
     private fun animateZoomAround(sx: Float, sy: Float, target: Double) {
+        if (!finite(sx.toDouble(), sy.toDouble(), target)) return
         cancelAnimation()
         val z0 = zoom
         val z1 = target.coerceIn(MIN_ZOOM, MAX_ZOOM)
@@ -187,10 +193,12 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     }
 
     fun animateTo(lat: Double, lon: Double, targetZoom: Double = zoom, durationMs: Long = 700L) {
+        if (!finite(lat, lon, targetZoom)) return
         cancelAnimation()
         val x0 = centerX
         val y0 = centerY
         val z0 = zoom
+        val lat = lat.coerceIn(-Camera.MAX_LAT, Camera.MAX_LAT)
         var dx = Mercator.lonToX(lon) - x0
         if (dx > 0.5) dx -= 1.0 else if (dx < -0.5) dx += 1.0
         val dy = Mercator.latToY(lat) - y0
@@ -203,7 +211,7 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     }
 
     fun follow(lat: Double, lon: Double) {
-        if (width == 0 || animator != null) return
+        if (width == 0 || animator != null || !finite(lat, lon)) return
         val target = Viewport(Mercator.lonToX(lon), Mercator.latToY(lat), zoom, width, height, renderer.pixelRatio)
         val screen = viewport().worldToScreen(target.centerX, target.centerY)
         val off = max(abs(screen.x - width / 2.0), abs(screen.y - height / 2.0))
@@ -212,6 +220,7 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     }
 
     fun fitBounds(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double, maxZoom: Double = 19.0) {
+        if (!finite(minLat, minLon, maxLat, maxLon, maxZoom) || width == 0 || height == 0) return
         val x0 = Mercator.lonToX(minLon)
         val x1 = Mercator.lonToX(maxLon)
         val y0 = Mercator.latToY(maxLat)

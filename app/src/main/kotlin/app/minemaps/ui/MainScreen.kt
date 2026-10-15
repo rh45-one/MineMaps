@@ -207,7 +207,10 @@ private fun MapScreen(
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val renderer = remember { MapRenderer(engine, RenderProfile.PHONE, density, null, settings.texturePack) { controller.view?.requestRedraw() } }
-    DisposableEffect(renderer) { onDispose { renderer.close() } }
+    DisposableEffect(renderer) {
+        container.register(renderer)
+        onDispose { renderer.close() }
+    }
     controller.renderer = renderer
 
     val saved by vm.savedPlaces.collectAsStateWithLifecycle()
@@ -293,6 +296,10 @@ private fun MapScreen(
             }
             onResult(r, lat, lon)
         }
+    }
+
+    LaunchedEffect(Unit) {
+        vm.messages.collect { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }
 
     val bottomPad = if (card != null) 150.dp else 16.dp

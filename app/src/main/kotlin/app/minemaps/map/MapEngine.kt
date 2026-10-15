@@ -50,11 +50,13 @@ class MapEngine(context: Context, val client: OkHttpClient) {
         return atlas
     }
 
-    private fun loadTypeface(context: Context): Typeface {
+    private fun loadTypeface(context: Context): Typeface = try {
         val target = File(context.filesDir, "Monocraft.ttf")
         val bytes = EngineResources.fontStream().use { it.readBytes() }
         if (!target.exists() || target.length() != bytes.size.toLong()) target.writeBytes(bytes)
-        return Typeface.createFromFile(target)
+        Typeface.createFromFile(target)
+    } catch (e: Exception) {
+        Typeface.MONOSPACE
     }
 
     fun clearCache() = cache.clear()

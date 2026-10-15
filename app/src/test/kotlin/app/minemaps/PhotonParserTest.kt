@@ -58,4 +58,50 @@ class PhotonParserTest {
         assertEquals(0, PhotonParser.parse("""{"features":[]}""").size)
         assertEquals(0, PhotonParser.parse("""{}""").size)
     }
+
+    private fun feature(coords: String, extent: String? = null) =
+        """{"features":[{"geometry":{"coordinates":$coords},"properties":{"name":"x"${if (extent != null) ",\"extent\":$extent" else ""}}}]}"""
+
+    @Test
+    fun invalidCoordinatesAreDropped() {
+        assertEquals(0, PhotonParser.parse(feature("[1e999, 2]")).size)
+        assertEquals(0, PhotonParser.parse(feature("[2, -1e999]")).size)
+        assertEquals(0, PhotonParser.parse(feature("[2, 91]")).size)
+        assertEquals(0, PhotonParser.parse(feature("[2, -90.5]")).size)
+        assertEquals(0, PhotonParser.parse(feature("[180.5, 10]")).size)
+        assertEquals(0, PhotonParser.parse(feature("[-181, 10]")).size)
+        assertEquals(0, PhotonParser.parse(feature("[\"a\", 10]")).size)
+        assertEquals(1, PhotonParser.parse(feature("[180, 90]")).size)
+        assertEquals(1, PhotonParser.parse(feature("[-180, -90]")).size)
+    }
+
+    @Test
+    fun extentsAreValidatedAndNormalised() {
+        val swapped = PhotonParser.parse(feature("[1, 2]", "[10.0, 20.0, 5.0, 30.0]")).single().extent!!
+        assertEquals(listOf(5.0, 30.0, 10.0, 20.0), swapped.toList())
+        assertNull(PhotonParser.parse(feature("[1, 2]", "[1e999, 20.0, 5.0, 30.0]")).single().extent)
+        assertNull(PhotonParser.parse(feature("[1, 2]", "[10.0, 120.0, 5.0, 30.0]")).single().extent)
+        assertNull(PhotonParser.parse(feature("[1, 2]", "[10.0, 20.0, 500.0, 30.0]")).single().extent)
+        assertNull(PhotonParser.parse(feature("[1, 2]", "[10.0, 20.0]")).single().extent)
+    }
+
+    private fun clientReturning(onRequest: (okhttp3.Request) -> okhttp3.Response) =
+        okhttp3.OkHttpClient.Builder().addInterceptor { onRequest(it.request()) }.build()
+
+    private fun ok(req: okhttp3.Request, body: String) = okhttp3.Response.Builder().request(req).protocol(okhttp3.Protocol.HTTP_1_1)
+        .code(200).message("ok").body(okhttp3.ResponseBody.create(null, body.toByteArray())).build()
+
+    @Test
+    fun queryIsCappedAndOversizedResponsesRejected() = kotlinx.coroutines.runBlocking<Unit> {
+        var seenUrl: okhttp3.HttpUrl? = null
+        val client = clientReturning { req -> seenUrl = req.url; ok(req, """{"features":[]}""") }
+        app.minemaps.search.PhotonClient({ client }, "https://photon.test", "ua").search("q".repeat(5000), 1.0, 2.0, "en")
+        assertEquals(app.minemaps.search.PhotonClient.MAX_QUERY_CHARS, seenUrl!!.queryParameter("q")!!.length)
+        assertEquals("en", seenUrl!!.queryParameter("lang"))
+        val big = clientReturning { req -> ok(req, """{"features":[],"pad":"${"x".repeat(app.minemaps.search.PhotonClient.MAX_RESPONSE_BYTES.toInt() + 100)}"}""") }
+        kotlin.test.assertFailsWith<java.io.IOException> {
+            app.minemaps.search.PhotonClient({ big }, "https://photon.test", "ua").search("paris", null, null, null)
+        }
+        Unit
+    }
 }

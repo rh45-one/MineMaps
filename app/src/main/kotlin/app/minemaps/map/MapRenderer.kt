@@ -70,6 +70,7 @@ class MapRenderer(
                 onInvalidate()
             }
         }
+        p.onLowMemory = { evictHalf() }
         p.timings.rasterize.listener = { ms -> Log.d(PERF_TAG, "rasterize %.2f".format(ms)) }
         p.timings.compose.listener = { ms -> Log.d(PERF_TAG, "compose %.2f".format(ms)) }
         networkJob?.cancel()
@@ -175,8 +176,12 @@ class MapRenderer(
 
     private fun onTile(key: TileKey, night: Boolean, argb: IntArray, gen: Int) {
         if (gen != generation) return
-        val bmp = Bitmap.createBitmap(TILE, TILE, Bitmap.Config.RGB_565)
-        bmp.setPixels(argb, 0, TILE, 0, 0, TILE, TILE)
+        val bmp = try {
+            Bitmap.createBitmap(TILE, TILE, Bitmap.Config.RGB_565).also { it.setPixels(argb, 0, TILE, 0, 0, TILE, TILE) }
+        } catch (e: OutOfMemoryError) {
+            evictHalf()
+            return
+        }
         synchronized(bitmaps) {
             bitmaps.put(TileId(key, night, activePack), bmp)?.let { cacheBytes -= it.byteCount }
             cacheBytes += bmp.byteCount
@@ -189,6 +194,32 @@ class MapRenderer(
                 }
             }
         }
+        onInvalidate()
+    }
+
+    private fun evictHalf() {
+        synchronized(bitmaps) {
+            var toDrop = bitmaps.size / 2
+            val it = bitmaps.entries.iterator()
+            while (toDrop-- > 0 && it.hasNext()) {
+                cacheBytes -= it.next().value.byteCount
+                it.remove()
+            }
+        }
+    }
+
+    /** Called from the app on low-memory callbacks: drops tile bitmaps, label bitmaps and the provider's grid caches. */
+    fun trimMemory() {
+        synchronized(bitmaps) {
+            bitmaps.clear()
+            cacheBytes = 0
+        }
+        labelBitmaps.clear()
+        labelCacheBytes = 0
+        measureCache.clear()
+        provider.trimMemory()
+        lastLayout = null
+        lastLayoutKey = null
         onInvalidate()
     }
 
@@ -425,9 +456,11 @@ class MapRenderer(
     }
     private val oval = android.graphics.RectF()
 
+    private fun resolveIcon(name: String): String = if (atlas.icon(name) != null) name else "pin"
+
     /** Icon rectangle (left, top, right, bottom) so that the icon's anchor pixel sits on screen point (x, y). */
     private fun bookmarkRect(icon: String, x: Float, y: Float, size: Float, out: FloatArray) {
-        val a = atlas.anchor(icon)
+        val a = atlas.anchor(resolveIcon(icon))
         val f = size / 16f
         out[0] = x - a.x * f
         out[1] = y - a.y * f
@@ -459,9 +492,9 @@ class MapRenderer(
             val x = viewport.worldToScreenX(Mercator.lonToX(b.lon)).toFloat()
             val y = viewport.worldToScreenY(Mercator.latToY(b.lat)).toFloat()
             if (x < -size * 3 || y < -size * 3 || x > viewport.widthPx + size * 3 || y > viewport.heightPx + size * 3) continue
-            val bmp = iconBitmap(b.icon) ?: iconBitmap("pin") ?: continue
+            val bmp = iconBitmap(resolveIcon(b.icon)) ?: continue
             bookmarkRect(b.icon, x, y, size, r)
-            val baseY = if (atlas.anchor(b.icon) != Anchor(8, 8)) y else r[3] - size * 0.12f
+            val baseY = if (atlas.anchor(resolveIcon(b.icon)) != Anchor(8, 8)) y else r[3] - size * 0.12f
             oval.set(x - size * 0.34f, baseY - size * 0.07f, x + size * 0.34f, baseY + size * 0.09f)
             canvas.drawOval(oval, shadowPaint)
             dst.set(r[0].roundToInt(), r[1].roundToInt(), r[2].roundToInt(), r[3].roundToInt())

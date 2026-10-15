@@ -75,7 +75,8 @@ class AtlasItemIcons(
 
     @Synchronized
     override fun icon(name: String): CarIcon? = cache.getOrPut(name) {
-        val px = atlas?.icon(name) ?: return@getOrPut null
+        val a = atlas ?: return@getOrPut null
+        val px = a.icon(name) ?: a.icon("pin") ?: return@getOrPut null
         val src = android.graphics.Bitmap.createBitmap(px, 16, 16, android.graphics.Bitmap.Config.ARGB_8888)
         val scaled = android.graphics.Bitmap.createScaledBitmap(src, 64, 64, false)
         CarIcon.Builder(IconCompat.createWithBitmap(scaled)).build()

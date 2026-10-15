@@ -8,16 +8,18 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -30,6 +32,8 @@ class OpenMapTilesSource(
     maxConcurrent: Int = 4,
 ) : TileSource {
     private class TileJson(val template: String, val minZoom: Int, val maxZoom: Int)
+
+    private val tileClient: OkHttpClient by lazy { client.newBuilder().callTimeout(TILE_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS).build() }
 
     private val permits = Semaphore(maxConcurrent)
     private val tileJsonMutex = Mutex()
@@ -50,7 +54,7 @@ class OpenMapTilesSource(
         if (cached != null && cache.isFresh(cached)) return cached.bytes.takeIf { it.isNotEmpty() }
         val url = tj.template.replace("{z}", key.z.toString()).replace("{x}", key.x.toString()).replace("{y}", key.y.toString())
         return try {
-            val response = permits.withPermit { execute(url) }
+            val response = permits.withPermit { execute(url, MAX_TILE_BYTES, tileClient) }
             when (response.code) {
                 200 -> response.body.also { cache.put(name, it) }
                 404, 204 -> {
@@ -66,8 +70,8 @@ class OpenMapTilesSource(
 
     private class Result(val code: Int, val body: ByteArray)
 
-    private suspend fun execute(url: String): Result = suspendCancellableCoroutine { cont: CancellableContinuation<Result> ->
-        val call = client.newCall(Request.Builder().url(url).header("User-Agent", userAgent).build())
+    private suspend fun execute(url: String, maxBytes: Long, httpClient: OkHttpClient = client): Result = suspendCancellableCoroutine { cont: CancellableContinuation<Result> ->
+        val call = httpClient.newCall(Request.Builder().url(url).header("User-Agent", userAgent).build())
         cont.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -76,12 +80,24 @@ class OpenMapTilesSource(
 
             override fun onResponse(call: Call, response: Response) {
                 try {
-                    response.use { r -> cont.resume(Result(r.code, r.body.bytes())) }
+                    response.use { r -> cont.resume(Result(r.code, readLimited(r, maxBytes))) }
                 } catch (e: IOException) {
                     cont.resumeWithException(e)
                 }
             }
         })
+    }
+
+    private fun readLimited(r: Response, maxBytes: Long): ByteArray {
+        if (r.code != 200) return ByteArray(0)
+        val declared = r.body.contentLength()
+        if (declared > maxBytes) throw IOException("response too large ($declared bytes)")
+        val source = r.body.source()
+        val buffer = okio.Buffer()
+        while (buffer.size <= maxBytes) {
+            if (source.read(buffer, 8192) < 0) return buffer.readByteArray()
+        }
+        throw IOException("response too large (more than $maxBytes bytes)")
     }
 
     private suspend fun resolveTileJson(): TileJson {
@@ -90,35 +106,56 @@ class OpenMapTilesSource(
             tileJson?.let { if (System.currentTimeMillis() - tileJsonFetchedAt < tileJsonTtlMillis) return it }
             val cached = cache.get(TILEJSON_NAME)
             if (cached != null && cache.isFresh(cached, tileJsonTtlMillis)) {
-                return parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis)
+                runCatching { parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis) }.getOrNull()?.let { return it }
             }
             try {
-                val r = permits.withPermit { execute(tileJsonUrl) }
+                val r = permits.withPermit { execute(tileJsonUrl, MAX_TILEJSON_BYTES) }
                 if (r.code != 200) throw IOException("HTTP ${r.code} for $tileJsonUrl")
                 val text = String(r.body, Charsets.UTF_8)
                 val parsed = parse(text, System.currentTimeMillis())
                 cache.put(TILEJSON_NAME, r.body)
                 parsed
             } catch (e: IOException) {
-                if (cached != null) parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis) else throw e
+                val stale = cached?.let { runCatching { parse(String(it.bytes, Charsets.UTF_8), it.fetchedAtMillis) }.getOrNull() }
+                stale ?: throw e
             }
         }
     }
 
     private fun parse(text: String, fetchedAt: Long): TileJson {
-        val o = Json.parseToJsonElement(text).jsonObject
-        val template = o["tiles"]!!.jsonArray[0].jsonPrimitive.content
-        val tj = TileJson(
-            template,
-            o["minzoom"]?.jsonPrimitive?.int ?: 0,
-            o["maxzoom"]?.jsonPrimitive?.int ?: 14,
-        )
+        val tj = try {
+            val o = Json.parseToJsonElement(text).jsonObject
+            val template = o["tiles"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.takeIf { it.isString }?.content
+            if (template.isNullOrBlank()) throw IOException("invalid TileJSON")
+            validateTemplate(template)
+            val maxZoom = (o["maxzoom"]?.jsonPrimitive?.intOrNull ?: 14).coerceIn(0, MAX_ZOOM_LIMIT)
+            val minZoom = (o["minzoom"]?.jsonPrimitive?.intOrNull ?: 0).coerceIn(0, maxZoom)
+            TileJson(template, minZoom, maxZoom)
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Exception) {
+            throw IOException("invalid TileJSON", e)
+        }
         tileJson = tj
         tileJsonFetchedAt = fetchedAt
         return tj
     }
 
-    private companion object {
-        const val TILEJSON_NAME = "tilejson"
+    companion object {
+        private const val TILEJSON_NAME = "tilejson"
+        const val MAX_TILE_BYTES = 8L * 1024 * 1024
+        const val MAX_TILEJSON_BYTES = 1L * 1024 * 1024
+        const val TILE_CALL_TIMEOUT_SECONDS = 30L
+        const val MAX_ZOOM_LIMIT = 16
+        private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2", "::1", "[::1]")
+
+        /** https only (http for loopback/emulator-host dev servers) and must contain {z}, {x} and {y}. */
+        fun validateTemplate(template: String) {
+            if (!template.contains("{z}") || !template.contains("{x}") || !template.contains("{y}")) throw IOException("invalid TileJSON")
+            val probe = template.replace("{z}", "0").replace("{x}", "0").replace("{y}", "0").toHttpUrlOrNull()
+                ?: throw IOException("invalid TileJSON")
+            val ok = probe.scheme == "https" || (probe.scheme == "http" && probe.host in LOCAL_HOSTS)
+            if (!ok) throw IOException("invalid TileJSON")
+        }
     }
 }

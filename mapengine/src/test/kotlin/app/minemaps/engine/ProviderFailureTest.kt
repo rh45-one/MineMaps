@@ -96,4 +96,27 @@ class ProviderFailureTest {
         waitFor { source.calls.get() >= 2 }
         assertEquals(2, source.calls.get())
     }
+
+    @Test
+    fun outOfMemoryTrimsCachesAndIsNegativeCachedForFifteenSeconds() {
+        val source = FailingSource { OutOfMemoryError("test") }
+        var now = 10_000L
+        val low = AtomicInteger()
+        val p = provider(source) { now }
+        p.onLowMemory = { low.incrementAndGet() }
+        val key = TileKey(14, 8296, 5636)
+        p.request(key, false)
+        waitFor { low.get() >= 1 && p.pendingCount() == 0 }
+        assertEquals(1, low.get())
+        val calls = source.calls.get()
+        repeat(30) { p.request(key, false) }
+        now += 14_000
+        repeat(5) { p.request(key, false) }
+        Thread.sleep(200)
+        assertEquals(calls, source.calls.get())
+        now += 2_000
+        p.request(key, false)
+        waitFor { source.calls.get() > calls }
+        assertEquals(calls + 1, source.calls.get())
+    }
 }

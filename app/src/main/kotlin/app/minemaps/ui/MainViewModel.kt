@@ -57,6 +57,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     val text = MutableStateFlow("")
     val resultsVisible = MutableStateFlow(false)
     val cacheSize = MutableStateFlow(0L)
+    val messages = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     private val typed = MutableStateFlow("")
     private val cameraEvents = MutableSharedFlow<Camera>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -151,8 +152,12 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         val d = saveDialog.value ?: return
         saveDialog.value = null
         viewModelScope.launch {
-            val place = container.savedPlaces.add(name, d.lat, d.lon, icon)
-            card.value = InfoCard.Saved(place)
+            try {
+                val place = container.savedPlaces.add(name, d.lat, d.lon, icon)
+                card.value = InfoCard.Saved(place)
+            } catch (e: app.minemaps.data.SavedPlacesFullException) {
+                messages.tryEmit("Saved places limit reached (${app.minemaps.data.SavedPlacesRepository.MAX_PLACES}). Delete one first.")
+            }
         }
     }
 

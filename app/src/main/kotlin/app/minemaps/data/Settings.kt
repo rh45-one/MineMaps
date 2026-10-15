@@ -48,7 +48,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val askedKey = booleanPreferencesKey("permission_asked")
     private val rationaleKey = booleanPreferencesKey("rationale_dismissed")
 
-    val settings: Flow<Settings> = store.data.map { p ->
+    val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
             theme = p[themeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
             showIcons = p[iconsKey] ?: true,

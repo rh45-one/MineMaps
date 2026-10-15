@@ -56,12 +56,24 @@ object PhotonParser {
         return features.mapNotNull { runCatching { parseFeature(it.jsonObject) }.getOrNull() }
     }
 
+    /** [minLon, maxLat, maxLon, minLat] with min/max sorted, or null when any value is not a valid coordinate. */
+    private fun normalizeExtent(v: List<Double>): DoubleArray? {
+        if (v.size != 4 || v.any { !it.isFinite() }) return null
+        val lonA = v[0]
+        val latA = v[1]
+        val lonB = v[2]
+        val latB = v[3]
+        if (listOf(lonA, lonB).any { it < -180.0 || it > 180.0 } || listOf(latA, latB).any { it < -90.0 || it > 90.0 }) return null
+        return doubleArrayOf(minOf(lonA, lonB), maxOf(latA, latB), maxOf(lonA, lonB), minOf(latA, latB))
+    }
+
     private fun str(o: JsonObject, key: String): String? = (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 
     private fun parseFeature(f: JsonObject): SearchResult? {
         val coords = f["geometry"]?.jsonObject?.get("coordinates")?.jsonArray ?: return null
         val lon = coords[0].jsonPrimitive.doubleOrNull ?: return null
         val lat = coords[1].jsonPrimitive.doubleOrNull ?: return null
+        if (!lon.isFinite() || !lat.isFinite() || lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) return null
         val p = f["properties"]?.jsonObject ?: return null
         val street = str(p, "street")
         val house = str(p, "housenumber")
@@ -78,7 +90,7 @@ object PhotonParser {
         ).distinct()
         val extent = (p["extent"] as? JsonArray)?.let { a ->
             val v = a.mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }
-            if (v.size == 4) doubleArrayOf(v[0], v[1], v[2], v[3]) else null
+            normalizeExtent(v)
         }
         val typeLabel = (osmValue ?: type)?.replace('_', ' ')?.replaceFirstChar { it.uppercase() } ?: ""
         return SearchResult(name, parts.joinToString(", "), typeLabel, lat, lon, type, osmValue, extent)
@@ -89,7 +101,7 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
     suspend fun search(query: String, biasLat: Double?, biasLon: Double?, lang: String?): List<SearchResult> {
         val url = baseUrl.toHttpUrl().newBuilder()
             .addPathSegment("api").addPathSegment("")
-            .addQueryParameter("q", query)
+            .addQueryParameter("q", query.take(MAX_QUERY_CHARS))
             .addQueryParameter("limit", "8")
             .apply {
                 if (biasLat != null && biasLon != null) {
@@ -115,7 +127,7 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
                             cont.resumeWithException(IOException("Search failed (HTTP ${r.code})"))
                         } else {
                             try {
-                                cont.resume(r.body.string())
+                                cont.resume(readLimited(r))
                             } catch (e: IOException) {
                                 cont.resumeWithException(e)
                             }
@@ -127,7 +139,19 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
         return PhotonParser.parse(body)
     }
 
-    private companion object {
-        val SUPPORTED_LANGS = setOf("en", "de", "fr")
+    private fun readLimited(r: Response): String {
+        if (r.body.contentLength() > MAX_RESPONSE_BYTES) throw IOException("Search response too large")
+        val source = r.body.source()
+        val buffer = okio.Buffer()
+        while (buffer.size <= MAX_RESPONSE_BYTES) {
+            if (source.read(buffer, 8192) < 0) return buffer.readUtf8()
+        }
+        throw IOException("Search response too large")
+    }
+
+    companion object {
+        const val MAX_QUERY_CHARS = 200
+        const val MAX_RESPONSE_BYTES = 1L * 1024 * 1024
+        private val SUPPORTED_LANGS = setOf("en", "de", "fr")
     }
 }

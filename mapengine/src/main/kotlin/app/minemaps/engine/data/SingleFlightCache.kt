@@ -21,6 +21,8 @@ class SingleFlightCache<K : Any, V : Any>(
     }
     private val inflight = HashMap<K, Inflight<V>>()
 
+    fun clear() = synchronized(lock) { cache.clear() }
+
     fun peek(key: K): V? = synchronized(lock) { cache[key] }
 
     suspend fun get(key: K): V {
