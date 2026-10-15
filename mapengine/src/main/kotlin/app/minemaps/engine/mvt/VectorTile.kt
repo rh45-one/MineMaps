@@ -38,7 +38,23 @@ class Feature(
 class Layer(val name: String, val extent: Int, val features: List<Feature>)
 
 class VectorTile(val layers: Map<String, Layer>) {
+    /** Rough heap footprint (object headers, tag maps, geometry arrays); used to bound caches by bytes instead of count. */
+    val estimatedBytes: Long by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        var total = 64L
+        for (layer in layers.values) {
+            total += 64
+            for (f in layer.features) {
+                total += FEATURE_OVERHEAD + f.tags.size * TAG_BYTES + f.geometry.size * ARRAY_OVERHEAD
+                for (g in f.geometry) total += g.size * 4L
+            }
+        }
+        total
+    }
+
     companion object {
+        private const val FEATURE_OVERHEAD = 200L
+        private const val TAG_BYTES = 110L
+        private const val ARRAY_OVERHEAD = 32L
         val EMPTY = VectorTile(emptyMap())
     }
 }

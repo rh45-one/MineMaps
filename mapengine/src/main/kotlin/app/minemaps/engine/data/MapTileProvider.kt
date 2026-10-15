@@ -95,6 +95,7 @@ class MapTileProvider(
 
     /** Drops the provider's internal caches (block grids and label results). */
     fun trimMemory() {
+        repo.clearMemory()
         grids.clear()
         labelCache.clear()
     }

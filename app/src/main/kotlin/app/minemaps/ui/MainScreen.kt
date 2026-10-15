@@ -59,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -227,29 +228,33 @@ private fun MapScreen(
     val net by renderer.networkState.collectAsStateWithLifecycle()
 
     val activity = context.findActivity()
+    val askedBefore by rememberUpdatedState(settings.permissionAsked)
     var granted by remember { mutableStateOf(container.location.hasPermission()) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
-        granted = res.values.any { it } || container.location.hasPermission()
+    var permanentlyDenied by remember { mutableStateOf(false) }
+    fun recomputePermission(asked: Boolean = askedBefore) {
+        granted = container.location.hasPermission()
+        permanentlyDenied = !granted && asked && activity != null &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
+        recomputePermission(asked = true)
         vm.markPermissionAsked()
         container.location.refresh()
         if (granted) vm.startFollowing(16.0)
     }
+    LaunchedEffect(settings.permissionAsked) { recomputePermission() }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_RESUME) {
-                val now = container.location.hasPermission()
-                if (now != granted) {
-                    granted = now
-                    container.location.refresh()
-                }
+                val was = granted
+                recomputePermission()
+                if (granted != was) container.location.refresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
-    val permanentlyDenied = !granted && settings.permissionAsked && activity != null &&
-        !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
     fun requestPermission() = launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     fun openAppSettings() = context.startActivity(
         Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -308,7 +313,7 @@ private fun MapScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 MapView(ctx, renderer).also {
-                    it.setCamera(initial)
+                    it.setCamera(vm.camera ?: initial)
                     controller.view = it
                 }
             },

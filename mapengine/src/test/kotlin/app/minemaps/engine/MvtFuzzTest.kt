@@ -254,4 +254,13 @@ class MvtFuzzTest {
             }
         }
     }
+
+    @Test
+    fun estimatedBytesTracksRealHeapUse() {
+        val tile = MvtDecoder.decode(TestSupport.fixtureBytes())
+        val mb = tile.estimatedBytes / 1048576.0
+        println("estimatedBytes for the Paris fixture: $mb MB (measured heap use ~4.2 MB)")
+        assertTrue(mb in 2.0..8.0, "estimate $mb MB")
+        assertEquals(64L, VectorTile.EMPTY.estimatedBytes)
+    }
 }
