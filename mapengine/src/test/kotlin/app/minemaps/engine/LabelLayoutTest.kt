@@ -168,4 +168,15 @@ class LabelLayoutTest {
             assertEquals(0f, out.labels.first { it.label.text == "Town" }.angleDeg, "point label stays upright at $bearing")
         }
     }
+
+    @Test
+    fun priorityObstaclesKeepPlaceAndRoadLabelsOffTheMarker() {
+        val onMarker = label("Cairo", 500.0, 505.0)
+        val away = label("Giza", 800.0, 200.0)
+        val marker = app.minemaps.engine.layout.Obstacle(480f, 480f, 520f, 520f)
+        val without = LabelLayout.layout(listOf(onMarker, away), emptyList(), vp, measure, RenderProfile.PHONE, 32f)
+        assertEquals(2, without.labels.size)
+        val with = LabelLayout.layout(listOf(onMarker, away), emptyList(), vp, measure, RenderProfile.PHONE, 32f, priorityObstacles = listOf(marker))
+        assertEquals(listOf("Giza"), with.labels.map { it.label.text })
+    }
 }

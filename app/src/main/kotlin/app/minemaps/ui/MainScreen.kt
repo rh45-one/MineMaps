@@ -14,13 +14,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import kotlinx.coroutines.delay
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.fadeOut
@@ -29,53 +27,29 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -98,13 +72,42 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.minemaps.AppContainer
 import app.minemaps.data.Camera
 import app.minemaps.data.LabelNames
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.WindowInsetsSides
+import app.minemaps.ui.theme.rememberMcWindow
+import app.minemaps.ui.theme.mcPanel
+import app.minemaps.ui.theme.PixelGlyph
+import app.minemaps.ui.theme.MineMapsTheme
+import app.minemaps.ui.theme.McVariant
+import app.minemaps.ui.theme.McTextField
+import app.minemaps.ui.theme.McPanel
+import app.minemaps.ui.theme.McListRow
+import app.minemaps.ui.theme.McInsets
+import app.minemaps.ui.theme.McIconButton
+import app.minemaps.ui.theme.McGlyphButton
+import app.minemaps.ui.theme.McDivider
+import app.minemaps.ui.theme.McDialog
+import app.minemaps.ui.theme.McButton
+import app.minemaps.ui.theme.Mc
+import app.minemaps.ui.theme.Glyph
 import app.minemaps.engine.labels.NameResolver
 import app.minemaps.data.SavedPlace
 import app.minemaps.data.Settings
 import app.minemaps.data.ThemeMode
 import app.minemaps.engine.art.EngineResources
 import app.minemaps.engine.art.TexturePack
-import app.minemaps.engine.geo.LatLng
 import app.minemaps.engine.geo.Mercator
 import app.minemaps.engine.geo.Viewport
 import app.minemaps.engine.layout.RenderProfile
@@ -121,6 +124,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -139,7 +144,8 @@ fun MineMapsRoot(vm: MainViewModel, container: AppContainer, applyBars: (Boolean
         else -> androidx.compose.foundation.isSystemInDarkTheme()
     }
     LaunchedEffect(dark) { applyBars(dark) }
-    MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
+    val fontFile = java.io.File(androidx.compose.ui.platform.LocalContext.current.filesDir, "Monocraft.ttf")
+    MineMapsTheme(dark, if (engine != null) fontFile else null) {
         val s = settings
         val cam = initial
         val eng = engine
@@ -184,7 +190,7 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
             Screen.SETTINGS -> {
                 LaunchedEffect(Unit) { vm.refreshCacheSize() }
                 SettingsScreen(
-                    settings, cacheSize, engine.atlas(settings.texturePack),
+                    settings, cacheSize, engine::atlas, engine.atlas(settings.texturePack),
                     vanillaAvailable = engine.isPackAvailable(TexturePack.VANILLA),
                     onTexturePack = { vm.setTexturePack(it) },
                     onArrowColor = { vm.setArrowColor(it) },
@@ -224,6 +230,7 @@ private fun MapScreen(
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val bearingState = vm.bearing.collectAsState()
+    var confirmDelete by rememberSaveable { mutableStateOf<String?>(null) }
     var creditShown by rememberSaveable { mutableStateOf(true) }
     var creditTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(creditShown, creditTick) {
@@ -369,44 +376,50 @@ private fun MapScreen(
             },
         )
 
-        Column(
-            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        val win = rememberMcWindow()
+        val sidePanel = win.wide
+        val c = Mc.colors
+        val density2 = androidx.compose.ui.platform.LocalDensity.current
+        var bottomPanelPx by remember { mutableIntStateOf(0) }
+        val rationaleVisible = !granted && !settings.rationaleDismissed && !settings.permissionAsked
+        val bottomPad = if (!sidePanel && bottomPanelPx > 0) with(density2) { bottomPanelPx.toDp() } + 24.dp else 16.dp
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+
+        val searchRow: @Composable () -> Unit = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Card(Modifier.weight(1f), shape = MaterialTheme.shapes.extraLarge, elevation = CardDefaults.cardElevation(4.dp)) {
-                    TextField(
-                        value = text,
-                        onValueChange = vm::onQueryChange,
-                        modifier = Modifier.fillMaxWidth().onFocusChanged { s: FocusState ->
-                            if (s.isFocused) vm.onSearchFocus()
-                            if (s.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
-                        },
-                        singleLine = true,
-                        placeholder = { Text("Search places") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (text.isNotEmpty() || searchPin != null) {
-                                IconButton(onClick = { vm.clearSearch() }) { Icon(Icons.Default.Close, contentDescription = "Clear search") }
+                McTextField(
+                    value = text,
+                    onValueChange = vm::onQueryChange,
+                    modifier = Modifier.weight(1f).onFocusChanged { s: FocusState ->
+                        if (s.isFocused) vm.onSearchFocus()
+                        if (s.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
+                    },
+                    placeholder = "Search places",
+                    leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, 20.dp) },
+                    trailing = {
+                        if (text.isNotEmpty() || searchPin != null) {
+                            Box(Modifier.size(48.dp).semantics { contentDescription = "Clear search" }.clickable { vm.clearSearch() }, contentAlignment = Alignment.Center) {
+                                PixelGlyph(Glyph.CLOSE, c.text, 16.dp)
                             }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                    )
-                }
-                SmallFloatingActionButton(onClick = { vm.screen.value = Screen.SAVED }, shape = CircleShape) {
-                    Icon(Icons.Default.Star, contentDescription = "Saved places")
-                }
-                SmallFloatingActionButton(onClick = { vm.screen.value = Screen.SETTINGS }, shape = CircleShape) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
-                }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                )
+                val pinImage = remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "pin") }
+                McIconButton({ vm.screen.value = Screen.SAVED }, Modifier.semantics { contentDescription = "Saved places" }, size = 48.dp) { PixelIcon(pinImage, 28.dp) }
+                McGlyphButton(Glyph.SETTINGS, { vm.screen.value = Screen.SETTINGS }, Modifier.semantics { contentDescription = "Settings" }, size = 48.dp)
             }
-            if (resultsVisible) SearchResultsPanel(searchState, onSelect = { r ->
+        }
+        val banners: @Composable () -> Unit = {
+            if (net == app.minemaps.engine.data.NetState.OFFLINE) McBanner("Offline \u2013 showing cached map", null, {})
+            if (!granted && !rationaleVisible) {
+                McBanner("Location permission needed", if (permanentlyDenied) "Settings" else "Allow", { if (permanentlyDenied) openAppSettings() else requestPermission() })
+            } else if (granted && loc.status == LocationStatus.DISABLED) {
+                McBanner("Location is off", "Turn on", { openLocationSettings() })
+            }
+        }
+        val resultsPanel: @Composable () -> Unit = {
+            SearchResultsPanel(searchState, onSelect = { r ->
                 focus.clearFocus()
                 vm.selectResult(r)
                 val v = controller.view
@@ -415,30 +428,69 @@ private fun MapScreen(
                     if (ex != null && (ex[2] - ex[0] > 1e-6 || ex[1] - ex[3] > 1e-6)) v.fitBounds(ex[3], ex[0], ex[1], ex[2]) else v.animateTo(r.lat, r.lon, r.targetZoom())
                 }
             })
-            if (net == app.minemaps.engine.data.NetState.OFFLINE) Banner("Offline \u2013 showing cached map", null, {})
-            val rationale = !granted && !settings.rationaleDismissed && !settings.permissionAsked
-            if (!granted && !rationale) {
-                Banner("Location permission needed", if (permanentlyDenied) "Settings" else "Allow", { if (permanentlyDenied) openAppSettings() else requestPermission() })
-            } else if (granted && loc.status == LocationStatus.DISABLED) {
-                Banner("Location is off", "Turn on", { openLocationSettings() })
+        }
+        val bottomPanel: @Composable () -> Unit = {
+            if (rationaleVisible) {
+                RationaleCard(onAllow = { requestPermission() }, onDismiss = { vm.dismissRationale() })
+            } else {
+                card?.let { cc ->
+                    InfoCardView(
+                        cc,
+                        onClose = { vm.dismissCard() },
+                        onSaveInspect = { i -> vm.requestSave(i.lat, i.lon, i.title) },
+                        onSaveResult = { r -> vm.requestSave(r.lat, r.lon, r.name) },
+                        onRename = { vm.renameTarget.value = it },
+                        onDelete = { confirmDelete = it.id },
+                        onCopy = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) },
+                    )
+                }
             }
         }
+        val hasBottomPanel = rationaleVisible || card != null
 
-        Column(
-            Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.navigationBars).padding(end = 12.dp, bottom = bottomPad),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
-            CompassButton(bearingState, remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "compass") }) { controller.view?.animateBearing(0.0, 300L) }
-            SmallFloatingActionButton(
-                modifier = Modifier.semantics { contentDescription = if (settings.showStreetNames) "Hide street names" else "Show street names" },
-                onClick = { vm.setShowStreetNames(!settings.showStreetNames) },
-                shape = CircleShape,
-            ) { StreetNamesIcon(settings.showStreetNames) }
-            SmallFloatingActionButton(onClick = { controller.zoomIn() }, shape = CircleShape) { Icon(Icons.Default.Add, contentDescription = "Zoom in") }
-            SmallFloatingActionButton(onClick = { controller.zoomOut() }, shape = CircleShape, modifier = Modifier.semantics { contentDescription = "Zoom out" }) { Text("\u2212", style = MaterialTheme.typography.titleLarge) }
-            SmallFloatingActionButton(
-                modifier = Modifier.semantics { contentDescription = "My location" },
+        if (sidePanel) {
+            Column(
+                Modifier.align(Alignment.TopStart).width(400.dp).fillMaxHeight()
+                    .windowInsetsPadding(McInsets.only(WindowInsetsSides.Top + WindowInsetsSides.Start + WindowInsetsSides.Bottom))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                searchRow()
+                banners()
+                Box(Modifier.weight(1f, fill = false).padding(bottom = 56.dp)) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        if (resultsVisible) resultsPanel() else if (hasBottomPanel) bottomPanel()
+                    }
+                }
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().windowInsetsPadding(McInsets.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                searchRow()
+                if (resultsVisible) resultsPanel()
+                banners()
+            }
+            Box(
+                Modifier.align(Alignment.BottomCenter).windowInsetsPadding(McInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(12.dp)
+                    .onSizeChanged { bottomPanelPx = if (hasBottomPanel) it.height else 0 },
+            ) { if (hasBottomPanel) bottomPanel() }
+        }
+
+        val compassIcon = remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "compass") }
+        val navControls: @Composable () -> Unit = {
+            CompassButton(bearingState, compassIcon) { controller.view?.animateBearing(0.0, 300L) }
+            StreetNamesButton(settings.showStreetNames) { vm.setShowStreetNames(!settings.showStreetNames) }
+        }
+        val locationButton: @Composable () -> Unit = {
+            LocationButton(
+                when {
+                    !granted -> LocationIconState.NO_PERMISSION
+                    loc.status == LocationStatus.DISABLED -> LocationIconState.GPS_OFF
+                    following -> LocationIconState.FOLLOWING
+                    else -> LocationIconState.NOT_FOLLOWING
+                },
                 onClick = {
                     when {
                         !granted -> if (permanentlyDenied) openAppSettings() else requestPermission()
@@ -449,69 +501,45 @@ private fun MapScreen(
                         }
                     }
                 },
-                shape = CircleShape,
-            ) {
-                LocationIcon(
-                    when {
-                        !granted -> LocationIconState.NO_PERMISSION
-                        loc.status == LocationStatus.DISABLED -> LocationIconState.GPS_OFF
-                        following -> LocationIconState.FOLLOWING
-                        else -> LocationIconState.NOT_FOLLOWING
-                    },
-                )
-            }
+            )
         }
-
-        Box(Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 4.dp, bottom = bottomPad - 8.dp)) {
-            AnimatedVisibility(creditShown, enter = fadeIn(), exit = fadeOut()) {
-                Surface(
-                    Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp).widthIn(max = 280.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    shadowElevation = 2.dp,
-                ) {
-                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                        Text(
-                            buildAnnotatedString {
-                                append("\u00a9 ")
-                                withLink(LinkAnnotation.Url(OSM_COPYRIGHT_URL)) { append("OpenStreetMap") }
-                                append(" contributors \u00b7 \u00a9 OpenMapTiles \u00b7 OpenFreeMap")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Text("Licences", Modifier.clickable { vm.screen.value = Screen.LICENCES }.padding(top = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-            AnimatedVisibility(!creditShown, enter = fadeIn(), exit = fadeOut()) {
-                Box(
-                    Modifier.size(48.dp).semantics { contentDescription = "Map credits" }.clickable { creditShown = true; creditTick++ },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Surface(Modifier.size(24.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), contentColor = MaterialTheme.colorScheme.onSurface, shadowElevation = 2.dp) {
-                        Box(contentAlignment = Alignment.Center) { Text("i", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
-                    }
-                }
-            }
+        val zoomControls: @Composable () -> Unit = {
+            McGlyphButton(Glyph.PLUS, { controller.zoomIn() }, Modifier.semantics { contentDescription = "Zoom in" })
+            McGlyphButton(Glyph.MINUS, { controller.zoomOut() }, Modifier.semantics { contentDescription = "Zoom out" })
         }
-
-        val rationaleVisible = !granted && !settings.rationaleDismissed && !settings.permissionAsked
-        Box(Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(12.dp)) {
-            if (rationaleVisible) {
-                RationaleCard(onAllow = { requestPermission() }, onDismiss = { vm.dismissRationale() })
+        Row(
+            Modifier.align(Alignment.BottomEnd).windowInsetsPadding(McInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.End)).padding(end = 12.dp, bottom = bottomPad),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            if (win.compactHeight) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.End) { navControls(); locationButton() }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.End) { zoomControls() }
             } else {
-                card?.let { c ->
-                    InfoCardView(
-                        c,
-                        onClose = { vm.dismissCard() },
-                        onSaveInspect = { i -> vm.requestSave(i.lat, i.lon, i.title) },
-                        onSaveResult = { r -> vm.requestSave(r.lat, r.lon, r.name) },
-                        onRename = { vm.renameTarget.value = it },
-                        onDelete = { vm.delete(it) },
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+                    navControls()
+                    zoomControls()
+                    locationButton()
                 }
             }
+        }
+
+        Box(Modifier.align(Alignment.BottomStart).windowInsetsPadding(McInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Start)).padding(start = 4.dp, bottom = bottomPad - 14.dp)) {
+            AnimatedVisibility(creditShown, enter = fadeIn(), exit = fadeOut()) {
+                Column(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp).widthIn(max = 280.dp).mcPanel(c).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text(
+                        buildAnnotatedString {
+                            append("\u00a9 ")
+                            withLink(LinkAnnotation.Url(OSM_COPYRIGHT_URL, TextLinkStyles(SpanStyle(color = c.greenHighlight, textDecoration = TextDecoration.Underline)))) { append("OpenStreetMap") }
+                            append(" contributors \u00b7 \u00a9 OpenMapTiles \u00b7 OpenFreeMap")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = c.text,
+                    )
+                    Text("Licences", Modifier.clickable { vm.screen.value = Screen.LICENCES }.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = c.greenHighlight)
+                }
+            }
+            AnimatedVisibility(!creditShown, enter = fadeIn(), exit = fadeOut()) { CreditsButton { creditShown = true; creditTick++ } }
         }
     }
 
@@ -521,29 +549,41 @@ private fun MapScreen(
     renameTarget?.let { p ->
         IconNameDialog("Edit place", p.name, p.icon, engine.atlas(settings.texturePack), "Save", onConfirm = { n, i -> vm.edit(p, n, i) }, onDismiss = { vm.renameTarget.value = null })
     }
+    saved.firstOrNull { it.id == confirmDelete }?.let { p ->
+        McDialog(
+            "Delete place?",
+            onDismiss = { confirmDelete = null },
+            buttons = {
+                McButton({ confirmDelete = null }) { Text("Cancel") }
+                McButton({ confirmDelete = null; vm.delete(p) }, variant = McVariant.DANGER) { Text("Delete") }
+            },
+        ) { Text("\"${p.name}\" will be removed from your saved places.", style = MaterialTheme.typography.bodyMedium) }
+    }
 }
 
 @Composable
 private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> Unit) {
-    Card(Modifier.fillMaxWidth().heightIn(max = 420.dp), elevation = CardDefaults.cardElevation(4.dp)) {
+    val c = Mc.colors
+    val maxH = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+    McPanel(Modifier.fillMaxWidth().heightIn(max = maxH), contentPadding = 4.dp) {
         when (state) {
-            SearchState.Idle -> Text("Type at least 2 characters", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
-            SearchState.Loading -> Text("Searching\u2026", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
-            is SearchState.Error -> Text("Search unavailable: ${state.message}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
+            SearchState.Idle -> Text("Type at least 2 characters", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+            SearchState.Loading -> Text("Searching\u2026", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+            is SearchState.Error -> Text("Search unavailable: ${state.message}", Modifier.padding(12.dp), color = c.danger, style = MaterialTheme.typography.bodyMedium)
             is SearchState.Results -> if (state.items.isEmpty()) {
-                Text(if (state.updating) "Searching\u2026" else "No results", Modifier.padding(16.dp))
+                Text(if (state.updating) "Searching\u2026" else "No results", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
             } else {
                 LazyColumn {
                     items(state.items) { r ->
-                        Column(Modifier.fillMaxWidth().clickable { onSelect(r) }.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                            Text(r.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (r.subtitle.isNotBlank()) {
-                                Text(r.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        HorizontalDivider()
+                        McListRow(
+                            onClick = { onSelect(r) },
+                            title = r.name,
+                            subtitle = if (r.local) r.address.ifBlank { r.typeLabel.removeSuffix(" \u00b7 nearby") } else r.subtitle,
+                            trailing = { if (r.local) McTag("nearby") },
+                        )
+                        McDivider()
                     }
-                    if (state.updating) item { Text("Updating\u2026", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (state.updating) item { Text("Updating\u2026", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = c.textSecondary) }
                 }
             }
         }
@@ -552,17 +592,18 @@ private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> U
 
 @Composable
 private fun RationaleCard(onAllow: () -> Unit, onDismiss: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(6.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Show your position on the map?", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "MineMaps uses your location only while the app is open, to centre the map on you. You can use the map without it.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Not now") }
-                Button(onClick = onAllow) { Text("Allow location") }
-            }
+    McPanel(Modifier.fillMaxWidth()) {
+        Text("Show your position on the map?", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "MineMaps uses your location only while the app is open, to centre the map on you. You can use the map without it.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Mc.colors.textSecondary,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            McButton(onDismiss) { Text("Not now") }
+            McButton(onAllow, variant = McVariant.PRIMARY) { Text("Allow location") }
         }
     }
 }
@@ -575,56 +616,53 @@ private fun InfoCardView(
     onSaveResult: (SearchResult) -> Unit,
     onRename: (SavedPlace) -> Unit,
     onDelete: (SavedPlace) -> Unit,
+    onCopy: (String) -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(6.dp)) {
-        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    val c = Mc.colors
+    McPanel(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 when (card) {
                     is InfoCard.Inspect -> {
                         Text(card.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(card.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(coords(card.lat, card.lon), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = { onSaveInspect(card) }, Modifier.padding(top = 6.dp)) { Text("Save place") }
+                        Text(card.subtitle, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                        CoordsRow(coords(card.lat, card.lon), onCopy)
                     }
                     is InfoCard.Saved -> {
                         Text(card.place.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("Saved place", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(coords(card.place.lat, card.place.lon), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row {
-                            TextButton(onClick = { onRename(card.place) }) {
-                                Icon(Icons.Default.Edit, contentDescription = null)
-                                Text("Edit", Modifier.padding(start = 6.dp))
-                            }
-                            TextButton(onClick = { onDelete(card.place) }) {
-                                Icon(Icons.Default.Delete, contentDescription = null)
-                                Text("Delete", Modifier.padding(start = 6.dp))
-                            }
-                        }
+                        Text("Saved place", style = MaterialTheme.typography.bodyMedium, color = c.gold)
+                        CoordsRow(coords(card.place.lat, card.place.lon), onCopy)
                     }
                     is InfoCard.Result -> {
                         Text(card.result.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        if (card.result.subtitle.isNotBlank()) {
-                            Text(card.result.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        OutlinedButton(onClick = { onSaveResult(card.result) }, Modifier.padding(top = 6.dp)) { Text("Save place") }
+                        if (card.result.subtitle.isNotBlank()) Text(card.result.subtitle, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
                     }
                 }
             }
-            IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close") }
+            McGlyphButton(Glyph.CLOSE, onClose, Modifier.semantics { contentDescription = "Close" }, size = 48.dp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            when (card) {
+                is InfoCard.Inspect -> McButton({ onSaveInspect(card) }, variant = McVariant.PRIMARY) { Text("Save place") }
+                is InfoCard.Result -> McButton({ onSaveResult(card.result) }, variant = McVariant.PRIMARY) { Text("Save place") }
+                is InfoCard.Saved -> {
+                    McButton({ onRename(card.place) }) { PixelGlyph(Glyph.EDIT, LocalContentColor.current, 18.dp); Text("Edit") }
+                    McButton({ onDelete(card.place) }, variant = McVariant.DANGER) { PixelGlyph(Glyph.DELETE, LocalContentColor.current, 18.dp); Text("Delete") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoordsRow(text: String, onCopy: (String) -> Unit) {
+    Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.bodySmall, color = Mc.colors.textSecondary)
+        Box(Modifier.size(40.dp).semantics { contentDescription = "Copy coordinates" }.clickable { onCopy(text) }, contentAlignment = Alignment.Center) {
+            PixelGlyph(Glyph.COPY, Mc.colors.textSecondary, 16.dp)
         }
     }
 }
 
 private fun coords(lat: Double, lon: Double): String = String.format(Locale.US, "%.5f, %.5f", lat, lon)
-
-@Composable
-private fun NameDialog(title: String, initial: String, confirmLabel: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { TextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") }) },
-        confirmButton = { TextButton(onClick = { onConfirm(name.trim()) }) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}

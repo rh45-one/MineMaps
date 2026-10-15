@@ -106,4 +106,22 @@ class PlaceIndexTest {
         assertEquals(12, first.z)
         assertTrue(tiles.all { it.z == 12 })
     }
+
+    @Test
+    fun landmarksAndImportantPoisOutrankNearbyGiftShops() {
+        val idx = PlaceIndex()
+        fun poi(name: String, label: String, dxM: Double, rank: Int) = Poi("compass", name, px + dxM / 40_075_016.0 / 0.658, py, 16, rank = rank, kindLabel = label)
+        idx.add(
+            emptyList(),
+            listOf(
+                poi("Eiffel shopping", "Gift", 20.0, 40),
+                poi("Eiffel techno", "Gift", 30.0, Int.MAX_VALUE),
+                poi("Eiffel Tower", "Monument", 900.0, 3),
+                poi("Hotel Eiffel Blomet", "Hotel", 100.0, 20),
+            ),
+        )
+        val names = idx.query("eiffel", px, py).map { it.name }
+        assertEquals("Eiffel Tower", names.first())
+        assertTrue(names.indexOf("Eiffel Tower") < names.indexOf("Hotel Eiffel Blomet"))
+    }
 }

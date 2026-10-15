@@ -1,44 +1,43 @@
 package app.minemaps.ui
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Path
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.Box
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.minemaps.map.MapRenderer
 import app.minemaps.map.MapView
-import kotlin.math.cos
-import kotlin.math.sin
+import app.minemaps.ui.theme.Glyph
+import app.minemaps.ui.theme.Mc
+import app.minemaps.ui.theme.McButton
+import app.minemaps.ui.theme.McIconButton
+import app.minemaps.ui.theme.McPanel
+import app.minemaps.ui.theme.PixelGlyph
+import app.minemaps.ui.theme.mcPanel
+import androidx.compose.runtime.getValue
 
 class MapController {
     var view: MapView? = null
@@ -52,86 +51,59 @@ class MapController {
 enum class LocationIconState { NOT_FOLLOWING, FOLLOWING, NO_PERMISSION, GPS_OFF }
 
 @Composable
-fun LocationIcon(state: LocationIconState, modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val error = MaterialTheme.colorScheme.error
-    Canvas(modifier.size(24.dp)) {
-        val c = center
-        val r = size.minDimension * 0.28f
-        val w = 2.dp.toPx()
-        val tint = when (state) {
-            LocationIconState.FOLLOWING -> primary
-            LocationIconState.NOT_FOLLOWING -> onSurface
-            else -> onSurface.copy(alpha = 0.6f)
-        }
-        drawCircle(tint, r, c, style = Stroke(w))
-        for (i in 0 until 4) {
-            val a = Math.toRadians(i * 90.0)
-            val dx = cos(a).toFloat()
-            val dy = sin(a).toFloat()
-            drawLine(tint, Offset(c.x + dx * (r + 1.dp.toPx()), c.y + dy * (r + 1.dp.toPx())), Offset(c.x + dx * size.minDimension * 0.46f, c.y + dy * size.minDimension * 0.46f), w, StrokeCap.Round)
-        }
-        when (state) {
-            LocationIconState.FOLLOWING -> drawCircle(tint, r * 0.55f, c)
-            LocationIconState.NOT_FOLLOWING -> drawCircle(tint, r * 0.18f, c)
-            LocationIconState.GPS_OFF -> drawLine(error, Offset(size.width * 0.12f, size.height * 0.12f), Offset(size.width * 0.88f, size.height * 0.88f), w * 1.2f, StrokeCap.Round)
-            LocationIconState.NO_PERMISSION -> {
-                drawLine(error, Offset(c.x, c.y - r * 0.5f), Offset(c.x, c.y + r * 0.15f), w * 1.2f, StrokeCap.Round)
-                drawCircle(error, w * 0.8f, Offset(c.x, c.y + r * 0.55f))
-            }
-        }
+fun LocationButton(state: LocationIconState, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val following = state == LocationIconState.FOLLOWING
+    val problem = state == LocationIconState.NO_PERMISSION || state == LocationIconState.GPS_OFF
+    McIconButton(onClick, modifier.semantics { contentDescription = "My location" }, active = following, danger = problem) {
+        val tint = androidx.compose.material3.LocalContentColor.current
+        Box(
+            Modifier.drawBehind {
+                if (state == LocationIconState.GPS_OFF) {
+                    drawLine(Color.White, Offset(size.width * 0.05f, size.height * 0.95f), Offset(size.width * 0.95f, size.height * 0.05f), 3.dp.toPx())
+                }
+            },
+        ) { PixelGlyph(if (following) Glyph.LOCATE_FILLED else Glyph.LOCATE, tint, 24.dp) }
     }
 }
 
 @Composable
-fun Banner(text: String, actionLabel: String?, onAction: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shadowElevation = 2.dp,
+fun McBanner(text: String, actionLabel: String?, onAction: () -> Unit, modifier: Modifier = Modifier, warning: Boolean = true) {
+    val c = Mc.colors
+    Row(
+        modifier.fillMaxWidth().mcPanel(c).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            if (actionLabel != null) TextButton(onClick = onAction) { Text(actionLabel) }
-        }
+        Box(Modifier.size(8.dp).background(if (warning) c.gold else c.green))
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = c.text)
+        if (actionLabel != null) McButton(onAction, variant = app.minemaps.ui.theme.McVariant.PRIMARY) { Text(actionLabel, style = MaterialTheme.typography.labelLarge) }
     }
 }
 
-val Transparent = Color.Transparent
-
 @Composable
-fun StreetNamesIcon(on: Boolean) {
-    val color = androidx.compose.material3.LocalContentColor.current
-    androidx.compose.material3.Text(
-        "Aa",
-        Modifier.drawBehind {
-            if (!on) drawLine(color, androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
-        },
-        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-    )
+fun StreetNamesButton(on: Boolean, onClick: () -> Unit) {
+    McIconButton(onClick, Modifier.semantics { contentDescription = if (on) "Hide street names" else "Show street names" }, active = on) {
+        val color = androidx.compose.material3.LocalContentColor.current
+        Text(
+            "Aa",
+            Modifier.drawBehind {
+                if (!on) drawLine(color, Offset(0f, size.height), Offset(size.width, 0f), strokeWidth = 3.dp.toPx())
+            },
+            style = MaterialTheme.typography.labelLarge,
+            color = color,
+        )
+    }
 }
 
 @Composable
 fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Unit) {
     val visible by remember { derivedStateOf { bearing.value > 0.5 && bearing.value < 359.5 } }
     AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut()) {
-        SmallFloatingActionButton(
-            onClick = onClick,
-            shape = CircleShape,
-            modifier = Modifier.semantics { contentDescription = "Reset map to north" },
-        ) {
+        McIconButton(onClick, Modifier.semantics { contentDescription = "Reset map to north" }) {
             Box(
-                Modifier.size(32.dp).graphicsLayer { rotationZ = -bearing.value.toFloat() }.drawBehind {
+                Modifier.size(34.dp).graphicsLayer { rotationZ = -bearing.value.toFloat() }.drawBehind {
                     val w = size.width
-                    val t = 8.dp.toPx()
+                    val t = 9.dp.toPx()
                     drawPath(
                         Path().apply {
                             moveTo(w / 2, 0f)
@@ -143,7 +115,32 @@ fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Uni
                     )
                 },
                 contentAlignment = Alignment.Center,
-            ) { PixelIcon(icon, 22.dp) }
+            ) { PixelIcon(icon, 24.dp) }
         }
     }
+}
+
+/** Small "i" button (48 dp touch target, subtle square visual). */
+@Composable
+fun CreditsButton(onClick: () -> Unit) {
+    val c = Mc.colors
+    Box(Modifier.size(48.dp).semantics { contentDescription = "Map credits" }.clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp).mcPanel(c), contentAlignment = Alignment.Center) { PixelGlyph(Glyph.INFO, c.text, 16.dp) }
+    }
+}
+
+@Composable
+fun McTag(text: String, modifier: Modifier = Modifier) {
+    val c = Mc.colors
+    Text(
+        text.uppercase(),
+        modifier.background(c.greenLedge).padding(horizontal = 6.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White,
+    )
+}
+
+@Composable
+fun McCard(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    McPanel(modifier.fillMaxWidth(), content = content)
 }

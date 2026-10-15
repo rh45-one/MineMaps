@@ -166,6 +166,7 @@ class MapRenderer(
         val vts: List<TileKey>,
         val bookmarks: List<Bookmark>,
         val pack: TexturePack,
+        val markers: List<Double>,
     )
 
     private var drawFrames = 0
@@ -272,7 +273,7 @@ class MapRenderer(
             retainRing(viewport, z, size)
         }
         val t1 = System.nanoTime()
-        drawLabels(canvas, viewport, slots.map { it.key }, overlays.bookmarks)
+        drawLabels(canvas, viewport, slots.map { it.key }, overlays)
         val t2 = System.nanoTime()
         drawOverlays(canvas, viewport, overlays)
         drawNs += System.nanoTime() - t0
@@ -367,13 +368,15 @@ class MapRenderer(
     private var layoutOriginX = 0.0
     private var layoutOriginY = 0.0
 
-    private fun drawLabels(canvas: Canvas, viewport: Viewport, tiles: List<TileKey>, bookmarks: List<Bookmark>) {
+    private fun drawLabels(canvas: Canvas, viewport: Viewport, tiles: List<TileKey>, overlays: MapOverlays) {
+        val bookmarks = overlays.bookmarks
+        val markers = markerKey(overlays)
         val vts = tiles.map { provider.vectorTileKey(it) }.distinct().sortedWith(compareBy({ it.z }, { it.x }, { it.y }))
         val worldSize = viewport.worldSizePx
         val origin = viewport.worldToScreen(layoutOriginX, layoutOriginY)
         var shiftX = origin.x - viewport.widthPx / 2.0
         var shiftY = origin.y - viewport.heightPx / 2.0
-        val key = LayoutKey(viewport.bearingDeg, 0.0, viewport.zoom, viewport.widthPx, viewport.heightPx, labelVersion.get(), showIcons, vts, bookmarks, activePack)
+        val key = LayoutKey(viewport.bearingDeg, 0.0, viewport.zoom, viewport.widthPx, viewport.heightPx, labelVersion.get(), showIcons, vts, bookmarks, activePack, markers)
         var layout = lastLayout
         if (key != lastLayoutKey || layout == null || Math.abs(shiftX) > LAYOUT_MARGIN_PX / 2 || Math.abs(shiftY) > LAYOUT_MARGIN_PX / 2) {
             val labels = ArrayList<Label>()
@@ -385,7 +388,7 @@ class MapRenderer(
             }
             val m = LAYOUT_MARGIN_PX
             val expanded = Viewport(viewport.centerX, viewport.centerY, viewport.zoom, viewport.widthPx + 2 * m, viewport.heightPx + 2 * m, viewport.pixelRatio, viewport.bearingDeg)
-            layout = LabelLayout.layout(labels, pois, expanded, measure, profile, 16f * iconFactor, bookmarkObstacles(expanded, bookmarks, viewport.zoom))
+            layout = LabelLayout.layout(labels, pois, expanded, measure, profile, 16f * iconFactor, bookmarkObstacles(expanded, bookmarks, viewport.zoom), markerObstacles(expanded, overlays))
             lastLayout = layout
             lastLayoutKey = key
             layoutOriginX = viewport.centerX
@@ -481,6 +484,30 @@ class MapRenderer(
         out[1] = y - a.y * f
         out[2] = out[0] + size
         out[3] = out[1] + size
+    }
+
+    private fun markerKey(o: MapOverlays): List<Double> = buildList {
+        o.player?.let { add(it.lat); add(it.lon) }
+        o.searchPin?.let { add(it.lat); add(it.lng) }
+    }
+
+    /** The player arrow (plus a 4 dp pad) and the search pin are kept free of place, water and road labels. */
+    private fun markerObstacles(expanded: Viewport, o: MapOverlays): List<Obstacle> {
+        val size = 16f * iconFactor
+        val pad = 4f * density
+        val out = ArrayList<Obstacle>(2)
+        o.player?.let { p ->
+            val pt = expanded.worldToScreen(Mercator.lonToX(p.lon), Mercator.latToY(p.lat))
+            val half = size / 2 + pad
+            out.add(Obstacle(pt.x.toFloat() - half, pt.y.toFloat() - half, pt.x.toFloat() + half, pt.y.toFloat() + half))
+        }
+        o.searchPin?.let { p ->
+            val pt = expanded.worldToScreen(Mercator.lonToX(p.lng), Mercator.latToY(p.lat))
+            val r = FloatArray(4)
+            bookmarkRect("pin", pt.x.toFloat(), pt.y.toFloat(), size, r)
+            out.add(Obstacle(r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad))
+        }
+        return out
     }
 
     private fun bookmarkObstacles(expanded: Viewport, bookmarks: List<Bookmark>, zoom: Double): List<Obstacle> {

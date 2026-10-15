@@ -203,4 +203,19 @@ class SearchFlowTest {
         assertEquals(ResponseCache.key("Paris ", 48.861, 2.349, "en"), ResponseCache.key("paris", 48.849, 2.351, "en"))
         assertTrue(ResponseCache.key("paris", 48.0, 2.0, "en") != ResponseCache.key("paris", 48.0, 2.0, "fr"))
     }
+
+    @Test
+    fun allTokenMatchesRankBeforePartialMatchesAndExactFirst() {
+        val net = listOf("Madame", "Madame Arthur", "Madame Z", "Madame Brasserie Annexe", "Madame Brasserie").map { result(it, 48.0, 2.0) }
+        val local = listOf(result("Madame Brasserie", 48.0, 2.0, local = true), result("Brasserie Madame Lune", 48.0, 2.0, local = true))
+        val ranked = mergeResults(local, net, "Madame Brasserie").map { it.name }
+        assertEquals("Madame Brasserie", ranked.first())
+        assertEquals(setOf("Madame Brasserie Annexe", "Brasserie Madame Lune"), ranked.subList(1, 3).toSet())
+        assertEquals(setOf("Madame", "Madame Arthur", "Madame Z"), ranked.subList(3, 6).toSet())
+        // equally good matches: the nearby local hit comes first
+        val tie = mergeResults(listOf(result("Rue Foo", 48.0, 2.0, local = true)), listOf(result("Rue Foo Bis", 10.0, 10.0)), "rue foo").map { it.name }
+        assertEquals(listOf("Rue Foo", "Rue Foo Bis"), tie)
+        // no query: unchanged order
+        assertEquals(listOf("a", "x"), mergeResults(listOf(result("a", local = true)), listOf(result("x", 5.0, 5.0))).map { it.name })
+    }
 }

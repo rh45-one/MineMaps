@@ -106,3 +106,6 @@ Gestures: a two-finger twist only engages after 12 degrees of accumulated rotati
 ## Place search index
 `PlaceIndex` (package `search`) keeps up to 50,000 named features (places, streets, water, POIs) from every decoded vector tile (`TileRepository.onDecoded`), with the English name and the local name. Entries nearest the index centre survive; streets are de-duplicated within 300 m (places 1-5 km).
 Query: every token must be a prefix of a name token (English or local), accents and case folded. Score = match (exact 4, starts-with 3, token prefixes 2) x kind weight x proximity to the map centre x rank bonus. `PlacePrefetcher` fills the index from z12 tiles within 20 km (about 26 tiles, re-run after moving more than 10 km, skipped offline) and from up to 300 z14 tiles already in the disk cache.
+
+## Label obstacles
+Bookmarks suppress POI icons (obstacles added after place labels). The player arrow (arrow box + 4 dp) and the search pin are priority obstacles, registered before any label, so place/water/road labels and icons never sit under them; the layout key includes the marker positions. Search ranking: exact name, then all-token matches (local before network), then partial matches; local POIs are weighted by OMT rank and landmark classes.

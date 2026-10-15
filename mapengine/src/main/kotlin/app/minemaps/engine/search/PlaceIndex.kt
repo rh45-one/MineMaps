@@ -128,8 +128,10 @@ class PlaceIndex(private val maxEntries: Int = 50_000) {
                 if (m <= 0.0) continue
                 val km = meters(e.wx, e.wy, centerWx, centerWy) / 1000.0
                 val proximity = 0.4 + 0.6 / (1.0 + km / 10.0)
-                val rankBonus = if (e.rank in 0..200) 1.0 - e.rank / 400.0 else 0.9
-                hits.add(PlaceHit(if (localNames && e.local != null) e.local else e.en, e.kindLabel, e.kind, e.wx, e.wy, m * e.kind.weight * proximity * rankBonus))
+                val rankBonus = if (e.rank in 0..1000) 0.3 + 0.7 / (1.0 + e.rank / 20.0) else 0.3
+                val classBonus = if (e.kind == PlaceKind.POI && e.kindLabel.lowercase() in LANDMARK_CLASSES) 1.8 else 1.0
+                val firstToken = if (e.enTokens.first().startsWith(tokens[0]) || e.localTokens.firstOrNull()?.startsWith(tokens[0]) == true) 1.3 else 1.0
+                hits.add(PlaceHit(if (localNames && e.local != null) e.local else e.en, e.kindLabel, e.kind, e.wx, e.wy, m * e.kind.weight * proximity * rankBonus * classBonus * firstToken))
             }
         }
         return hits.sortedByDescending { it.score }.take(limit)
@@ -143,6 +145,7 @@ class PlaceIndex(private val maxEntries: Int = 50_000) {
     }
 
     companion object {
+        private val LANDMARK_CLASSES = setOf("attraction", "monument", "museum", "castle", "viewpoint", "art gallery", "theme park", "zoo", "memorial", "artwork")
         private const val EARTH_M = 40_075_016.0
 
         fun normalize(s: String): String {

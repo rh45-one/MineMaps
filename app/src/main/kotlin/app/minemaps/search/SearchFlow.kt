@@ -21,13 +21,25 @@ sealed interface SearchState {
 }
 
 /** Local hits first (top 3), then network hits; a network hit replaces a local one with the same name closer than 250 m. */
-fun mergeResults(local: List<SearchResult>, network: List<SearchResult>): List<SearchResult> {
-    if (network.isEmpty()) return local
-    val kept = local.filter { l ->
+fun mergeResults(local: List<SearchResult>, network: List<SearchResult>, query: String = ""): List<SearchResult> {
+    val kept = if (network.isEmpty()) local else local.filter { l ->
         val n = PlaceIndex.normalize(l.name)
         network.none { PlaceIndex.normalize(it.name) == n && meters(it, l) < 250.0 }
     }
-    return kept.take(3) + network + kept.drop(3)
+    val base = if (network.isEmpty()) kept else kept.take(3) + network + kept.drop(3)
+    val q = PlaceIndex.normalize(query)
+    if (q.isEmpty()) return base
+    val tokens = q.split(' ')
+    fun tier(r: SearchResult): Int {
+        val n = PlaceIndex.normalize(r.name)
+        val nameTokens = n.split(' ')
+        return when {
+            n == q -> 0
+            tokens.all { t -> nameTokens.any { it.startsWith(t) } } -> 1
+            else -> 2
+        }
+    }
+    return base.sortedWith(compareBy({ tier(it) }, { if (tier(it) < 2 && !it.local) 1 else 0 }))
 }
 
 private fun meters(a: SearchResult, b: SearchResult): Double {
@@ -59,7 +71,7 @@ fun searchStates(
     var pending: Job? = null
 
     suspend fun ProducerScope<SearchState>.publish() {
-        val merged = mergeResults(localRes, netRes)
+        val merged = mergeResults(localRes, netRes, latest)
         val err = error
         send(if (merged.isEmpty() && err != null && !updating) SearchState.Error(err) else SearchState.Results(merged, updating))
     }

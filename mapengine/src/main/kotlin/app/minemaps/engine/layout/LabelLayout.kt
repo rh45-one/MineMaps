@@ -85,6 +85,7 @@ object LabelLayout {
         profile: RenderProfile,
         iconSizePx: Float = 32f,
         obstacles: List<Obstacle> = emptyList(),
+        priorityObstacles: List<Obstacle> = emptyList(),
     ): PlacedLayout {
         val zoom = floor(viewport.zoom).toInt()
         val sw = viewport.widthPx.toFloat()
@@ -122,6 +123,8 @@ object LabelLayout {
             boxes.add(x0, y0, x1, y1, TEXT_PAD)
             placedLabels.add(PlacedLabel(l, cx, cy, w, h, angle.toFloat()))
         }
+
+        for (o in priorityObstacles) boxes.add(o.x0, o.y0, o.x1, o.y1, TEXT_PAD)
 
         places.forEach(::placeLabel)
 
