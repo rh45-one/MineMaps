@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- LeakCanary keeps watching and logging, but its UI (which analyses heap dumps inside the app process) is removed so monkey runs cannot open it. -->
+        <activity android:name="leakcanary.internal.activity.LeakActivity" tools:node="remove" />
+        <activity-alias android:name="leakcanary.internal.activity.LeakLauncherActivity" tools:node="remove" />
+    </application>
+</manifest>

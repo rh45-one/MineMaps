@@ -9,6 +9,7 @@ activityCompose = "1.13.0"
 junit = "4.13.2"
 datastore = "1.2.1"
 carApp = "1.7.0"
+leakcanary = "2.14"
 robolectric = "4.17"
 lifecycle = "2.11.0"
 
@@ -37,6 +38,8 @@ androidx-car-app-projected = { module = "androidx.car.app:app-projected", versio
 androidx-car-app-testing = { module = "androidx.car.app:app-testing", version.ref = "carApp" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core", version = "1.7.0" }
+
+leakcanary = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
