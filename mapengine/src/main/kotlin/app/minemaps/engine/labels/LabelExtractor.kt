@@ -30,7 +30,7 @@ class TileLabels(val labels: List<Label>, val pois: List<Poi>) {
     }
 }
 
-class LabelExtractor(private val nameField: String = "name") {
+class LabelExtractor(private val names: NameResolver = NameResolver(NameResolver.Mode.LOCAL)) {
     companion object {
         fun extract(tile: VectorTile, vtKey: TileKey): TileLabels = LabelExtractor().extract(tile, vtKey)
     }
@@ -45,18 +45,15 @@ class LabelExtractor(private val nameField: String = "name") {
         return TileLabels(labels, pois)
     }
 
-    private fun nameOf(f: Feature): String? {
-        val n = (f.tags[nameField] as? String) ?: (f.tags["name"] as? String)
-        return n?.takeIf { it.isNotBlank() }
-    }
+    private fun nameOf(f: Feature, isPlace: Boolean = false): String? = names.resolve(f.tags, isPlace)
 
     private fun placeLabels(layer: Layer, vtKey: TileKey, out: MutableList<Label>) {
         for (f in layer.features) {
             if (f.type != GeomType.POINT) continue
-            val text = nameOf(f) ?: continue
+            val text = nameOf(f, isPlace = true) ?: continue
             val (kind, minZoom) = when (f.tags["class"] as? String) {
-                "country" -> LabelKind.COUNTRY to 2
-                "state", "province", "region" -> LabelKind.STATE to 4
+                "country" -> LabelKind.COUNTRY to 5
+                "state", "province", "region" -> LabelKind.STATE to 6
                 "city" -> LabelKind.CITY to 6
                 "town" -> LabelKind.TOWN to 9
                 "village" -> LabelKind.VILLAGE to 11
@@ -161,6 +158,11 @@ class LabelExtractor(private val nameField: String = "name") {
     private fun wx(key: TileKey, layer: Layer, u: Int): Double = (key.x + u.toDouble() / layer.extent) / (1 shl key.z)
 
     private fun wy(key: TileKey, layer: Layer, v: Int): Double = (key.y + v.toDouble() / layer.extent) / (1 shl key.z)
+}
+
+object LabelFilter {
+    fun apply(labels: List<Label>, showStreetNames: Boolean): List<Label> =
+        if (showStreetNames) labels else labels.filter { it.kind != LabelKind.ROAD && it.kind != LabelKind.ROAD_MINOR }
 }
 
 object PoiIcons {

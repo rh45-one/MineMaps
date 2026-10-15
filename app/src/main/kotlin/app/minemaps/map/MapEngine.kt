@@ -9,6 +9,7 @@ import app.minemaps.BuildConfig
 import app.minemaps.engine.art.EngineResources
 import app.minemaps.engine.art.TextureAtlas
 import app.minemaps.engine.art.TexturePack
+import app.minemaps.engine.labels.NameResolver
 import app.minemaps.engine.data.DiskTileCache
 import app.minemaps.engine.data.OpenMapTilesSource
 import app.minemaps.engine.data.TileRepository
@@ -20,6 +21,10 @@ class MapEngine(context: Context, val client: OkHttpClient) {
     val source = OpenMapTilesSource(BuildConfig.TILEJSON_URL, client, BuildConfig.USER_AGENT, cache)
     val repository = TileRepository(source)
     private val atlases = HashMap<TexturePack, TextureAtlas>()
+    val transliterator = AndroidTransliterator()
+
+    fun nameResolver(mode: NameResolver.Mode) = NameResolver(mode, transliterator)
+
     val typeface: Typeface = loadTypeface(context)
     val memoryClassMb: Int = context.getSystemService(ActivityManager::class.java).memoryClass
 

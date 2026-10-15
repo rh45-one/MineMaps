@@ -48,12 +48,13 @@ class SearchResult(
 }
 
 object PhotonParser {
+    private val TEXT_KEYS = setOf("name", "street", "district", "city", "state", "country")
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(text: String): List<SearchResult> {
+    fun parse(text: String, latinize: (String) -> String = { it }): List<SearchResult> {
         val root = json.parseToJsonElement(text).jsonObject
         val features = root["features"] as? JsonArray ?: return emptyList()
-        return features.mapNotNull { runCatching { parseFeature(it.jsonObject) }.getOrNull() }
+        return features.mapNotNull { runCatching { parseFeature(it.jsonObject, latinize) }.getOrNull() }
     }
 
     /** [minLon, maxLat, maxLon, minLat] with min/max sorted, or null when any value is not a valid coordinate. */
@@ -67,14 +68,15 @@ object PhotonParser {
         return doubleArrayOf(minOf(lonA, lonB), maxOf(latA, latB), maxOf(lonA, lonB), minOf(latA, latB))
     }
 
-    private fun str(o: JsonObject, key: String): String? = (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+    private fun rawStr(o: JsonObject, key: String): String? = (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 
-    private fun parseFeature(f: JsonObject): SearchResult? {
+    private fun parseFeature(f: JsonObject, latinize: (String) -> String): SearchResult? {
         val coords = f["geometry"]?.jsonObject?.get("coordinates")?.jsonArray ?: return null
         val lon = coords[0].jsonPrimitive.doubleOrNull ?: return null
         val lat = coords[1].jsonPrimitive.doubleOrNull ?: return null
         if (!lon.isFinite() || !lat.isFinite() || lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) return null
         val p = f["properties"]?.jsonObject ?: return null
+        fun str(o: JsonObject, key: String): String? = rawStr(o, key)?.let { if (key in TEXT_KEYS) latinize(it) else it }
         val street = str(p, "street")
         val house = str(p, "housenumber")
         val streetLine = if (street != null) listOfNotNull(street, house).joinToString(" ") else null
@@ -98,7 +100,7 @@ object PhotonParser {
 }
 
 class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, private val baseUrl: String, private val userAgent: String) {
-    suspend fun search(query: String, biasLat: Double?, biasLon: Double?, lang: String?): List<SearchResult> {
+    suspend fun search(query: String, biasLat: Double?, biasLon: Double?, lang: String?, latinize: (String) -> String = { it }): List<SearchResult> {
         val url = baseUrl.toHttpUrl().newBuilder()
             .addPathSegment("api").addPathSegment("")
             .addQueryParameter("q", query.take(MAX_QUERY_CHARS))
@@ -136,7 +138,7 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
                 }
             })
         }
-        return PhotonParser.parse(body)
+        return PhotonParser.parse(body, latinize)
     }
 
     private fun readLimited(r: Response): String {

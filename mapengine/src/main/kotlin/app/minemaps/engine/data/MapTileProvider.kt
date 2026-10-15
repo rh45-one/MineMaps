@@ -5,6 +5,7 @@ import app.minemaps.engine.geo.TileKey
 import app.minemaps.engine.inspect.FeatureInspector
 import app.minemaps.engine.inspect.InspectResult
 import app.minemaps.engine.labels.LabelExtractor
+import app.minemaps.engine.labels.NameResolver
 import app.minemaps.engine.labels.TileLabels
 import app.minemaps.engine.raster.BlockGrid
 import app.minemaps.engine.raster.GridRasterizer
@@ -108,7 +109,10 @@ class MapTileProvider(
     val timings = Timings()
 
     @Volatile
-    private var labelExtractor = LabelExtractor()
+    private var nameResolver = NameResolver(NameResolver.Mode.LOCAL)
+
+    @Volatile
+    private var labelExtractor = LabelExtractor(nameResolver)
     private val compositor = TileCompositor(atlas)
     private val cpu = Dispatchers.Default.limitedParallelism(maxOf(2, Runtime.getRuntime().availableProcessors() - 1))
     private val _networkState = MutableStateFlow(NetState.OK)
@@ -153,8 +157,9 @@ class MapTileProvider(
         cancel.forEach { it.cancel() }
     }
 
-    fun setLabelNameField(field: String) {
-        labelExtractor = LabelExtractor(field)
+    fun setNameResolver(resolver: NameResolver) {
+        nameResolver = resolver
+        labelExtractor = LabelExtractor(resolver)
         labelCache.clear()
     }
 
@@ -163,7 +168,7 @@ class MapTileProvider(
         val n = 1 shl vz
         val key = TileKey(vz, floor(wx * n).toInt().coerceIn(0, n - 1), floor(wy * n).toInt().coerceIn(0, n - 1))
         val tile = repo.get(key)
-        return withContext(cpu) { FeatureInspector.inspect(tile, key, wx, wy, zoom, pixelRatio) }
+        return withContext(cpu) { FeatureInspector.inspect(tile, key, wx, wy, zoom, pixelRatio, nameResolver) }
     }
 
     fun pendingCount(): Int = synchronized(lock) { pending.size }

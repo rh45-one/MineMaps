@@ -161,6 +161,16 @@ def scale_icon(im):
     return im.resize((T, T), Image.BOX)
 
 
+def center_x(im):
+    box = im.getchannel('A').getbbox()
+    if not box:
+        return im
+    shift = round(T / 2 - (box[0] + box[2]) / 2)
+    out = Image.new('RGBA', im.size)
+    out.paste(im, (shift, 0))
+    return out
+
+
 def recipes(tx):
     """atlas name -> function returning a list of 16x16 variants (textures) or one image (icons)."""
     item = lambda n: tx.img('item/' + n)
@@ -212,7 +222,7 @@ def recipes(tx):
         'minecart': lambda: item('minecart'), 'mug': lambda: item('honey_bottle'),
         'pickaxe': lambda: item('iron_pickaxe'), 'compass': lambda: item('compass_00'), 'bell': lambda: item('bell'),
         'fish': lambda: item('cod'), 'pin': lambda: tx.img('map/decorations/red_banner'),
-        'player': lambda: tx.img('map/decorations/player'), 'diamond': lambda: item('diamond'),
+        'player': lambda: center_x(scale_icon(tx.img('map/decorations/player'))), 'diamond': lambda: item('diamond'),
         'iron_ingot': lambda: item('iron_ingot'), 'redstone': lambda: item('redstone'),
         'golden_apple': lambda: item('golden_apple'), 'cake': lambda: item('cake'), 'cookie': lambda: item('cookie'),
         'map': lambda: item('filled_map') if tx.has('item/filled_map') else item('map'),

@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -89,3 +90,16 @@ fun Banner(text: String, actionLabel: String?, onAction: () -> Unit, modifier: M
 }
 
 val Transparent = Color.Transparent
+
+@Composable
+fun StreetNamesIcon(on: Boolean) {
+    val color = androidx.compose.material3.LocalContentColor.current
+    androidx.compose.material3.Text(
+        "Aa",
+        Modifier.drawBehind {
+            if (!on) drawLine(color, androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+        },
+        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+    )
+}

@@ -13,6 +13,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import kotlinx.coroutines.delay
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -84,6 +97,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.minemaps.AppContainer
 import app.minemaps.data.Camera
 import app.minemaps.data.LabelNames
+import app.minemaps.engine.labels.NameResolver
 import app.minemaps.data.SavedPlace
 import app.minemaps.data.Settings
 import app.minemaps.data.ThemeMode
@@ -207,6 +221,14 @@ private fun MapScreen(
     val density = context.resources.displayMetrics.density
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
+    var creditShown by rememberSaveable { mutableStateOf(true) }
+    var creditTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(creditShown, creditTick) {
+        if (creditShown) {
+            delay(5000)
+            creditShown = false
+        }
+    }
     val renderer = remember { MapRenderer(engine, RenderProfile.PHONE, density, null, settings.texturePack) { controller.view?.requestRedraw() } }
     DisposableEffect(renderer) {
         container.register(renderer)
@@ -264,7 +286,8 @@ private fun MapScreen(
     LaunchedEffect(settings.showIcons) { renderer.showIcons = settings.showIcons }
     LaunchedEffect(settings.arrowColor) { renderer.arrowColor = settings.arrowColor }
     LaunchedEffect(settings.texturePack) { renderer.pack = settings.texturePack }
-    LaunchedEffect(settings.labelNames) { renderer.labelNameField = if (settings.labelNames == LabelNames.LATIN) "name:latin" else "name" }
+    LaunchedEffect(settings.labelNames) { renderer.nameMode = if (settings.labelNames == LabelNames.LOCAL) NameResolver.Mode.LOCAL else NameResolver.Mode.ENGLISH }
+    LaunchedEffect(settings.showStreetNames) { renderer.showStreetNames = settings.showStreetNames }
 
     val player = loc.location
     LaunchedEffect(player, following, pending) {
@@ -321,7 +344,10 @@ private fun MapScreen(
                 v.night = dark
                 v.overlays = overlays
                 v.onCameraChanged = vm::onCameraChanged
-                v.onUserMoved = vm::onUserMoved
+                v.onUserMoved = {
+                    vm.onUserMoved()
+                    creditShown = false
+                }
                 v.onTap = { vp, sx, sy ->
                     focus.clearFocus()
                     vm.resultsVisible.value = false
@@ -399,8 +425,13 @@ private fun MapScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.End,
         ) {
+            SmallFloatingActionButton(
+                modifier = Modifier.semantics { contentDescription = if (settings.showStreetNames) "Hide street names" else "Show street names" },
+                onClick = { vm.setShowStreetNames(!settings.showStreetNames) },
+                shape = CircleShape,
+            ) { StreetNamesIcon(settings.showStreetNames) }
             SmallFloatingActionButton(onClick = { controller.zoomIn() }, shape = CircleShape) { Icon(Icons.Default.Add, contentDescription = "Zoom in") }
-            SmallFloatingActionButton(onClick = { controller.zoomOut() }, shape = CircleShape) { Text("\u2212", style = MaterialTheme.typography.titleLarge) }
+            SmallFloatingActionButton(onClick = { controller.zoomOut() }, shape = CircleShape, modifier = Modifier.semantics { contentDescription = "Zoom out" }) { Text("\u2212", style = MaterialTheme.typography.titleLarge) }
             SmallFloatingActionButton(
                 modifier = Modifier.semantics { contentDescription = "My location" },
                 onClick = {
@@ -426,13 +457,38 @@ private fun MapScreen(
             }
         }
 
-        Surface(
-            Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 12.dp, bottom = bottomPad).clickable { vm.screen.value = Screen.LICENCES },
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-            shadowElevation = 2.dp,
-        ) {
-            Text("\u00a9 OpenMapTiles \u00a9 OpenStreetMap", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelSmall)
+        Box(Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.navigationBars).padding(start = 4.dp, bottom = bottomPad - 8.dp)) {
+            AnimatedVisibility(creditShown, enter = fadeIn(), exit = fadeOut()) {
+                Surface(
+                    Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp).widthIn(max = 280.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    shadowElevation = 2.dp,
+                ) {
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            buildAnnotatedString {
+                                append("\u00a9 ")
+                                withLink(LinkAnnotation.Url(OSM_COPYRIGHT_URL)) { append("OpenStreetMap") }
+                                append(" contributors \u00b7 \u00a9 OpenMapTiles \u00b7 OpenFreeMap")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text("Licences", Modifier.clickable { vm.screen.value = Screen.LICENCES }.padding(top = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            AnimatedVisibility(!creditShown, enter = fadeIn(), exit = fadeOut()) {
+                Box(
+                    Modifier.size(48.dp).semantics { contentDescription = "Map credits" }.clickable { creditShown = true; creditTick++ },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(Modifier.size(24.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), contentColor = MaterialTheme.colorScheme.onSurface, shadowElevation = 2.dp) {
+                        Box(contentAlignment = Alignment.Center) { Text("i", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
         }
 
         val rationaleVisible = !granted && !settings.rationaleDismissed && !settings.permissionAsked

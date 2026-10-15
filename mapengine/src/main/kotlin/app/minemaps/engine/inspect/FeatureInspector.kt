@@ -2,6 +2,7 @@ package app.minemaps.engine.inspect
 
 import app.minemaps.engine.geo.Mercator
 import app.minemaps.engine.geo.TileKey
+import app.minemaps.engine.labels.NameResolver
 import app.minemaps.engine.mvt.Feature
 import app.minemaps.engine.mvt.GeomType
 import app.minemaps.engine.mvt.Layer
@@ -20,7 +21,21 @@ object FeatureInspector {
     private const val MIN_ROAD_RADIUS_PX = 8.0
     private const val NAME_RADIUS_PX = 14.0
 
-    fun inspect(tile: VectorTile, vtKey: TileKey, wx: Double, wy: Double, zoom: Double, pixelRatio: Float = 1f): InspectResult? {
+    private val currentNames = ThreadLocal.withInitial { NameResolver(NameResolver.Mode.LOCAL) }
+
+    fun inspect(
+        tile: VectorTile, vtKey: TileKey, wx: Double, wy: Double, zoom: Double, pixelRatio: Float = 1f,
+        names: NameResolver = NameResolver(NameResolver.Mode.LOCAL),
+    ): InspectResult? {
+        currentNames.set(names)
+        return try {
+            inspectTile(tile, vtKey, wx, wy, zoom, pixelRatio)
+        } finally {
+            currentNames.remove()
+        }
+    }
+
+    private fun inspectTile(tile: VectorTile, vtKey: TileKey, wx: Double, wy: Double, zoom: Double, pixelRatio: Float): InspectResult? {
         val n = (1 shl vtKey.z).toDouble()
         val worldSizePx = 256.0 * pixelRatio * 2.0.pow(zoom)
         val lat = Mercator.yToLat(wy)
@@ -130,7 +145,7 @@ object FeatureInspector {
         return null
     }
 
-    private fun nameOf(f: Feature): String? = (f.tags["name"] as? String)?.takeIf { it.isNotBlank() }
+    private fun nameOf(f: Feature): String? = currentNames.get().resolve(f.tags)
 
     private fun pretty(s: String): String = s.replace('_', ' ').replaceFirstChar { it.uppercase() }
 

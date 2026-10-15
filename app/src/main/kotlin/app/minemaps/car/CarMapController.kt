@@ -18,6 +18,7 @@ import app.minemaps.engine.geo.Viewport
 import app.minemaps.engine.layout.RenderProfile
 import app.minemaps.location.LocationState
 import app.minemaps.location.LocationStatus
+import app.minemaps.engine.labels.NameResolver
 import app.minemaps.map.Bookmark
 import app.minemaps.map.MapOverlays
 import app.minemaps.map.MapRenderer
@@ -94,6 +95,14 @@ class CarMapController(
     private var texturePack: app.minemaps.engine.art.TexturePack = app.minemaps.engine.art.TexturePack.ORIGINAL
 
     @Volatile
+    private var nameMode = NameResolver.Mode.ENGLISH
+
+    @Volatile
+    private var showStreetNames = true
+
+    private fun names(s: app.minemaps.data.Settings) = if (s.labelNames == app.minemaps.data.LabelNames.LOCAL) NameResolver.Mode.LOCAL else NameResolver.Mode.ENGLISH
+
+    @Volatile
     private var arrowColor: Int = app.minemaps.data.ArrowColors.DEFAULT
     private var gotFix = false
     private var cameraLoaded = false
@@ -125,6 +134,8 @@ class CarMapController(
             val density = dpi / 160f
             val r = MapRenderer(engine, RenderProfile.CAR, density, max(1f, density), texturePack) { requestRender() }
             r.arrowColor = arrowColor
+            r.nameMode = nameMode
+            r.showStreetNames = showStreetNames
             container.register(r)
             renderer = r
             launch { r.networkState.collect { networkState.value = it } }
@@ -143,6 +154,12 @@ class CarMapController(
                     arrowColor = it.arrowColor
                     texturePack = it.texturePack
                     renderer?.pack = it.texturePack
+                    nameMode = names(it)
+                    showStreetNames = it.showStreetNames
+                    renderer?.apply {
+                        this.nameMode = nameMode
+                        this.showStreetNames = showStreetNames
+                    }
                     renderer?.arrowColor = it.arrowColor
                     requestRender()
                 }

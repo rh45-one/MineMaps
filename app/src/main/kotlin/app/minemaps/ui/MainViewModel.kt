@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -68,7 +69,12 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     val searchState: StateFlow<SearchState> = searchStates(typed) { q ->
         val c = camera
-        container.photon.search(q, c?.lat, c?.lon, Locale.getDefault().language)
+        if (container.settings.settings.first().labelNames == app.minemaps.data.LabelNames.ENGLISH) {
+            val names = container.engine.await().nameResolver(app.minemaps.engine.labels.NameResolver.Mode.ENGLISH)
+            container.photon.search(q, c?.lat, c?.lon, "en") { names.latinize(it) ?: it }
+        } else {
+            container.photon.search(q, c?.lat, c?.lon, Locale.getDefault().language)
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SearchState.Idle)
 
     init {
@@ -200,6 +206,8 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun setArrowColor(v: Int) = viewModelScope.launch { container.settings.setArrowColor(v) }
 
     fun setShowIcons(v: Boolean) = viewModelScope.launch { container.settings.setShowIcons(v) }
+
+    fun setShowStreetNames(v: Boolean) = viewModelScope.launch { container.settings.setShowStreetNames(v) }
 
     fun setLabelNames(v: app.minemaps.data.LabelNames) = viewModelScope.launch { container.settings.setLabelNames(v) }
 

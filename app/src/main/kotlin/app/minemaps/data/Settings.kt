@@ -12,12 +12,13 @@ import kotlinx.coroutines.flow.map
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-enum class LabelNames { LOCAL, LATIN }
+enum class LabelNames { ENGLISH, LOCAL }
 
 data class Settings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val showIcons: Boolean = true,
-    val labelNames: LabelNames = LabelNames.LOCAL,
+    val labelNames: LabelNames = LabelNames.ENGLISH,
+    val showStreetNames: Boolean = true,
     val arrowColor: Int = ArrowColors.DEFAULT,
     val texturePack: TexturePack = TexturePack.ORIGINAL,
     val permissionAsked: Boolean = false,
@@ -43,6 +44,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val themeKey = stringPreferencesKey("theme")
     private val iconsKey = booleanPreferencesKey("show_icons")
     private val namesKey = stringPreferencesKey("label_names")
+    private val streetsKey = booleanPreferencesKey("show_street_names")
     private val packKey = stringPreferencesKey("texture_pack")
     private val arrowKey = intPreferencesKey("arrow_color")
     private val askedKey = booleanPreferencesKey("permission_asked")
@@ -52,7 +54,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         Settings(
             theme = p[themeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
             showIcons = p[iconsKey] ?: true,
-            labelNames = p[namesKey]?.let { runCatching { LabelNames.valueOf(it) }.getOrNull() } ?: LabelNames.LOCAL,
+            labelNames = if (p[namesKey] == LabelNames.LOCAL.name) LabelNames.LOCAL else LabelNames.ENGLISH,
+            showStreetNames = p[streetsKey] ?: true,
             arrowColor = p[arrowKey] ?: ArrowColors.DEFAULT,
             texturePack = p[packKey]?.let { runCatching { TexturePack.valueOf(it) }.getOrNull() } ?: TexturePack.ORIGINAL,
             permissionAsked = p[askedKey] ?: false,
@@ -63,6 +66,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setTheme(v: ThemeMode) = store.edit { it[themeKey] = v.name }
 
     suspend fun setShowIcons(v: Boolean) = store.edit { it[iconsKey] = v }
+
+    suspend fun setShowStreetNames(v: Boolean) = store.edit { it[streetsKey] = v }
 
     suspend fun setLabelNames(v: LabelNames) = store.edit { it[namesKey] = v.name }
 

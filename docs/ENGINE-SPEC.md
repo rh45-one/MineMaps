@@ -73,7 +73,7 @@ service/track/path/drain z≥15.
 - Night: `r×0.42, g×0.48, b×0.68` (clamped). Night tiles are a separate cache key.
 
 ## Labels & POIs (per vector tile, drawn by the platform renderer, never baked into tiles)
-- `place` points: country, state, city, town, village, hamlet, suburb, quarter, neighbourhood, island → Label(kind, rank).
+- `place` points: country (minZoom 5), state/province/region (6), city (6), town (9), village (11), hamlet (13), suburb (12), quarter and neighbourhood (14), island (10) → Label(kind, rank).
 - `water_name` (class lake: minZoom 15; ocean 0, sea 3, others 12) points/lines, `transportation_name` lines: label at the midpoint of the longest segment, angle
   normalised to (−90°, 90°]; minor roads z≥16, others z≥14.
 - `poi` → icon by class/subclass:
@@ -84,7 +84,10 @@ service/track/path/drain z≥15.
   minecart {railway, bus, parking, car, bicycle_rental, ferry_terminal}, bed {lodging, hotel, hostel, motel},
   pickaxe {hardware, doityourself, car_repair}, compass {attraction, museum, monument, viewpoint, castle, art_gallery},
   bell {place_of_worship}, fish {seafood, marina, harbor}. Unmapped → no icon.
-- Name field: `name` by default (an engine option may prefer `name:latin`/`name:en`).
+- Names: `NameResolver` (package `labels`) picks the text for places, water, roads, POIs and the inspector. LOCAL mode uses `name`. ENGLISH mode takes the first of:
+  `name:en`; `name_en` if Latin; `name_int` if Latin (for places only the part before ", "); `name` if Latin; `name:latin`; the longest run of Latin words (>= 2 letters) in a mixed `name`;
+  a platform `Transliterator` (Android: ICU `Any-Latin; Latin-ASCII`, Android 10+, title-cased, LRU-cached); finally `name`. "Latin" = every letter is Latin/Common/Inherited script.
+- `LabelFilter` hides ROAD and ROAD_MINOR labels when street names are switched off (applied in the renderer, no re-extraction).
 
 ## Decorative trees (FOREST and PARK blocks)
 Trees are decorative: they are only placed on blocks that the data already classifies as FOREST or PARK, and are not real tree positions.

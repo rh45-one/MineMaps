@@ -195,8 +195,8 @@ fun SettingsScreen(
                 Switch(checked = settings.showIcons, onCheckedChange = onIcons)
             }
             SectionTitle("Label names")
-            RadioRow<Unit>("Local names", settings.labelNames == LabelNames.LOCAL) { onLabelNames(LabelNames.LOCAL) }
-            RadioRow<Unit>("Latin names (where available)", settings.labelNames == LabelNames.LATIN) { onLabelNames(LabelNames.LATIN) }
+            RadioRow<Unit>("English (Latin script)", settings.labelNames == LabelNames.ENGLISH) { onLabelNames(LabelNames.ENGLISH) }
+            RadioRow<Unit>("Local language", settings.labelNames == LabelNames.LOCAL) { onLabelNames(LabelNames.LOCAL) }
             SectionTitle("Storage")
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -209,6 +209,7 @@ fun SettingsScreen(
             Row(Modifier.fillMaxWidth().clickable(onClick = onLicences).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 Text("Licences & attribution")
             }
+            MapDataCredits(Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
         }
     }
 }
@@ -257,3 +258,25 @@ fun LicencesScreen(oflText: String, vanillaActive: Boolean, onBack: () -> Unit) 
         }
     }
 }
+
+@Composable
+fun MapDataCredits(modifier: Modifier = Modifier) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    Column(modifier) {
+        Text("Map data", style = MaterialTheme.typography.labelLarge)
+        Text(
+            "\u00a9 OpenStreetMap contributors \u00b7 \u00a9 OpenMapTiles \u00b7 OpenFreeMap",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "OpenStreetMap copyright and license",
+            Modifier.clickable { uri.openUri(OSM_COPYRIGHT_URL) }.padding(vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text("Search by Photon (komoot)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+const val OSM_COPYRIGHT_URL = "https://www.openstreetmap.org/copyright"

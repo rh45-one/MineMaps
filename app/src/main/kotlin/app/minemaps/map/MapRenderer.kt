@@ -18,6 +18,8 @@ import app.minemaps.engine.art.Anchor
 import app.minemaps.engine.art.TextureAtlas
 import app.minemaps.engine.art.TexturePack
 import app.minemaps.engine.data.NetState
+import app.minemaps.engine.labels.LabelFilter
+import app.minemaps.engine.labels.NameResolver
 import app.minemaps.engine.layout.LabelLayout
 import app.minemaps.engine.layout.Obstacle
 import app.minemaps.engine.layout.PlacedLayout
@@ -48,7 +50,7 @@ class MapRenderer(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val labelVersion = AtomicInteger()
-    private var labelNameFieldValue = "name"
+    private var nameResolver = engine.nameResolver(NameResolver.Mode.ENGLISH)
     private var generation = 0
     private var activePack: TexturePack = engine.resolve(initialPack)
     private var atlas: TextureAtlas = engine.atlas(activePack)
@@ -63,7 +65,7 @@ class MapRenderer(
     private fun createProvider(): MapTileProvider {
         val gen = ++generation
         val p = MapTileProvider(engine.repository, atlas, scope) { key, night, argb -> onTile(key, night, argb, gen) }
-        p.setLabelNameField(labelNameFieldValue)
+        p.setNameResolver(nameResolver)
         p.onLabelsReady = {
             if (gen == generation) {
                 labelVersion.incrementAndGet()
@@ -110,12 +112,20 @@ class MapRenderer(
             onInvalidate()
         }
 
-    var labelNameField: String = "name"
+    var nameMode: NameResolver.Mode = NameResolver.Mode.ENGLISH
         set(value) {
             if (field == value) return
             field = value
-            labelNameFieldValue = value
-            provider.setLabelNameField(value)
+            nameResolver = engine.nameResolver(value)
+            provider.setNameResolver(nameResolver)
+            labelVersion.incrementAndGet()
+            onInvalidate()
+        }
+
+    @Volatile
+    var showStreetNames: Boolean = true
+        set(value) {
+            field = value
             labelVersion.incrementAndGet()
             onInvalidate()
         }
@@ -365,7 +375,7 @@ class MapRenderer(
             val pois = ArrayList<Poi>()
             for (vt in vts) {
                 val tl = provider.labels(vt) ?: continue
-                labels.addAll(tl.labels)
+                labels.addAll(LabelFilter.apply(tl.labels, showStreetNames))
                 if (showIcons) pois.addAll(tl.pois)
             }
             val m = LAYOUT_MARGIN_PX
