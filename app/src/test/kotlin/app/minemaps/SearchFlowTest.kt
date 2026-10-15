@@ -204,18 +204,45 @@ class SearchFlowTest {
         assertTrue(ResponseCache.key("paris", 48.0, 2.0, "en") != ResponseCache.key("paris", 48.0, 2.0, "fr"))
     }
 
+    private fun osm(name: String, lat: Double, lon: Double, key: String, value: String, local: Boolean = false) =
+        SearchResult(name, "", "", lat, lon, null, value, null, local, key)
+
     @Test
-    fun allTokenMatchesRankBeforePartialMatchesAndExactFirst() {
-        val net = listOf("Madame", "Madame Arthur", "Madame Z", "Madame Brasserie Annexe", "Madame Brasserie").map { result(it, 48.0, 2.0) }
-        val local = listOf(result("Madame Brasserie", 48.0, 2.0, local = true), result("Brasserie Madame Lune", 48.0, 2.0, local = true))
-        val ranked = mergeResults(local, net, "Madame Brasserie").map { it.name }
-        assertEquals("Madame Brasserie", ranked.first())
-        assertEquals(setOf("Madame Brasserie Annexe", "Brasserie Madame Lune"), ranked.subList(1, 3).toSet())
-        assertEquals(setOf("Madame", "Madame Arthur", "Madame Z"), ranked.subList(3, 6).toSet())
-        // equally good matches: the nearby local hit comes first
-        val tie = mergeResults(listOf(result("Rue Foo", 48.0, 2.0, local = true)), listOf(result("Rue Foo Bis", 10.0, 10.0)), "rue foo").map { it.name }
-        assertEquals(listOf("Rue Foo", "Rue Foo Bis"), tie)
-        // no query: unchanged order
-        assertEquals(listOf("a", "x"), mergeResults(listOf(result("a", local = true)), listOf(result("x", 5.0, 5.0))).map { it.name })
+    fun photonOrderIsKeptAndDuplicateTransitStopsCollapseToTheNearest() {
+        val net = listOf(
+            osm("Eiffel Tower", 48.8584, 2.2945, "man_made", "tower"),
+            osm("Eiffel", 48.8950, 2.2870, "highway", "bus_stop"),
+            osm("Eiffel", 48.8700, 2.3000, "office", "company"),
+            osm("Eiffel", 48.9500, 2.2000, "highway", "bus_stop"),
+            osm("Eiffel", 49.2000, 2.5000, "highway", "bus_stop"),
+            osm("Eiffel", 48.7000, 2.1000, "highway", "bus_stop"),
+            osm("Eiffel", 48.6000, 2.0000, "highway", "bus_stop"),
+            osm("Eiffel XV", 48.8450, 2.2900, "tourism", "hotel"),
+        )
+        val out = mergeResults(emptyList(), net, "eiffel", 48.8584, 2.2945)
+        assertEquals("Eiffel Tower", out.first().name)
+        val stops = out.filter { it.osmValue == "bus_stop" }
+        assertEquals(1, stops.size)
+        assertEquals(48.8950, stops.single().lat, 1e-9)
+        assertEquals(listOf("Eiffel Tower", "Eiffel", "Eiffel XV", "Eiffel"), out.map { it.name })
+        assertEquals("office", out[1].osmKey)
+        assertEquals("bus_stop", out.last().osmValue)
+    }
+
+    @Test
+    fun nearbyLocalAllTokenMatchPrecedesNetworkPartialMatches() {
+        val local = listOf(result("Madame Brasserie", 48.8590, 2.2950, local = true), result("Brasserie Lune", 48.8590, 2.2950, local = true), result("Madame Brasserie Far", 49.5, 2.9, local = true))
+        val net = listOf("Madame", "Madame Arthur", "Madame Z").map { result(it, 48.9, 2.3) }
+        val ranked = mergeResults(local, net, "Madame Brasserie", 48.8584, 2.2945).map { it.name }
+        assertEquals(listOf("Madame Brasserie", "Madame", "Madame Arthur", "Madame Z", "Brasserie Lune", "Madame Brasserie Far"), ranked)
+    }
+
+    @Test
+    fun localDuplicatesOfNetworkHitsAreDropped() {
+        val local = listOf(result("Eiffel Tower", 48.8584, 2.2945, local = true), result("Eiffel Shop", 48.8590, 2.2950, local = true))
+        val net = listOf(result("eiffel tower", 48.8585, 2.2946))
+        val out = mergeResults(local, net, "eiffel", 48.8584, 2.2945)
+        assertEquals(listOf("Eiffel Shop", "eiffel tower"), out.map { it.name })
+        assertEquals(listOf(true, false), out.map { it.local })
     }
 }

@@ -14,8 +14,10 @@ Phone (`:app`)
 - Labels (places, roads, water) in the Monocraft pixel font, item icons for points of interest, greedy collision layout.
 - Location: follow mode, accuracy circle, Minecraft-map-style player arrow with a selectable colour (platform `LocationManager`, no Google Play services dependency).
 - Bookmarks: saved places with a choice of 34 item icons, drawn on the map with names; decorative trees in forests and parks, depth-shaded water.
-- Search (Photon), saved places (long-press to save), tap-to-inspect card (POI, building, road, water, land).
-- Settings: theme (system/light/dark), item icons, label names (local/Latin), tile cache size and clearing; licences screen.
+- Search: instant on-device results (places, streets, POIs from visited and cached tiles) merged with Photon; saved places (long-press to save); tap-to-inspect card (POI, building, road, water, land).
+- Two-finger map rotation with a compass button (phone; the car stays north-up). Street-name quick toggle.
+- Minecraft-style UI (bevelled blocks, Monocraft titles) that adapts to phones and tablets, portrait and landscape.
+- Settings: theme (system/light/dark), item icons, label names (English/Latin or local language; transliteration needs Android 10+), tile cache size and clearing; licences screen.
 - Offline behaviour: cached tiles keep rendering, a banner shows when the network is down.
 
 Android Auto (POI category, `MapWithContentTemplate`, car API level 7)

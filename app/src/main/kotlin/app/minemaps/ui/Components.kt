@@ -62,7 +62,7 @@ fun LocationButton(state: LocationIconState, onClick: () -> Unit, modifier: Modi
                     drawLine(Color.White, Offset(size.width * 0.05f, size.height * 0.95f), Offset(size.width * 0.95f, size.height * 0.05f), 3.dp.toPx())
                 }
             },
-        ) { PixelGlyph(if (following) Glyph.LOCATE_FILLED else Glyph.LOCATE, tint, 24.dp) }
+        ) { PixelGlyph(if (following) Glyph.LOCATE_FILLED else Glyph.LOCATE, tint, size = 24.dp) }
     }
 }
 
@@ -125,7 +125,7 @@ fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Uni
 fun CreditsButton(onClick: () -> Unit) {
     val c = Mc.colors
     Box(Modifier.size(48.dp).semantics { contentDescription = "Map credits" }.clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(28.dp).mcPanel(c), contentAlignment = Alignment.Center) { PixelGlyph(Glyph.INFO, c.text, 16.dp) }
+        Box(Modifier.size(28.dp).mcPanel(c), contentAlignment = Alignment.Center) { PixelGlyph(Glyph.INFO, c.text, size = 16.dp) }
     }
 }
 

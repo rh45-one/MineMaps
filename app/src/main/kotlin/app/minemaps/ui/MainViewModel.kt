@@ -101,6 +101,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     val searchState: StateFlow<SearchState> = searchStates(
         typed,
+        center = { camera?.let { it.lat to it.lon } },
         local = { q -> localHits(q) },
         cached = { q -> photonCache.get(cacheKey(q)) },
     ) { q ->
@@ -108,9 +109,9 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         runCatching { android.util.Log.d(PhotonClient.TAG, "typed->request ${android.os.SystemClock.elapsedRealtime() - typedAt}ms") }
         val r = if (englishNames) {
             val names = container.engine.await().nameResolver(app.minemaps.engine.labels.NameResolver.Mode.ENGLISH)
-            container.photon.search(q, c?.lat, c?.lon, "en") { names.latinize(it) ?: it }
+            container.photon.search(q, c?.lat, c?.lon, "en", { names.latinize(it) ?: it }, c?.zoom)
         } else {
-            container.photon.search(q, c?.lat, c?.lon, Locale.getDefault().language)
+            container.photon.search(q, c?.lat, c?.lon, Locale.getDefault().language, zoom = c?.zoom)
         }
         photonCache.put(cacheKey(q), r)
         runCatching { android.util.Log.d(PhotonClient.TAG, "network results at +${android.os.SystemClock.elapsedRealtime() - sessionStartAt}ms since first key") }

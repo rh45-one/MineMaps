@@ -14,11 +14,9 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import java.io.File
 
 @Immutable
 class McColors(
@@ -69,11 +67,9 @@ object Mc {
 }
 
 @Composable
-fun MineMapsTheme(dark: Boolean, fontFile: File?, content: @Composable () -> Unit) {
+fun MineMapsTheme(dark: Boolean, typeface: android.graphics.Typeface?, content: @Composable () -> Unit) {
     val c = if (dark) McDark else McLight
-    val title = remember(fontFile) {
-        runCatching { if (fontFile != null && fontFile.exists()) FontFamily(Font(fontFile)) else FontFamily.Monospace }.getOrDefault(FontFamily.Monospace)
-    }
+    val title = remember(typeface) { if (typeface != null) FontFamily(androidx.compose.ui.text.font.Typeface(typeface)) else FontFamily.Monospace }
     val scheme = if (dark) {
         darkColorScheme(
             primary = c.green, onPrimary = c.onGreen, primaryContainer = c.greenLedge, onPrimaryContainer = c.text,

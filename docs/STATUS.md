@@ -12,6 +12,7 @@
 | 6 | Look v2: tinted textures, decorative trees, water depth, tintable arrow, bookmark icons | done |
 | 8 | Name resolution (English/Latin labels), street-name toggle, credit fade + (i), vanilla arrow centring | done (batch 1 of the feature round) |
 | 9 | Map rotation with compass (phone), on-device place index + faster search | done (batch 2) |
+| 11 | Final polish: Photon-order search merge (transit collapse, nearby local hits first), lint cleanup, regression pass | done (batch 4) |
 | 10 | Minecraft-style UI (ui/theme: palette, bevel, Mc* components, pixel glyphs), responsive phone/tablet layouts, search ranking, marker label obstacles | done (batch 3) |
 | 7 | Switchable texture pack (original / Minecraft from the user's own game files), icon anchors | done; vanilla verified on phone, car and desktop renders |
 
@@ -26,9 +27,9 @@
 
 ## Test counts (last run)
 
-- `:mapengine:test`: 90 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory).
-- `:app:testDebugUnitTest`: 30 tests, 0 failures (Photon parsing, search flow, saved-place codec and sanitising, stable-area math, car `MapScreen` with Robolectric, car host allowlist).
-- `:app:lintRelease`: 0 errors, 18 warnings, none in the Security category.
+- `:mapengine:test`: 114 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory; name resolution with real tiles; viewport rotation; place index incl. a 50k-entry query benchmark; label obstacles).
+- `:app:testDebugUnitTest`: 47 tests, 0 failures (Photon parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec, stable-area math, car `MapScreen` with Robolectric, car host allowlist).
+- `:app:lintRelease`: 0 errors, 17 warnings, none in the Security category.
 
 ## Stability campaign (emulator + DHU)
 
@@ -135,12 +136,18 @@ Phone, 10-swipe scripted pan, debug build, `dumpsys gfxinfo`:
 
 Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 
+## Features since the first release
+- Two-finger map rotation with a compass button (phone only; the car stays north-up, the Car API has no rotate gesture).
+- English / Latin label names (ICU transliteration), street-name toggle, credit chip with (i) button.
+- On-device place index (visited and cached tiles, z12 places within 20 km) merged with Photon results; Photon query uses zoom and `location_bias_scale=0.2`.
+- Minecraft-style UI (Monocraft titles, bevelled panels and buttons, pixel glyphs) with phone/tablet, portrait/landscape layouts.
+
 ## Known limitations
 
 - Map overlays use system bars + display cutout insets (safeDrawing minus the keyboard). Swipe-to-delete in the saved list was dropped in favour of a confirm dialog.
 
-- Map rotation is phone only (the Car API has no rotate gesture); there is no heading-up mode. Two-finger rotation was not exercised with real touch input on the emulator (bearing was driven programmatically).
-- The local place index only knows streets and POIs from z14 tiles already decoded or cached, so an unvisited neighbourhood is found only through the network search.
+- Map rotation is phone only (car north-up); there is no heading-up mode. Two-finger rotation was not exercised with real touch input on the emulator (bearing was driven by a temporary debug hook).
+- The local place index only knows streets and POIs from z14 tiles already visited or cached, plus places from the z12 prefetch; an unvisited neighbourhood is found only through the network search.
 
 - English label mode transliterates names that have no Latin-script tag with ICU, which needs Android 10+ (API 29); on Android 8-9 such names stay in their local script. ICU output is phonetic (e.g. Arabic without vowels), not an official romanisation.
 - The car screen shows no OpenStreetMap/OpenMapTiles attribution; the phone shows it at start, behind an (i) button, in Settings and on the Licences screen.

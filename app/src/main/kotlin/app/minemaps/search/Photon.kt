@@ -31,6 +31,7 @@ class SearchResult(
     val osmValue: String?,
     val extent: DoubleArray?,
     val local: Boolean = false,
+    val osmKey: String? = null,
 ) {
     val subtitle: String get() = listOf(address, typeLabel).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
 
@@ -86,6 +87,7 @@ object PhotonParser {
         val name = str(p, "name") ?: streetLine ?: return null
         val type = str(p, "type")
         val osmValue = str(p, "osm_value")
+        val osmKey = str(p, "osm_key")
         val parts = listOfNotNull(
             streetLine?.takeIf { it != name },
             str(p, "district")?.takeIf { it != name },
@@ -98,12 +100,12 @@ object PhotonParser {
             normalizeExtent(v)
         }
         val typeLabel = (osmValue ?: type)?.replace('_', ' ')?.replaceFirstChar { it.uppercase() } ?: ""
-        return SearchResult(name, parts.joinToString(", "), typeLabel, lat, lon, type, osmValue, extent)
+        return SearchResult(name, parts.joinToString(", "), typeLabel, lat, lon, type, osmValue, extent, osmKey = osmKey)
     }
 }
 
 class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, private val baseUrl: String, private val userAgent: String) {
-    suspend fun search(query: String, biasLat: Double?, biasLon: Double?, lang: String?, latinize: (String) -> String = { it }): List<SearchResult> {
+    suspend fun search(query: String, biasLat: Double?, biasLon: Double?, lang: String?, latinize: (String) -> String = { it }, zoom: Double? = null): List<SearchResult> {
         val url = baseUrl.toHttpUrl().newBuilder()
             .addPathSegment("api").addPathSegment("")
             .addQueryParameter("q", query.take(MAX_QUERY_CHARS))
@@ -112,6 +114,8 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
                 if (biasLat != null && biasLon != null) {
                     addQueryParameter("lat", "%.5f".format(java.util.Locale.US, biasLat))
                     addQueryParameter("lon", "%.5f".format(java.util.Locale.US, biasLon))
+                    addQueryParameter("location_bias_scale", "0.2")
+                    if (zoom != null && zoom.isFinite()) addQueryParameter("zoom", Math.round(zoom).toInt().coerceIn(10, 16).toString())
                 }
                 if (lang in SUPPORTED_LANGS) addQueryParameter("lang", lang)
             }

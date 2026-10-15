@@ -20,13 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.minemaps.data.SavedPlaceNames
 import app.minemaps.engine.art.TextureAtlas
+import app.minemaps.ui.theme.windowHeightDp
 import app.minemaps.ui.theme.McButton
 import app.minemaps.ui.theme.McDialog
 import app.minemaps.ui.theme.McSlot
@@ -68,7 +68,7 @@ fun IconNameDialog(
     var name by rememberSaveable { mutableStateOf(initialName) }
     var icon by rememberSaveable { mutableStateOf(if (initialIcon in atlas.bookmarkIcons) initialIcon else "pin") }
     val images = rememberBookmarkImages(atlas)
-    val gridHeight = minOf(240, (LocalConfiguration.current.screenHeightDp * 0.4f).toInt()).dp
+    val gridHeight = minOf(240, (windowHeightDp() * 0.4f).toInt()).dp
     McDialog(
         title = title,
         onDismiss = onDismiss,

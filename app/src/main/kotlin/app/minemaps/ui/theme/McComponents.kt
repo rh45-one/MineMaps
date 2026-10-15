@@ -45,7 +45,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -161,7 +160,7 @@ fun McIconButton(
 @Composable
 fun McGlyphButton(glyph: Glyph, onClick: () -> Unit, modifier: Modifier = Modifier, active: Boolean = false, danger: Boolean = false, size: Dp = 52.dp, enabled: Boolean = true) {
     McIconButton(onClick, modifier, active, danger, enabled, size) {
-        PixelGlyph(glyph, LocalContentColor.current, 24.dp)
+        PixelGlyph(glyph, LocalContentColor.current, size = 24.dp)
     }
 }
 
@@ -226,7 +225,7 @@ fun McSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
             .padding(4.dp),
     ) {
         Box(
-            Modifier.offset(x = knob).size(22.dp)
+            Modifier.offset { IntOffset(knob.roundToPx(), 0) }.size(22.dp)
                 .mcBevel(if (checked) c.greenHighlight else c.raised, c.outline, if (checked) Color(0xFF7BC96A) else c.highlight, if (checked) c.green else c.shadow, border = 1.dp),
         )
     }
@@ -347,7 +346,7 @@ fun McDialog(
     buttons: @Composable RowScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val maxHeight = (LocalConfiguration.current.screenHeightDp - 32).dp
+    val maxHeight = (windowHeightDp() - 32).dp
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
             McPanel(Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = maxHeight)) {

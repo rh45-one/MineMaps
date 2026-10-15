@@ -76,7 +76,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -86,6 +85,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.WindowInsetsSides
+import app.minemaps.ui.theme.windowHeightDp
 import app.minemaps.ui.theme.rememberMcWindow
 import app.minemaps.ui.theme.mcPanel
 import app.minemaps.ui.theme.PixelGlyph
@@ -144,8 +144,7 @@ fun MineMapsRoot(vm: MainViewModel, container: AppContainer, applyBars: (Boolean
         else -> androidx.compose.foundation.isSystemInDarkTheme()
     }
     LaunchedEffect(dark) { applyBars(dark) }
-    val fontFile = java.io.File(androidx.compose.ui.platform.LocalContext.current.filesDir, "Monocraft.ttf")
-    MineMapsTheme(dark, if (engine != null) fontFile else null) {
+    MineMapsTheme(dark, engine?.typeface) {
         val s = settings
         val cam = initial
         val eng = engine
@@ -226,7 +225,7 @@ private fun MapScreen(
     controller: MapController,
 ) {
     val context = LocalContext.current
-    val density = context.resources.displayMetrics.density
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val bearingState = vm.bearing.collectAsState()
@@ -395,11 +394,11 @@ private fun MapScreen(
                         if (s.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
                     },
                     placeholder = "Search places",
-                    leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, 20.dp) },
+                    leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, size = 20.dp) },
                     trailing = {
                         if (text.isNotEmpty() || searchPin != null) {
                             Box(Modifier.size(48.dp).semantics { contentDescription = "Clear search" }.clickable { vm.clearSearch() }, contentAlignment = Alignment.Center) {
-                                PixelGlyph(Glyph.CLOSE, c.text, 16.dp)
+                                PixelGlyph(Glyph.CLOSE, c.text, size = 16.dp)
                             }
                         }
                     },
@@ -564,7 +563,7 @@ private fun MapScreen(
 @Composable
 private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> Unit) {
     val c = Mc.colors
-    val maxH = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+    val maxH = (windowHeightDp() * 0.55f).dp
     McPanel(Modifier.fillMaxWidth().heightIn(max = maxH), contentPadding = 4.dp) {
         when (state) {
             SearchState.Idle -> Text("Type at least 2 characters", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
@@ -647,8 +646,8 @@ private fun InfoCardView(
                 is InfoCard.Inspect -> McButton({ onSaveInspect(card) }, variant = McVariant.PRIMARY) { Text("Save place") }
                 is InfoCard.Result -> McButton({ onSaveResult(card.result) }, variant = McVariant.PRIMARY) { Text("Save place") }
                 is InfoCard.Saved -> {
-                    McButton({ onRename(card.place) }) { PixelGlyph(Glyph.EDIT, LocalContentColor.current, 18.dp); Text("Edit") }
-                    McButton({ onDelete(card.place) }, variant = McVariant.DANGER) { PixelGlyph(Glyph.DELETE, LocalContentColor.current, 18.dp); Text("Delete") }
+                    McButton({ onRename(card.place) }) { PixelGlyph(Glyph.EDIT, LocalContentColor.current, size = 18.dp); Text("Edit") }
+                    McButton({ onDelete(card.place) }, variant = McVariant.DANGER) { PixelGlyph(Glyph.DELETE, LocalContentColor.current, size = 18.dp); Text("Delete") }
                 }
             }
         }
@@ -660,7 +659,7 @@ private fun CoordsRow(text: String, onCopy: (String) -> Unit) {
     Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = Mc.colors.textSecondary)
         Box(Modifier.size(40.dp).semantics { contentDescription = "Copy coordinates" }.clickable { onCopy(text) }, contentAlignment = Alignment.Center) {
-            PixelGlyph(Glyph.COPY, Mc.colors.textSecondary, 16.dp)
+            PixelGlyph(Glyph.COPY, Mc.colors.textSecondary, size = 16.dp)
         }
     }
 }

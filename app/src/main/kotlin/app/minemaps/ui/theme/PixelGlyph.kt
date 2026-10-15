@@ -217,7 +217,7 @@ enum class Glyph(vararg val rows: String) {
 }
 
 @Composable
-fun PixelGlyph(glyph: Glyph, tint: Color, size: Dp = 24.dp, modifier: Modifier = Modifier) {
+fun PixelGlyph(glyph: Glyph, tint: Color, modifier: Modifier = Modifier, size: Dp = 24.dp) {
     Canvas(modifier.size(size)) {
         val cell = floor(this.size.minDimension / Glyph.SIZE).coerceAtLeast(1f)
         val used = cell * Glyph.SIZE
