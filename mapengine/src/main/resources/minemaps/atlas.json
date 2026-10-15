@@ -1,0 +1,413 @@
+{
+ "tileSize": 16,
+ "columns": 16,
+ "textures": {
+  "grass": [
+   [
+    0,
+    0
+   ],
+   [
+    1,
+    0
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    3,
+    0
+   ]
+  ],
+  "park": [
+   [
+    4,
+    0
+   ],
+   [
+    5,
+    0
+   ],
+   [
+    6,
+    0
+   ],
+   [
+    7,
+    0
+   ]
+  ],
+  "leaves": [
+   [
+    8,
+    0
+   ],
+   [
+    9,
+    0
+   ],
+   [
+    10,
+    0
+   ]
+  ],
+  "water": [
+   [
+    11,
+    0
+   ],
+   [
+    12,
+    0
+   ],
+   [
+    13,
+    0
+   ]
+  ],
+  "sand": [
+   [
+    14,
+    0
+   ],
+   [
+    15,
+    0
+   ]
+  ],
+  "gravel": [
+   [
+    0,
+    1
+   ],
+   [
+    1,
+    1
+   ]
+  ],
+  "stone": [
+   [
+    2,
+    1
+   ],
+   [
+    3,
+    1
+   ]
+  ],
+  "cobble": [
+   [
+    4,
+    1
+   ],
+   [
+    5,
+    1
+   ]
+  ],
+  "asphalt": [
+   [
+    6,
+    1
+   ],
+   [
+    7,
+    1
+   ]
+  ],
+  "stone_bricks": [
+   [
+    8,
+    1
+   ],
+   [
+    9,
+    1
+   ]
+  ],
+  "dirt_path": [
+   [
+    10,
+    1
+   ],
+   [
+    11,
+    1
+   ]
+  ],
+  "farmland": [
+   [
+    12,
+    1
+   ],
+   [
+    13,
+    1
+   ]
+  ],
+  "snow": [
+   [
+    14,
+    1
+   ],
+   [
+    15,
+    1
+   ]
+  ],
+  "wetland": [
+   [
+    0,
+    2
+   ],
+   [
+    1,
+    2
+   ]
+  ],
+  "roof_brick": [
+   [
+    2,
+    2
+   ]
+  ],
+  "roof_oak": [
+   [
+    3,
+    2
+   ]
+  ],
+  "roof_spruce": [
+   [
+    4,
+    2
+   ]
+  ],
+  "roof_stone": [
+   [
+    5,
+    2
+   ]
+  ],
+  "roof_concrete": [
+   [
+    6,
+    2
+   ]
+  ],
+  "roof_terracotta": [
+   [
+    7,
+    2
+   ]
+  ],
+  "rail": [
+   [
+    8,
+    2
+   ]
+  ],
+  "grave": [
+   [
+    9,
+    2
+   ]
+  ]
+ },
+ "icons": {
+  "apple": [
+   0,
+   3
+  ],
+  "bread": [
+   1,
+   3
+  ],
+  "meat": [
+   2,
+   3
+  ],
+  "emerald": [
+   3,
+   3
+  ],
+  "gold_ingot": [
+   4,
+   3
+  ],
+  "coal": [
+   5,
+   3
+  ],
+  "potion": [
+   6,
+   3
+  ],
+  "book": [
+   7,
+   3
+  ],
+  "sapling": [
+   8,
+   3
+  ],
+  "minecart": [
+   9,
+   3
+  ],
+  "bed": [
+   10,
+   3
+  ],
+  "mug": [
+   11,
+   3
+  ],
+  "pickaxe": [
+   12,
+   3
+  ],
+  "compass": [
+   13,
+   3
+  ],
+  "bell": [
+   14,
+   3
+  ],
+  "fish": [
+   15,
+   3
+  ],
+  "pin": [
+   0,
+   4
+  ],
+  "player": [
+   1,
+   4
+  ],
+  "diamond": [
+   2,
+   4
+  ],
+  "iron_ingot": [
+   3,
+   4
+  ],
+  "golden_apple": [
+   4,
+   4
+  ],
+  "redstone": [
+   5,
+   4
+  ],
+  "cake": [
+   6,
+   4
+  ],
+  "cookie": [
+   7,
+   4
+  ],
+  "map": [
+   8,
+   4
+  ],
+  "clock": [
+   9,
+   4
+  ],
+  "chest": [
+   10,
+   4
+  ],
+  "sword": [
+   11,
+   4
+  ],
+  "axe": [
+   12,
+   4
+  ],
+  "shovel": [
+   13,
+   4
+  ],
+  "bow": [
+   14,
+   4
+  ],
+  "torch": [
+   15,
+   4
+  ],
+  "lantern": [
+   0,
+   5
+  ],
+  "poppy": [
+   1,
+   5
+  ],
+  "boat": [
+   2,
+   5
+  ],
+  "bucket": [
+   3,
+   5
+  ],
+  "star": [
+   4,
+   5
+  ]
+ },
+ "bookmarkIcons": [
+  "pin",
+  "bed",
+  "chest",
+  "diamond",
+  "emerald",
+  "gold_ingot",
+  "iron_ingot",
+  "redstone",
+  "apple",
+  "golden_apple",
+  "bread",
+  "cake",
+  "cookie",
+  "meat",
+  "fish",
+  "potion",
+  "book",
+  "map",
+  "compass",
+  "clock",
+  "bell",
+  "sword",
+  "pickaxe",
+  "axe",
+  "shovel",
+  "bow",
+  "torch",
+  "lantern",
+  "poppy",
+  "sapling",
+  "minecart",
+  "boat",
+  "bucket",
+  "star"
+ ],
+ "tintableIcons": [
+  "player"
+ ],
+ "anchors": {
+  "pin": [
+   8,
+   13
+  ]
+ }
+}

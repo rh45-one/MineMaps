@@ -1,0 +1,76 @@
+package app.minemaps.data
+
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import app.minemaps.engine.art.TexturePack
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+enum class LabelNames { LOCAL, LATIN }
+
+data class Settings(
+    val theme: ThemeMode = ThemeMode.SYSTEM,
+    val showIcons: Boolean = true,
+    val labelNames: LabelNames = LabelNames.LOCAL,
+    val arrowColor: Int = ArrowColors.DEFAULT,
+    val texturePack: TexturePack = TexturePack.ORIGINAL,
+    val permissionAsked: Boolean = false,
+    val rationaleDismissed: Boolean = false,
+)
+
+object ArrowColors {
+    const val DEFAULT = 0xFFFFFFFF.toInt()
+    val presets: List<Pair<String, Int>> = listOf(
+        "White" to 0xFFFFFFFF.toInt(),
+        "Red" to 0xFFE53935.toInt(),
+        "Orange" to 0xFFFB8C00.toInt(),
+        "Yellow" to 0xFFFDD835.toInt(),
+        "Lime" to 0xFF7CB342.toInt(),
+        "Cyan" to 0xFF00ACC1.toInt(),
+        "Blue" to 0xFF1E88E5.toInt(),
+        "Purple" to 0xFF8E24AA.toInt(),
+        "Pink" to 0xFFEC407A.toInt(),
+    )
+}
+
+class SettingsRepository(private val store: DataStore<Preferences>) {
+    private val themeKey = stringPreferencesKey("theme")
+    private val iconsKey = booleanPreferencesKey("show_icons")
+    private val namesKey = stringPreferencesKey("label_names")
+    private val packKey = stringPreferencesKey("texture_pack")
+    private val arrowKey = intPreferencesKey("arrow_color")
+    private val askedKey = booleanPreferencesKey("permission_asked")
+    private val rationaleKey = booleanPreferencesKey("rationale_dismissed")
+
+    val settings: Flow<Settings> = store.data.map { p ->
+        Settings(
+            theme = p[themeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
+            showIcons = p[iconsKey] ?: true,
+            labelNames = p[namesKey]?.let { runCatching { LabelNames.valueOf(it) }.getOrNull() } ?: LabelNames.LOCAL,
+            arrowColor = p[arrowKey] ?: ArrowColors.DEFAULT,
+            texturePack = p[packKey]?.let { runCatching { TexturePack.valueOf(it) }.getOrNull() } ?: TexturePack.ORIGINAL,
+            permissionAsked = p[askedKey] ?: false,
+            rationaleDismissed = p[rationaleKey] ?: false,
+        )
+    }
+
+    suspend fun setTheme(v: ThemeMode) = store.edit { it[themeKey] = v.name }
+
+    suspend fun setShowIcons(v: Boolean) = store.edit { it[iconsKey] = v }
+
+    suspend fun setLabelNames(v: LabelNames) = store.edit { it[namesKey] = v.name }
+
+    suspend fun setTexturePack(v: TexturePack) = store.edit { it[packKey] = v.name }
+
+    suspend fun setArrowColor(v: Int) = store.edit { it[arrowKey] = v }
+
+    suspend fun setPermissionAsked() = store.edit { it[askedKey] = true }
+
+    suspend fun setRationaleDismissed() = store.edit { it[rationaleKey] = true }
+}

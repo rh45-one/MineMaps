@@ -1,0 +1,133 @@
+package app.minemaps.search
+
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+class SearchResult(
+    val name: String,
+    val address: String,
+    val typeLabel: String,
+    val lat: Double,
+    val lon: Double,
+    val type: String?,
+    val osmValue: String?,
+    val extent: DoubleArray?,
+) {
+    val subtitle: String get() = listOf(address, typeLabel).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
+
+    fun targetZoom(): Double = when (type) {
+        "country" -> 5.0
+        "state" -> 7.0
+        "county" -> 9.0
+        "city" -> 12.0
+        "district", "locality" -> 14.0
+        "street" -> 17.0
+        "house" -> 18.0
+        else -> when (osmValue) {
+            "city", "town" -> 12.0
+            "village" -> 13.0
+            else -> 18.0
+        }
+    }
+}
+
+object PhotonParser {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun parse(text: String): List<SearchResult> {
+        val root = json.parseToJsonElement(text).jsonObject
+        val features = root["features"] as? JsonArray ?: return emptyList()
+        return features.mapNotNull { runCatching { parseFeature(it.jsonObject) }.getOrNull() }
+    }
+
+    private fun str(o: JsonObject, key: String): String? = (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+
+    private fun parseFeature(f: JsonObject): SearchResult? {
+        val coords = f["geometry"]?.jsonObject?.get("coordinates")?.jsonArray ?: return null
+        val lon = coords[0].jsonPrimitive.doubleOrNull ?: return null
+        val lat = coords[1].jsonPrimitive.doubleOrNull ?: return null
+        val p = f["properties"]?.jsonObject ?: return null
+        val street = str(p, "street")
+        val house = str(p, "housenumber")
+        val streetLine = if (street != null) listOfNotNull(street, house).joinToString(" ") else null
+        val name = str(p, "name") ?: streetLine ?: return null
+        val type = str(p, "type")
+        val osmValue = str(p, "osm_value")
+        val parts = listOfNotNull(
+            streetLine?.takeIf { it != name },
+            str(p, "district")?.takeIf { it != name },
+            str(p, "city")?.takeIf { it != name },
+            str(p, "state")?.takeIf { it != name },
+            str(p, "country")?.takeIf { it != name },
+        ).distinct()
+        val extent = (p["extent"] as? JsonArray)?.let { a ->
+            val v = a.mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }
+            if (v.size == 4) doubleArrayOf(v[0], v[1], v[2], v[3]) else null
+        }
+        val typeLabel = (osmValue ?: type)?.replace('_', ' ')?.replaceFirstChar { it.uppercase() } ?: ""
+        return SearchResult(name, parts.joinToString(", "), typeLabel, lat, lon, type, osmValue, extent)
+    }
+}
+
+class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, private val baseUrl: String, private val userAgent: String) {
+    suspend fun search(query: String, biasLat: Double?, biasLon: Double?, lang: String?): List<SearchResult> {
+        val url = baseUrl.toHttpUrl().newBuilder()
+            .addPathSegment("api").addPathSegment("")
+            .addQueryParameter("q", query)
+            .addQueryParameter("limit", "8")
+            .apply {
+                if (biasLat != null && biasLon != null) {
+                    addQueryParameter("lat", "%.5f".format(java.util.Locale.US, biasLat))
+                    addQueryParameter("lon", "%.5f".format(java.util.Locale.US, biasLon))
+                }
+                if (lang in SUPPORTED_LANGS) addQueryParameter("lang", lang)
+            }
+            .build()
+        val request = Request.Builder().url(url).header("User-Agent", userAgent).build()
+        val client = clientProvider().newBuilder().readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).callTimeout(40, java.util.concurrent.TimeUnit.SECONDS).build()
+        val body = suspendCancellableCoroutine<String> { cont ->
+            val call = client.newCall(request)
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use { r ->
+                        if (!r.isSuccessful) {
+                            cont.resumeWithException(IOException("Search failed (HTTP ${r.code})"))
+                        } else {
+                            try {
+                                cont.resume(r.body.string())
+                            } catch (e: IOException) {
+                                cont.resumeWithException(e)
+                            }
+                        }
+                    }
+                }
+            })
+        }
+        return PhotonParser.parse(body)
+    }
+
+    private companion object {
+        val SUPPORTED_LANGS = setOf("en", "de", "fr")
+    }
+}

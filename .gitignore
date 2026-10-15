@@ -1,0 +1,19 @@
+.gradle/
+build/
+*.iml
+.idea/
+local.properties
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+tools/art/out/
+
+# Minecraft textures imported from the user's own game files (personal use, never commit)
+mapengine/src/main/resources/minemaps/packs/vanilla/
+
+# Release signing keys
+*.jks
+*.keystore
