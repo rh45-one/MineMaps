@@ -19,13 +19,32 @@
 - Art changes: edit `tools/art/make_atlas.py`, regenerate, copy `atlas.png`/`atlas.json` into `mapengine/src/main/resources/minemaps/`, then run `tools/art/make_android_icons.py` if the app icon changed.
 - Car work: `app/src/main/kotlin/app/minemaps/car/`. The surface is drawn with the software `lockCanvas` (hardware canvas crashed the process when the host destroyed the surface).
 - Emulator `mm_phone` and the DHU are test fixtures only; follow the README procedure after any cold boot (head unit server must be restarted).
-- Gate before finishing: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug`.
+- Gate before finishing: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintRelease`.
 
 ## Test counts (last run)
 
-- `:mapengine:test`: 66 tests, 0 failures (new: `TerrainTest` for tree determinism/seams, water depth, tint, bookmark icon list; obstacle suppression in `LabelLayoutTest`).
-- `:app:testDebugUnitTest`: 21 tests, 0 failures (Photon parsing, search flow, saved-place codec incl. old-JSON icon default and icon round-trip, stable-area math, car `MapScreen` with Robolectric incl. refresh coalescing).
-- `:app:lintDebug`: 0 errors, 18 warnings (launcher-icon shape and monochrome tags, KTX suggestions, ExportedService for the car service, ViewConstructor, PrivateResource for the host allowlist array).
+- `:mapengine:test`: 90 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory).
+- `:app:testDebugUnitTest`: 30 tests, 0 failures (Photon parsing, search flow, saved-place codec and sanitising, stable-area math, car `MapScreen` with Robolectric, car host allowlist).
+- `:app:lintRelease`: 0 errors, 18 warnings, none in the Security category.
+
+## Stability campaign (emulator + DHU)
+
+Evidence outside the repo in `~/mm-qa/SUMMARY.md`. On the final build, with 0 app crashes and 0 ANRs:
+- **Monkey:** 7 runs × 15k events, and a release (R8) build with 10k events.
+- **Lifecycle:** rotation of every screen and dialog, night/day switching, trim-memory levels, process death, force-stop during search, font scale 2.0.
+- **Corrupted data:** DataStore files and 2,153 cached tiles corrupted.
+- **Network:** airplane toggling, slow network, DNS failure, clearing the cache offline.
+- **Permissions and location:** permission revoke and permanent denial, location off, extreme and 10 Hz GPS fixes.
+- **Memory:** 10-minute and 20-minute runs; the Java heap plateaus at 50-68 MB out of a 192 MB limit. LeakCanary found no app leaks; the car service is briefly held by the library's `CarAppBinder` until the host drops it, which is not cumulative.
+- **Car (DHU):** session start/stop, app switching, day/night spam, restriction toggling, phone process kill, permission revoke, airplane mode, both surface sizes.
+
+Bugs found and fixed:
+- **OOM under monkey:** the tile cache was bounded by tile count, and decodes ran without a limit.
+- **Camera reset** on activity recreation.
+- **Dialog text lost** on rotation.
+- **Stale "permanently denied" banner.**
+
+Not covered: real split-screen layout, the disk-cache cap on the device (it is unit-tested), a real low-memory killer, physical devices.
 
 ## Acceptance matrix
 

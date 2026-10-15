@@ -9,7 +9,7 @@
 
 ## Commands
 - Environment: `source ~/Android/env.sh` (ANDROID_HOME, PATH, DHU libraries).
-- Gate: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintDebug`
+- Gate: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintRelease`
 - Desktop renders: `./gradlew :tools:render:run --args="--lat 48.8584 --lon 2.2945 --zoom 16 --width 1024 --height 768 --out /tmp/x.png [--night] [--pack original|vanilla]"`
 - Art: `python3 tools/art/make_atlas.py`, then copy `tools/art/out/atlas.{png,json}` to `mapengine/src/main/resources/minemaps/`.
 - Minecraft pack (local only): `python3 tools/art/import_minecraft.py [--jar|--version|--resource-pack]`.
