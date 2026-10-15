@@ -68,6 +68,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -202,8 +203,9 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
 }
 
 private fun nearPin(vp: Viewport, lat: Double, lon: Double, sx: Float, sy: Float, density: Float): Boolean {
-    val x = vp.worldToScreenX(Mercator.lonToX(lon))
-    val y = vp.worldToScreenY(Mercator.latToY(lat)) - 16 * density
+    val pt = vp.worldToScreen(Mercator.lonToX(lon), Mercator.latToY(lat))
+    val x = pt.x
+    val y = pt.y - 16 * density
     return Math.hypot(x - sx, y - sy) <= 28 * density
 }
 
@@ -221,6 +223,7 @@ private fun MapScreen(
     val density = context.resources.displayMetrics.density
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
+    val bearingState = vm.bearing.collectAsState()
     var creditShown by rememberSaveable { mutableStateOf(true) }
     var creditTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(creditShown, creditTick) {
@@ -376,6 +379,7 @@ private fun MapScreen(
                         value = text,
                         onValueChange = vm::onQueryChange,
                         modifier = Modifier.fillMaxWidth().onFocusChanged { s: FocusState ->
+                            if (s.isFocused) vm.onSearchFocus()
                             if (s.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
                         },
                         singleLine = true,
@@ -425,6 +429,7 @@ private fun MapScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.End,
         ) {
+            CompassButton(bearingState, remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "compass") }) { controller.view?.animateBearing(0.0, 300L) }
             SmallFloatingActionButton(
                 modifier = Modifier.semantics { contentDescription = if (settings.showStreetNames) "Hide street names" else "Show street names" },
                 onClick = { vm.setShowStreetNames(!settings.showStreetNames) },
@@ -522,11 +527,11 @@ private fun MapScreen(
 private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> Unit) {
     Card(Modifier.fillMaxWidth().heightIn(max = 420.dp), elevation = CardDefaults.cardElevation(4.dp)) {
         when (state) {
-            SearchState.Idle -> Text("Type at least 3 characters", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+            SearchState.Idle -> Text("Type at least 2 characters", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
             SearchState.Loading -> Text("Searching\u2026", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
             is SearchState.Error -> Text("Search unavailable: ${state.message}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
             is SearchState.Results -> if (state.items.isEmpty()) {
-                Text("No results", Modifier.padding(16.dp))
+                Text(if (state.updating) "Searching\u2026" else "No results", Modifier.padding(16.dp))
             } else {
                 LazyColumn {
                     items(state.items) { r ->
@@ -538,6 +543,7 @@ private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> U
                         }
                         HorizontalDivider()
                     }
+                    if (state.updating) item { Text("Updating\u2026", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
         }

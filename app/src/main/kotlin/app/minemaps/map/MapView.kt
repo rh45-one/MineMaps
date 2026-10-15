@@ -26,6 +26,8 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         private set
     var zoom = 3.0
         private set
+    var bearing = 0.0
+        private set
 
     var overlays: MapOverlays = MapOverlays.EMPTY
         set(value) {
@@ -52,6 +54,8 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     private var scaling = false
     private var lastFocusX = 0f
     private var lastFocusY = 0f
+    private val rotation = RotationGesture()
+    private var pendingRotation = 0.0
 
     private val gestures = GestureDetector(
         context,
@@ -112,6 +116,10 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
                 val before = viewport().screenToWorld(lastFocusX.toDouble(), lastFocusY.toDouble())
                 val factor = detector.scaleFactor.toDouble()
                 if (!factor.isFinite() || factor <= 0.0) return true
+                if (pendingRotation != 0.0) {
+                    bearing = normalizeBearing(bearing - pendingRotation)
+                    pendingRotation = 0.0
+                }
                 zoom = (zoom + ln(factor) / ln(2.0)).coerceIn(MIN_ZOOM, MAX_ZOOM)
                 placeWorldAt(before.x, before.y, detector.focusX.toDouble(), detector.focusY.toDouble())
                 lastFocusX = detector.focusX
@@ -126,35 +134,38 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         },
     ).apply { isQuickScaleEnabled = false }
 
-    fun viewport(): Viewport = Viewport(centerX, centerY, zoom, max(width, 1), max(height, 1), renderer.pixelRatio)
+    fun viewport(): Viewport = Viewport(centerX, centerY, zoom, max(width, 1), max(height, 1), renderer.pixelRatio, bearing)
 
     private fun finite(vararg v: Double) = v.all { it.isFinite() }
 
     fun setCamera(camera: Camera) {
-        val safe = Camera.sanitized(camera.lat, camera.lon, camera.zoom) ?: return
+        val safe = Camera.sanitized(camera.lat, camera.lon, camera.zoom, camera.bearing) ?: return
         cancelAnimation()
         centerX = Mercator.lonToX(safe.lon)
         centerY = Mercator.latToY(safe.lat)
         zoom = safe.zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
+        bearing = safe.bearing
         cameraChanged()
     }
 
-    fun camera(): Camera = Camera(Mercator.yToLat(centerY), Mercator.xToLon(centerX), zoom)
+    fun camera(): Camera = Camera(Mercator.yToLat(centerY), Mercator.xToLon(centerX), zoom, bearing)
 
     fun requestRedraw() = postInvalidateOnAnimation()
 
     private fun placeWorldAt(wx: Double, wy: Double, sx: Double, sy: Double) {
-        val size = Viewport(0.0, 0.0, zoom, 1, 1, renderer.pixelRatio).worldSizePx
-        centerX = wrap(wx - (sx - width / 2.0) / size)
-        centerY = (wy - (sy - height / 2.0) / size).coerceIn(0.0, 1.0)
+        val c = Viewport(wx, wy, zoom, max(width, 1), max(height, 1), renderer.pixelRatio, bearing)
+        val off = c.screenToWorld(width - sx, height - sy)
+        centerX = wrap(off.x)
+        centerY = off.y.coerceIn(0.0, 1.0)
     }
 
     private fun wrap(x: Double): Double = x - Math.floor(x)
 
     private fun panBy(dxPx: Double, dyPx: Double) {
-        val size = viewport().worldSizePx
-        centerX = wrap(centerX + dxPx / size)
-        centerY = (centerY + dyPx / size).coerceIn(0.0, 1.0)
+        val vp = viewport()
+        val c = vp.screenToWorld(width / 2.0 + dxPx, height / 2.0 + dyPx)
+        centerX = wrap(c.x)
+        centerY = c.y.coerceIn(0.0, 1.0)
         cameraChanged()
     }
 
@@ -210,13 +221,23 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         }
     }
 
+    fun animateBearing(to: Double, durationMs: Long = 300L) {
+        if (!to.isFinite()) return
+        cancelAnimation()
+        val b0 = bearing
+        val delta = RotationGesture.angleDelta(b0, to)
+        runAnimation(durationMs) { f -> bearing = normalizeBearing(b0 + delta * f) }
+    }
+
+    private fun normalizeBearing(b: Double): Double = ((b % 360.0) + 360.0) % 360.0
+
     fun follow(lat: Double, lon: Double) {
         if (width == 0 || animator != null || !finite(lat, lon)) return
         val target = Viewport(Mercator.lonToX(lon), Mercator.latToY(lat), zoom, width, height, renderer.pixelRatio)
         val screen = viewport().worldToScreen(target.centerX, target.centerY)
         val off = max(abs(screen.x - width / 2.0), abs(screen.y - height / 2.0))
         if (off < 2.0) return
-        if (off > max(width, height)) setCamera(Camera(lat, lon, zoom)) else animateTo(lat, lon, zoom, 400L)
+        if (off > max(width, height)) setCamera(Camera(lat, lon, zoom, bearing)) else animateTo(lat, lon, zoom, 400L)
     }
 
     fun fitBounds(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double, maxZoom: Double = 19.0) {
@@ -259,9 +280,22 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        trackRotation(event)
         scaleDetector.onTouchEvent(event)
         if (!scaleDetector.isInProgress) gestures.onTouchEvent(event)
         return true
+    }
+
+    private fun trackRotation(event: MotionEvent) {
+        if (event.pointerCount != 2) {
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL || event.pointerCount < 2) rotation.end()
+            return
+        }
+        val angle = Math.toDegrees(kotlin.math.atan2((event.getY(1) - event.getY(0)).toDouble(), (event.getX(1) - event.getX(0)).toDouble()))
+        when (event.actionMasked) {
+            MotionEvent.ACTION_POINTER_DOWN -> rotation.start(angle)
+            MotionEvent.ACTION_MOVE -> pendingRotation += rotation.update(angle)
+        }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

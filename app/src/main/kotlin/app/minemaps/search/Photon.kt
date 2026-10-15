@@ -1,5 +1,7 @@
 package app.minemaps.search
 
+import android.os.SystemClock
+import android.util.Log
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -28,6 +30,7 @@ class SearchResult(
     val type: String?,
     val osmValue: String?,
     val extent: DoubleArray?,
+    val local: Boolean = false,
 ) {
     val subtitle: String get() = listOf(address, typeLabel).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
 
@@ -113,8 +116,11 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
                 if (lang in SUPPORTED_LANGS) addQueryParameter("lang", lang)
             }
             .build()
+        val t0 = SystemClock.elapsedRealtime()
         val request = Request.Builder().url(url).header("User-Agent", userAgent).build()
         val client = clientProvider().newBuilder().readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).callTimeout(40, java.util.concurrent.TimeUnit.SECONDS).build()
+        val tStart = SystemClock.elapsedRealtime()
+        var tHeaders = tStart
         val body = suspendCancellableCoroutine<String> { cont ->
             val call = client.newCall(request)
             cont.invokeOnCancellation { call.cancel() }
@@ -124,6 +130,7 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
                 }
 
                 override fun onResponse(call: Call, response: Response) {
+                    tHeaders = SystemClock.elapsedRealtime()
                     response.use { r ->
                         if (!r.isSuccessful) {
                             cont.resumeWithException(IOException("Search failed (HTTP ${r.code})"))
@@ -138,7 +145,30 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
                 }
             })
         }
-        return PhotonParser.parse(body, latinize)
+        val parsed = PhotonParser.parse(body, latinize)
+        val tDone = SystemClock.elapsedRealtime()
+        runCatching { Log.d(TAG, "photon qlen=${query.length} client=${tStart - t0}ms headers=${tHeaders - tStart}ms body+parse=${tDone - tHeaders}ms total=${tDone - t0}ms results=${parsed.size}") }
+        return parsed
+    }
+
+    @Volatile
+    private var lastPrewarm = 0L
+
+    /** Opens a connection (DNS + TLS) ahead of the first search; at most once per minute, errors ignored. */
+    suspend fun prewarm() {
+        val now = SystemClock.elapsedRealtime()
+        if (lastPrewarm != 0L && now - lastPrewarm < PREWARM_INTERVAL_MS) return
+        lastPrewarm = now
+        runCatching {
+            val client = clientProvider().newBuilder().callTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build()
+            client.newCall(Request.Builder().url(baseUrl.toHttpUrl()).head().header("User-Agent", userAgent).build()).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {}
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
+                }
+            })
+        }
     }
 
     private fun readLimited(r: Response): String {
@@ -152,7 +182,9 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
     }
 
     companion object {
+        const val TAG = "MineMapsSearch"
         const val MAX_QUERY_CHARS = 200
+        const val PREWARM_INTERVAL_MS = 60_000L
         const val MAX_RESPONSE_BYTES = 1L * 1024 * 1024
         private val SUPPORTED_LANGS = setOf("en", "de", "fr")
     }

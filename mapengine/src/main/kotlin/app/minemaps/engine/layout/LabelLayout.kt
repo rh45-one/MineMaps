@@ -39,6 +39,12 @@ class Obstacle(val x0: Float, val y0: Float, val x1: Float, val y1: Float)
 class PlacedLayout(val labels: List<PlacedLabel>, val icons: List<PlacedIcon>)
 
 object LabelLayout {
+    /** Angle in (-90, 90] equivalent to [a] for upright text. */
+    fun normalizeAngle(a: Double): Double {
+        val x = ((a % 180.0) + 180.0) % 180.0
+        return if (x > 90.0) x - 180.0 else x
+    }
+
     const val TEXT_PAD = 6f
     const val ICON_PAD = 8f
     const val POI_NAME_MIN_ZOOM = 18
@@ -98,9 +104,11 @@ object LabelLayout {
             val (w0, h0) = measure(l.text, l.kind)
             val w = w0 + 0f
             val h = h0 + 0f
-            val cx = viewport.worldToScreenX(l.wx).toFloat()
-            val cy = viewport.worldToScreenY(l.wy).toFloat()
-            val rad = Math.toRadians(l.angleDeg)
+            val pt = viewport.worldToScreen(l.wx, l.wy)
+            val cx = pt.x.toFloat()
+            val cy = pt.y.toFloat()
+            val angle = if (l.oriented) normalizeAngle(l.angleDeg - viewport.bearingDeg) else l.angleDeg
+            val rad = Math.toRadians(angle)
             val c = abs(cos(rad)).toFloat()
             val s = abs(sin(rad)).toFloat()
             val bw = w * c + h * s
@@ -112,7 +120,7 @@ object LabelLayout {
             if (x1 < 0 || x0 > sw || y1 < 0 || y0 > sh) return
             if (boxes.collides(x0, y0, x1, y1, TEXT_PAD)) return
             boxes.add(x0, y0, x1, y1, TEXT_PAD)
-            placedLabels.add(PlacedLabel(l, cx, cy, w, h, l.angleDeg.toFloat()))
+            placedLabels.add(PlacedLabel(l, cx, cy, w, h, angle.toFloat()))
         }
 
         places.forEach(::placeLabel)
@@ -124,8 +132,9 @@ object LabelLayout {
             val candidates = pois.filter { it.minZoom <= zoom }.sortedBy { it.rank }
             for (p in candidates) {
                 if (placedIcons.size >= profile.maxIcons) break
-                val cx = viewport.worldToScreenX(p.wx).toFloat()
-                val cy = viewport.worldToScreenY(p.wy).toFloat()
+                val pt = viewport.worldToScreen(p.wx, p.wy)
+                val cx = pt.x.toFloat()
+                val cy = pt.y.toFloat()
                 val x0 = cx - half
                 val y0 = cy - half
                 val x1 = cx + half

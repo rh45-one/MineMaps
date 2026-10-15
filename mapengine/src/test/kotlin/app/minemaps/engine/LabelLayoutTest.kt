@@ -152,4 +152,20 @@ class LabelLayoutTest {
         val without = LabelLayout.layout(emptyList(), listOf(p, far), vp, measure, RenderProfile.PHONE, 32f)
         assertEquals(2, without.icons.size)
     }
+
+    @Test
+    fun orientedLabelAnglesFollowTheBearingAndStayUpright() {
+        assertEquals(0.0, LabelLayout.normalizeAngle(180.0), 1e-9)
+        assertEquals(90.0, LabelLayout.normalizeAngle(90.0), 1e-9)
+        assertEquals(-80.0, LabelLayout.normalizeAngle(100.0), 1e-9)
+        assertEquals(30.0, LabelLayout.normalizeAngle(-150.0), 1e-9)
+        val road = Label("Rue", LabelKind.ROAD, 3, 0.5, 0.5, 20.0, 10, oriented = true)
+        val point = Label("Town", LabelKind.CITY, 3, 0.5, 0.5 - 1e-6, 0.0, 10)
+        for ((bearing, expected) in listOf(0.0 to 20.0, 30.0 to -10.0, 90.0 to -70.0, 200.0 to -0.0 + LabelLayout.normalizeAngle(20.0 - 200.0))) {
+            val v = Viewport(0.5, 0.5, 18.0, 1000, 1000, 1f, bearing)
+            val out = LabelLayout.layout(listOf(road, point), emptyList(), v, measure, RenderProfile.PHONE)
+            assertEquals(expected, out.labels.first { it.label.text == "Rue" }.angleDeg.toDouble(), 1e-3, "road at bearing $bearing")
+            assertEquals(0f, out.labels.first { it.label.text == "Town" }.angleDeg, "point label stays upright at $bearing")
+        }
+    }
 }

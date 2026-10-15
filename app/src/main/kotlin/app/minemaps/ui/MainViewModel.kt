@@ -12,6 +12,10 @@ import app.minemaps.engine.geo.LatLng
 import app.minemaps.engine.inspect.InspectResult
 import app.minemaps.location.LocationState
 import app.minemaps.location.LocationStatus
+import app.minemaps.search.PhotonClient
+import app.minemaps.search.ResponseCache
+import app.minemaps.engine.search.PlaceKind
+import app.minemaps.engine.geo.Mercator
 import app.minemaps.search.SearchResult
 import app.minemaps.search.SearchState
 import app.minemaps.search.searchStates
@@ -67,17 +71,58 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     var camera: Camera? = null
         private set
 
-    val searchState: StateFlow<SearchState> = searchStates(typed) { q ->
+    @Volatile
+    private var englishNames = true
+    private val photonCache = ResponseCache<List<SearchResult>>()
+
+    private fun lang(): String? = if (englishNames) "en" else Locale.getDefault().language
+
+    private fun cacheKey(q: String) = ResponseCache.key(q, camera?.lat, camera?.lon, lang())
+
+    private fun localHits(q: String): List<SearchResult> {
         val c = camera
-        if (container.settings.settings.first().labelNames == app.minemaps.data.LabelNames.ENGLISH) {
+        val wx = c?.let { Mercator.lonToX(it.lon) } ?: 0.5
+        val wy = c?.let { Mercator.latToY(it.lat) } ?: 0.5
+        val hits = container.placeIndex.query(q, wx, wy, localNames = !englishNames)
+        runCatching { android.util.Log.d(PhotonClient.TAG, "local results n=${hits.size} at +${android.os.SystemClock.elapsedRealtime() - sessionStartAt}ms since first key") }
+        return hits.map { h ->
+            val ll = LatLng(Mercator.yToLat(h.wy), Mercator.xToLon(h.wx))
+            val type = when (h.kind) {
+                PlaceKind.COUNTRY -> "country"
+                PlaceKind.STATE -> "state"
+                PlaceKind.CITY, PlaceKind.TOWN, PlaceKind.ISLAND -> "city"
+                PlaceKind.VILLAGE, PlaceKind.HAMLET, PlaceKind.SUBURB, PlaceKind.QUARTER -> "district"
+                PlaceKind.STREET -> "street"
+                else -> "house"
+            }
+            SearchResult(h.name, "", "${h.kindLabel} \u00b7 nearby", ll.lat, ll.lng, type, null, null, local = true)
+        }
+    }
+
+    val searchState: StateFlow<SearchState> = searchStates(
+        typed,
+        local = { q -> localHits(q) },
+        cached = { q -> photonCache.get(cacheKey(q)) },
+    ) { q ->
+        val c = camera
+        runCatching { android.util.Log.d(PhotonClient.TAG, "typed->request ${android.os.SystemClock.elapsedRealtime() - typedAt}ms") }
+        val r = if (englishNames) {
             val names = container.engine.await().nameResolver(app.minemaps.engine.labels.NameResolver.Mode.ENGLISH)
             container.photon.search(q, c?.lat, c?.lon, "en") { names.latinize(it) ?: it }
         } else {
             container.photon.search(q, c?.lat, c?.lon, Locale.getDefault().language)
         }
+        photonCache.put(cacheKey(q), r)
+        runCatching { android.util.Log.d(PhotonClient.TAG, "network results at +${android.os.SystemClock.elapsedRealtime() - sessionStartAt}ms since first key") }
+        r
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SearchState.Idle)
 
+    fun onSearchFocus() {
+        viewModelScope.launch { container.photon.prewarm() }
+    }
+
     init {
+        viewModelScope.launch { container.settings.settings.collect { englishNames = it.labelNames == app.minemaps.data.LabelNames.ENGLISH } }
         viewModelScope.launch(Dispatchers.IO) {
             val persisted = container.mapState.load()
             if (persisted != null) {
@@ -100,8 +145,11 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    val bearing = MutableStateFlow(0.0)
+
     fun onCameraChanged(c: Camera) {
         camera = c
+        if (bearing.value != c.bearing) bearing.value = c.bearing
         container.mapState.update(c)
         cameraEvents.tryEmit(c)
     }
@@ -115,7 +163,15 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         pendingFlyZoom.value = zoom
     }
 
+    @Volatile
+    private var typedAt = 0L
+
+    @Volatile
+    private var sessionStartAt = 0L
+
     fun onQueryChange(s: String) {
+        typedAt = android.os.SystemClock.elapsedRealtime()
+        if (text.value.isEmpty()) sessionStartAt = typedAt
         text.value = s
         typed.value = s
         resultsVisible.value = s.isNotBlank()

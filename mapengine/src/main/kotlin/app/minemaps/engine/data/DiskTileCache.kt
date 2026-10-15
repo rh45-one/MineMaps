@@ -79,6 +79,9 @@ class DiskTileCache(
         }
     }
 
+    /** File base names (sanitised cache keys) currently on disk. */
+    fun names(): List<String> = dir.listFiles { f -> f.name.endsWith(EXT) }?.map { it.name.removeSuffix(EXT) } ?: emptyList()
+
     fun sizeBytes(): Long = synchronized(lock) {
         ensureTotal()
         totalBytes

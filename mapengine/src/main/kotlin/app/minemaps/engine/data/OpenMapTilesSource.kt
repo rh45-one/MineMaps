@@ -68,6 +68,15 @@ class OpenMapTilesSource(
         }
     }
 
+    override fun cachedKeys(z: Int): List<TileKey> {
+        val prefix = tileJson?.let { "t_${it.template.hashCode().toUInt().toString(16)}_${z}_" } ?: return emptyList()
+        return cache.names().mapNotNull { n ->
+            if (!n.startsWith(prefix)) return@mapNotNull null
+            val p = n.removePrefix(prefix).split('_')
+            if (p.size == 2) TileKey(z, p[0].toIntOrNull() ?: return@mapNotNull null, p[1].toIntOrNull() ?: return@mapNotNull null) else null
+        }
+    }
+
     private class Result(val code: Int, val body: ByteArray)
 
     private suspend fun execute(url: String, maxBytes: Long, httpClient: OkHttpClient = client): Result = suspendCancellableCoroutine { cont: CancellableContinuation<Result> ->

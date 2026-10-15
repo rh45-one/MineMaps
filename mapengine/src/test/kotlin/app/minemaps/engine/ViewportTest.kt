@@ -77,4 +77,51 @@ class ViewportTest {
         kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, 0.5, 3.0, 0, 100, 1f) }
         kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, 0.5, 3.0, 100, 100, 0f) }
     }
+
+    @Test
+    fun rotatedRoundTripAndOrientation() {
+        for (b in listOf(0.0, 37.0, 90.0, 180.0, 271.0)) {
+            val v = Viewport(0.5063736, 0.3440208, 15.3, 1080, 1920, 2.625f, b)
+            for ((sx, sy) in listOf(0.0 to 0.0, 1080.0 to 1920.0, 540.0 to 960.0, 123.4 to 1777.7, 1000.0 to 5.0)) {
+                val w = v.screenToWorld(sx, sy)
+                val back = v.worldToScreen(w.x, w.y)
+                assertEquals(sx, back.x, 1e-6, "x at bearing $b")
+                assertEquals(sy, back.y, 1e-6, "y at bearing $b")
+            }
+            val c = v.worldToScreen(v.centerX, v.centerY)
+            assertEquals(540.0, c.x, 1e-9)
+            assertEquals(960.0, c.y, 1e-9)
+        }
+        // bearing 90: the screen's up points east, so a point east of the centre appears above it and north appears to the left
+        val v = Viewport(0.5, 0.5, 10.0, 200, 200, 1f, 90.0)
+        val east = v.worldToScreen(0.5 + 10.0 / v.worldSizePx, 0.5)
+        assertEquals(100.0, east.x, 1e-6)
+        assertEquals(90.0, east.y, 1e-6)
+        val north = v.worldToScreen(0.5, 0.5 - 10.0 / v.worldSizePx)
+        assertEquals(90.0, north.x, 1e-6)
+        assertEquals(100.0, north.y, 1e-6)
+    }
+
+    @Test
+    fun visibleTilesCoverAllCornersWhenRotated() {
+        for (b in listOf(45.0, 135.0, 300.0, 10.0)) {
+            val v = Viewport(0.5, 0.4, 14.0, 1080, 1920, 2f, b)
+            val z = 14
+            val n = 1 shl z
+            val tiles = v.visibleTiles(z).toSet()
+            for ((sx, sy) in listOf(0.0 to 0.0, 1080.0 to 0.0, 0.0 to 1920.0, 1080.0 to 1920.0, 540.0 to 960.0)) {
+                val w = v.screenToWorld(sx, sy)
+                val key = TileKey(z, Math.floorMod(Math.floor(w.x * n).toInt(), n), Math.floor(w.y * n).toInt())
+                assertTrue(key in tiles, "corner ($sx,$sy) at bearing $b not covered")
+            }
+            if (b > 20.0) assertTrue(tiles.size > Viewport(0.5, 0.4, 14.0, 1080, 1920, 2f).visibleTiles(z).size)
+        }
+        val slots = Viewport(0.5, 0.4, 14.0, 1080, 1920, 2f, 45.0).visibleTileSlots(14)
+        assertTrue(slots.isNotEmpty())
+    }
+
+    @Test
+    fun nonFiniteBearingIsRejected() {
+        kotlin.test.assertFailsWith<IllegalArgumentException> { Viewport(0.5, 0.5, 3.0, 100, 100, 1f, Double.NaN) }
+    }
 }

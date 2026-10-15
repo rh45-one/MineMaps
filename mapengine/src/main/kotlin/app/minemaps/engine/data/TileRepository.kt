@@ -31,6 +31,11 @@ class TileRepository(
 
     val maxZoom: Int get() = source.maxZoom
 
+    @Volatile
+    var onDecoded: ((TileKey, VectorTile) -> Unit)? = null
+
+    fun cachedKeys(z: Int): List<TileKey> = source.cachedKeys(z)
+
     /** Drops every decoded tile held in memory (tiles stay in the disk cache). */
     fun clearMemory() = synchronized(lock) {
         memory.clear()
@@ -79,6 +84,7 @@ class TileRepository(
                     }
                     inflight.remove(key)
                 }
+                runCatching { onDecoded?.invoke(key, tile) }
                 entry.result.complete(tile)
             } catch (e: Throwable) {
                 synchronized(lock) { if (inflight[key] === entry) inflight.remove(key) }

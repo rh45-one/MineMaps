@@ -12,6 +12,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.State
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,4 +117,33 @@ fun StreetNamesIcon(on: Boolean) {
         style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
     )
+}
+
+@Composable
+fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Unit) {
+    val visible by remember { derivedStateOf { bearing.value > 0.5 && bearing.value < 359.5 } }
+    AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut()) {
+        SmallFloatingActionButton(
+            onClick = onClick,
+            shape = CircleShape,
+            modifier = Modifier.semantics { contentDescription = "Reset map to north" },
+        ) {
+            Box(
+                Modifier.size(32.dp).graphicsLayer { rotationZ = -bearing.value.toFloat() }.drawBehind {
+                    val w = size.width
+                    val t = 8.dp.toPx()
+                    drawPath(
+                        Path().apply {
+                            moveTo(w / 2, 0f)
+                            lineTo(w / 2 - t * 0.6f, t)
+                            lineTo(w / 2 + t * 0.6f, t)
+                            close()
+                        },
+                        Color(0xFFE53935),
+                    )
+                },
+                contentAlignment = Alignment.Center,
+            ) { PixelIcon(icon, 22.dp) }
+        }
+    }
 }

@@ -20,9 +20,20 @@ class Label(
     val wy: Double,
     val angleDeg: Double,
     val minZoom: Int,
+    val oriented: Boolean = false,
+    val local: String? = null,
 )
 
-class Poi(val icon: String, val name: String, val wx: Double, val wy: Double, val minZoom: Int, val rank: Int = Int.MAX_VALUE)
+class Poi(
+    val icon: String,
+    val name: String,
+    val wx: Double,
+    val wy: Double,
+    val minZoom: Int,
+    val rank: Int = Int.MAX_VALUE,
+    val local: String? = null,
+    val kindLabel: String? = null,
+)
 
 class TileLabels(val labels: List<Label>, val pois: List<Poi>) {
     companion object {
@@ -47,6 +58,8 @@ class LabelExtractor(private val names: NameResolver = NameResolver(NameResolver
 
     private fun nameOf(f: Feature, isPlace: Boolean = false): String? = names.resolve(f.tags, isPlace)
 
+    private fun localOf(f: Feature): String? = (f.tags["name"] as? String)?.takeIf { it.isNotBlank() }
+
     private fun placeLabels(layer: Layer, vtKey: TileKey, out: MutableList<Label>) {
         for (f in layer.features) {
             if (f.type != GeomType.POINT) continue
@@ -66,7 +79,7 @@ class LabelExtractor(private val names: NameResolver = NameResolver(NameResolver
             }
             val p = f.geometry.firstOrNull() ?: continue
             val rank = (f.tags["rank"] as? Number)?.toInt() ?: 100
-            out.add(Label(text, kind, rank, wx(vtKey, layer, p[0]), wy(vtKey, layer, p[1]), 0.0, minZoom))
+            out.add(Label(text, kind, rank, wx(vtKey, layer, p[0]), wy(vtKey, layer, p[1]), 0.0, minZoom, local = localOf(f)))
         }
     }
 
@@ -81,10 +94,10 @@ class LabelExtractor(private val names: NameResolver = NameResolver(NameResolver
             }
             when (f.type) {
                 GeomType.POINT -> f.geometry.firstOrNull()?.let {
-                    out.add(Label(text, LabelKind.WATER, 0, wx(vtKey, layer, it[0]), wy(vtKey, layer, it[1]), 0.0, minZoom))
+                    out.add(Label(text, LabelKind.WATER, 0, wx(vtKey, layer, it[0]), wy(vtKey, layer, it[1]), 0.0, minZoom, local = localOf(f)))
                 }
                 GeomType.LINE -> longestSegment(f)?.let { s ->
-                    out.add(Label(text, LabelKind.WATER, 0, wx(vtKey, layer, s.mx), wy(vtKey, layer, s.my), s.angle, minZoom))
+                    out.add(Label(text, LabelKind.WATER, 0, wx(vtKey, layer, s.mx), wy(vtKey, layer, s.my), s.angle, minZoom, oriented = true, local = localOf(f)))
                 }
                 else -> {}
             }
@@ -109,7 +122,7 @@ class LabelExtractor(private val names: NameResolver = NameResolver(NameResolver
             out.add(
                 Label(
                     text, if (minor) LabelKind.ROAD_MINOR else LabelKind.ROAD, rank,
-                    wx(vtKey, layer, s.mx), wy(vtKey, layer, s.my), s.angle, if (minor) 16 else 14,
+                    wx(vtKey, layer, s.mx), wy(vtKey, layer, s.my), s.angle, if (minor) 16 else 14, oriented = true, local = localOf(f),
                 ),
             )
         }
@@ -127,7 +140,12 @@ class LabelExtractor(private val names: NameResolver = NameResolver(NameResolver
                 rank <= 25 -> 17
                 else -> 18
             }
-            out.add(Poi(icon, nameOf(f) ?: "", wx(vtKey, layer, p[0]), wy(vtKey, layer, p[1]), minZoom, rank ?: Int.MAX_VALUE))
+            out.add(
+                Poi(
+                    icon, nameOf(f) ?: "", wx(vtKey, layer, p[0]), wy(vtKey, layer, p[1]), minZoom, rank ?: Int.MAX_VALUE,
+                    local = localOf(f), kindLabel = ((f.tags["subclass"] ?: f.tags["class"]) as? String)?.replace('_', ' ')?.replaceFirstChar { it.uppercase() },
+                ),
+            )
         }
     }
 

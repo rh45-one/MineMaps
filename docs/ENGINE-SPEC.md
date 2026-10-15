@@ -96,3 +96,13 @@ Trees are decorative: they are only placed on blocks that the data already class
 - Canopy blocks use the `leaves` texture (variant by hash). Shading: north or west neighbour not canopy → ×1.12; south or east neighbour not canopy → ×0.80.
 - Non-canopy FOREST blocks use `grass` ×0.80 ("forest floor"), and ×0.75 more when the block at (x−1, y−1) is canopy. Non-canopy PARK blocks are unchanged.
 - Applied in textured mode (z17–z20) and in the z16 overview (1 px per block). At z ≤ 15 the average class colours are used.
+
+## Map rotation (phone)
+`Viewport.bearingDeg` is the clockwise angle of the map: the screen's up points to compass bearing `bearingDeg`. World to screen rotates the offset from the centre by -bearing (screen to world by +bearing), so x and y are coupled and callers must use `worldToScreen` / `screenToWorld`.
+`visibleTiles` / `visibleTileSlots` use the axis-aligned world bounds of the four rotated screen corners. The renderer draws tiles with `canvas.rotate(-bearing)` using an unrotated viewport copy; labels, icons, bookmarks, pins and the player marker use the rotated viewport and stay upright.
+Road/water-line labels (`Label.oriented`) get `normalize(angle - bearing)` into (-90, 90] inside `LabelLayout`, so collision boxes match. The car renders north-up (bearing 0).
+Gestures: a two-finger twist only engages after 12 degrees of accumulated rotation (`RotationGesture`), then follows the fingers 1:1; the camera bearing is persisted (0 when absent).
+
+## Place search index
+`PlaceIndex` (package `search`) keeps up to 50,000 named features (places, streets, water, POIs) from every decoded vector tile (`TileRepository.onDecoded`), with the English name and the local name. Entries nearest the index centre survive; streets are de-duplicated within 300 m (places 1-5 km).
+Query: every token must be a prefix of a name token (English or local), accents and case folded. Score = match (exact 4, starts-with 3, token prefixes 2) x kind weight x proximity to the map centre x rank bonus. `PlacePrefetcher` fills the index from z12 tiles within 20 km (about 26 tiles, re-run after moving more than 10 km, skipped offline) and from up to 300 z14 tiles already in the disk cache.

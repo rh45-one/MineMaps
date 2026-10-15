@@ -11,6 +11,7 @@
 | 5 | Polish: launcher icon, refresh coalescing, R8 release build, perf re-measure, docs | done |
 | 6 | Look v2: tinted textures, decorative trees, water depth, tintable arrow, bookmark icons | done |
 | 8 | Name resolution (English/Latin labels), street-name toggle, credit fade + (i), vanilla arrow centring | done (batch 1 of the feature round) |
+| 9 | Map rotation with compass (phone), on-device place index + faster search | done (batch 2) |
 | 7 | Switchable texture pack (original / Minecraft from the user's own game files), icon anchors | done; vanilla verified on phone, car and desktop renders |
 
 ## Resuming work
@@ -134,6 +135,9 @@ Phone, 10-swipe scripted pan, debug build, `dumpsys gfxinfo`:
 Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 
 ## Known limitations
+
+- Map rotation is phone only (the Car API has no rotate gesture); there is no heading-up mode. Two-finger rotation was not exercised with real touch input on the emulator (bearing was driven programmatically).
+- The local place index only knows streets and POIs from z14 tiles already decoded or cached, so an unvisited neighbourhood is found only through the network search.
 
 - English label mode transliterates names that have no Latin-script tag with ICU, which needs Android 10+ (API 29); on Android 8-9 such names stay in their local script. ICU output is phonetic (e.g. Arabic without vowels), not an official romanisation.
 - The car screen shows no OpenStreetMap/OpenMapTiles attribution; the phone shows it at start, behind an (i) button, in Settings and on the Licences screen.

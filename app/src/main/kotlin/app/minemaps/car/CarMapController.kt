@@ -208,7 +208,7 @@ class CarMapController(
         requestRender()
     }
 
-    private fun camera() = Camera(Mercator.yToLat(cy), Mercator.xToLon(cx), zoom)
+    private fun camera() = Camera(Mercator.yToLat(cy), Mercator.xToLon(cx), zoom, container.mapState.current?.bearing ?: 0.0)
 
     private fun wrap(x: Double) = x - Math.floor(x)
 

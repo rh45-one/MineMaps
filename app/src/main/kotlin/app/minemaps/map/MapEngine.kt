@@ -13,13 +13,19 @@ import app.minemaps.engine.labels.NameResolver
 import app.minemaps.engine.data.DiskTileCache
 import app.minemaps.engine.data.OpenMapTilesSource
 import app.minemaps.engine.data.TileRepository
+import app.minemaps.engine.search.PlaceIndex
 import okhttp3.OkHttpClient
 import java.io.File
 
-class MapEngine(context: Context, val client: OkHttpClient) {
+class MapEngine(context: Context, val client: OkHttpClient, placeIndex: PlaceIndex? = null) {
     val cache = DiskTileCache(File(context.cacheDir, "tiles"))
     val source = OpenMapTilesSource(BuildConfig.TILEJSON_URL, client, BuildConfig.USER_AGENT, cache)
-    val repository = TileRepository(source)
+    val repository = TileRepository(source).also { repo ->
+        if (placeIndex != null) {
+            val resolver = NameResolver(NameResolver.Mode.ENGLISH, AndroidTransliterator())
+            repo.onDecoded = { key, tile -> placeIndex.add(key, tile, resolver) }
+        }
+    }
     private val atlases = HashMap<TexturePack, TextureAtlas>()
     val transliterator = AndroidTransliterator()
 
