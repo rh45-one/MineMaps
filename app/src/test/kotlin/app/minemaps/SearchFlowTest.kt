@@ -27,7 +27,7 @@ class SearchFlowTest {
         runCurrent()
     }
 
-    private fun result(name: String, lat: Double = 0.0, lon: Double = 0.0, local: Boolean = false) = SearchResult(name, "", "", lat, lon, null, null, null, local)
+    private fun result(name: String, lat: Double = 0.0, lon: Double = 0.0, local: Boolean = false) = SearchResult(name, "", "", lat, lon, null, null, null, local, landmark = local)
 
     private class Harness(scope: TestScope, networkDelay: Long = 0, val netFails: Boolean = false, val cache: ResponseCache<List<SearchResult>>? = null) {
         val queries = MutableStateFlow("")
@@ -230,11 +230,38 @@ class SearchFlowTest {
     }
 
     @Test
-    fun nearbyLocalAllTokenMatchPrecedesNetworkPartialMatches() {
+    fun nearbyLocalLandmarkAllTokenMatchPrecedesNetworkPartialMatches() {
         val local = listOf(result("Madame Brasserie", 48.8590, 2.2950, local = true), result("Brasserie Lune", 48.8590, 2.2950, local = true), result("Madame Brasserie Far", 49.5, 2.9, local = true))
         val net = listOf("Madame", "Madame Arthur", "Madame Z").map { result(it, 48.9, 2.3) }
         val ranked = mergeResults(local, net, "Madame Brasserie", 48.8584, 2.2945).map { it.name }
         assertEquals(listOf("Madame Brasserie", "Madame", "Madame Arthur", "Madame Z", "Brasserie Lune", "Madame Brasserie Far"), ranked)
+    }
+
+    @Test
+    fun nonLandmarkLocalHitLeadsWhenTheNetworkOffersOnlyPartialMatches() {
+        val restaurant = SearchResult("Madame Brasserie", "", "", 48.8590, 2.2950, null, null, null, true)
+        val net = listOf("Madame", "Madame Arthur").map { result(it, 48.9, 2.3) }
+        assertEquals(listOf("Madame Brasserie", "Madame", "Madame Arthur"), mergeResults(listOf(restaurant), net, "Madame Brasserie", 48.8584, 2.2945).map { it.name })
+    }
+
+    @Test
+    fun nonLandmarkLocalHitFollowsTheNetworkWhenTheNetworkHasAnAllTokenMatch() {
+        val restaurant = SearchResult("Madame Brasserie Annexe", "", "", 48.8590, 2.2950, null, null, null, true)
+        val net = listOf(result("Madame", 48.9, 2.3), result("Madame Brasserie", 48.86, 2.3))
+        assertEquals(listOf("Madame", "Madame Brasserie", "Madame Brasserie Annexe"), mergeResults(listOf(restaurant), net, "Madame Brasserie", 48.8584, 2.2945).map { it.name })
+    }
+
+    @Test
+    fun onlyNearbyLandmarksLeadTheEiffelList() {
+        fun poi(name: String, kind: String, landmark: Boolean) = SearchResult(name, "", "$kind \u00b7 nearby", 48.8584, 2.2945, "house", null, null, true, landmark = landmark)
+        val local = listOf(poi("Eiffel techno", "Gift", false), poi("Tour Eiffel 2e \u00e9tage", "Viewpoint", true), poi("Le Carrousel de la Tour Eiffel", "Attraction", true))
+        val net = listOf(
+            osm("Eiffel Tower", 48.8584, 2.2945, "man_made", "tower"),
+            osm("Eiffel", 48.8950, 2.2870, "highway", "bus_stop"),
+            osm("Eiffel XV", 48.8450, 2.2900, "tourism", "hotel"),
+        )
+        val out = mergeResults(local, net, "eiffel", 48.8584, 2.2945).map { it.name }
+        assertEquals(listOf("Tour Eiffel 2e \u00e9tage", "Le Carrousel de la Tour Eiffel", "Eiffel Tower", "Eiffel XV", "Eiffel", "Eiffel techno"), out)
     }
 
     @Test

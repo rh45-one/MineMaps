@@ -117,6 +117,8 @@ class PlaceIndex(private val maxEntries: Int = 50_000) {
         for (e in entries) dedup.getOrPut(e.enNorm) { ArrayList(1) }.add(e)
     }
 
+    fun isLandmark(hit: PlaceHit): Boolean = hit.kind != PlaceKind.POI || hit.kindLabel.lowercase() in LANDMARK_CLASSES
+
     fun query(text: String, centerWx: Double, centerWy: Double, localNames: Boolean = false, limit: Int = 8): List<PlaceHit> {
         val q = normalize(text)
         if (q.isEmpty()) return emptyList()

@@ -95,7 +95,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
                 PlaceKind.STREET -> "street"
                 else -> "house"
             }
-            SearchResult(h.name, "", "${h.kindLabel} \u00b7 nearby", ll.lat, ll.lng, type, null, null, local = true)
+            SearchResult(h.name, "", "${h.kindLabel} \u00b7 nearby", ll.lat, ll.lng, type, null, null, local = true, landmark = container.placeIndex.isLandmark(h))
         }
     }
 

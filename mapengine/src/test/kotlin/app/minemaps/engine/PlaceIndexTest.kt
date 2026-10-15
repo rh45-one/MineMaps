@@ -124,4 +124,17 @@ class PlaceIndexTest {
         assertEquals("Eiffel Tower", names.first())
         assertTrue(names.indexOf("Eiffel Tower") < names.indexOf("Hotel Eiffel Blomet"))
     }
+
+    @Test
+    fun landmarkClassification() {
+        val idx = PlaceIndex()
+        idx.add(
+            listOf(label("Rue Eiffel", LabelKind.ROAD)),
+            listOf(Poi("compass", "Eiffel Tower", px, py, 16, kindLabel = "Monument"), Poi("meat", "Eiffel Cafe", px, py + 0.01, 16, kindLabel = "Restaurant")),
+        )
+        val hits = idx.query("eiffel", px, py).associateBy { it.name }
+        assertTrue(idx.isLandmark(hits.getValue("Rue Eiffel")))
+        assertTrue(idx.isLandmark(hits.getValue("Eiffel Tower")))
+        assertTrue(!idx.isLandmark(hits.getValue("Eiffel Cafe")))
+    }
 }

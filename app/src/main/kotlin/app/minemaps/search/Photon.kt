@@ -32,6 +32,7 @@ class SearchResult(
     val extent: DoubleArray?,
     val local: Boolean = false,
     val osmKey: String? = null,
+    val landmark: Boolean = false,
 ) {
     val subtitle: String get() = listOf(address, typeLabel).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
 

@@ -39,7 +39,7 @@ private fun metersTo(r: SearchResult, lat: Double, lon: Double): Double {
 /**
  * Photon's order is the backbone: duplicate transit/office hits keep only the one nearest the map centre, and transit stops sink below
  * the other all-token matches. Up to 3 local hits that match every query token within 5 km go first (unless a network hit has the
- * same name within 250 m); the other local hits follow the network list.
+ * same name within 250 m) and are landmarks (or no network hit matches every token); the other local hits follow the network list.
  */
 fun mergeResults(local: List<SearchResult>, network: List<SearchResult>, query: String = "", centerLat: Double? = null, centerLon: Double? = null): List<SearchResult> {
     if (network.isEmpty()) return local
@@ -61,8 +61,9 @@ fun mergeResults(local: List<SearchResult>, network: List<SearchResult>, query: 
         val n = PlaceIndex.normalize(l.name)
         net.none { PlaceIndex.normalize(it.name) == n && meters(it, l) < 250.0 }
     }
+    val networkMatches = net.any { matchesAll(it, tokens) }
     val first = fresh.filter { l ->
-        matchesAll(l, tokens) && (centerLat == null || centerLon == null || metersTo(l, centerLat, centerLon) <= 5_000.0)
+        (l.landmark || !networkMatches) && matchesAll(l, tokens) && (centerLat == null || centerLon == null || metersTo(l, centerLat, centerLon) <= 5_000.0)
     }.take(3)
     return first + net + fresh.filter { it !in first }
 }
