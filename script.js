@@ -1,28 +1,4 @@
-// 1. Hero preview texture switcher
-document.querySelectorAll('[data-hero-pack]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const pack = btn.getAttribute('data-hero-pack');
-    document.querySelectorAll('[data-hero-pack]').forEach((b) => {
-      const on = b === btn;
-      b.classList.toggle('active', on);
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    const orig = document.getElementById('hero-shot-original');
-    const mc = document.getElementById('hero-shot-minecraft');
-    const cap = document.getElementById('hero-caption');
-    if (pack === 'minecraft') {
-      orig.classList.remove('active');
-      mc.classList.add('active');
-      cap.innerHTML = 'Shown with <strong>Optional In-App Minecraft Textures*</strong> &mdash; imported privately on your phone.';
-    } else {
-      mc.classList.remove('active');
-      orig.classList.add('active');
-      cap.innerHTML = 'Shown with <strong>MineMaps Original Art</strong> &mdash; crafted from scratch and bundled out of the box.';
-    }
-  });
-});
-
-// 2. Mouse-reactive hero parallax + subtle 3D card tilt & spotlight glow
+// 1. Mouse-reactive hero parallax + subtle 3D card tilt & spotlight glow
 const root = document.documentElement;
 window.addEventListener('pointermove', (e) => {
   root.style.setProperty('--mx', `${e.clientX}px`);
@@ -39,8 +15,8 @@ document.querySelectorAll('.tilt-card').forEach((card) => {
     const rect = card.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const rx = ((y / rect.height - 0.5) * -3.6).toFixed(2);
-    const ry = ((x / rect.width - 0.5) * 3.6).toFixed(2);
+    const rx = ((y / rect.height - 0.5) * -3.2).toFixed(2);
+    const ry = ((x / rect.width - 0.5) * 3.2).toFixed(2);
     card.style.setProperty('--cx', `${x}px`);
     card.style.setProperty('--cy', `${y}px`);
     card.style.setProperty('--rx', `${rx}deg`);
@@ -54,7 +30,7 @@ document.querySelectorAll('.tilt-card').forEach((card) => {
   });
 });
 
-// 3. Scroll-reveal observer
+// 2. Scroll-reveal observer
 const revealObserver = new IntersectionObserver((entries) => {
   entries.forEach((entry) => {
     if (entry.isIntersecting) {
@@ -66,7 +42,7 @@ const revealObserver = new IntersectionObserver((entries) => {
 
 document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
 
-// 4. Interactive Live Block Map Demo
+// 3. Unified Interactive Showcase (Device: Phone / Tablet / Android Auto + Textures + Day/Night)
 (() => {
   const viewport = document.getElementById('demo-viewport');
   const canvas = document.getElementById('demo-canvas');
@@ -79,12 +55,14 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
   const cardClose = document.getElementById('demo-card-close');
   if (!viewport || !canvas || !mapImg) return;
 
+  const MAP_W = 1600;
+  const MAP_H = 1200;
+  let demoDevice = 'phone';
   let demoPack = 'original';
   let demoTime = 'day';
-  let selectedIcon = 'pin';
   let scale = 1.0;
-  let panX = -640; // center of 1280px
-  let panY = -480; // center of 960px
+  let panX = -MAP_W / 2;
+  let panY = -MAP_H / 2;
   let dragging = false;
   let startX = 0;
   let startY = 0;
@@ -92,14 +70,14 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
   function clampPan() {
     const vw = viewport.clientWidth;
     const vh = viewport.clientHeight;
-    const halfW = (1280 * scale) / 2;
-    const halfH = (960 * scale) / 2;
+    const halfW = (MAP_W * scale) / 2;
+    const halfH = (MAP_H * scale) / 2;
     const maxOffX = Math.max(0, halfW - vw / 2);
     const maxOffY = Math.max(0, halfH - vh / 2);
-    const offsetX = Math.max(-maxOffX, Math.min(maxOffX, panX + 640));
-    const offsetY = Math.max(-maxOffY, Math.min(maxOffY, panY + 480));
-    panX = offsetX - 640;
-    panY = offsetY - 480;
+    const offsetX = Math.max(-maxOffX, Math.min(maxOffX, panX + MAP_W / 2));
+    const offsetY = Math.max(-maxOffY, Math.min(maxOffY, panY + MAP_H / 2));
+    panX = offsetX - MAP_W / 2;
+    panY = offsetY - MAP_H / 2;
   }
 
   function renderTransform() {
@@ -108,29 +86,48 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
   }
 
   function updateMapAsset() {
-    mapImg.src = `assets/demo-rome-${demoTime}-${demoPack}.png`;
+    mapImg.src = `assets/demo-london-${demoTime}-${demoPack}.png`;
   }
 
+  // Device selector (Phone / Tablet / Android Auto)
+  document.querySelectorAll('[data-demo-device]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      demoDevice = btn.getAttribute('data-demo-device') || 'phone';
+      document.querySelectorAll('[data-demo-device]').forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      viewport.classList.remove('device-phone', 'device-tablet', 'device-car');
+      viewport.classList.add(`device-${demoDevice}`);
+      setTimeout(renderTransform, 50);
+      setTimeout(renderTransform, 340);
+    });
+  });
+
+  // Texture selector (MineMaps Original / Minecraft*)
   document.querySelectorAll('[data-demo-pack]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      demoPack = btn.getAttribute('data-demo-pack');
-      document.querySelectorAll('[data-demo-pack]').forEach((b) => b.classList.toggle('active', b === btn));
+      demoPack = btn.getAttribute('data-demo-pack') || 'original';
+      document.querySelectorAll('[data-demo-pack]').forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
       updateMapAsset();
     });
   });
 
+  // Lighting selector (Day / Night)
   document.querySelectorAll('[data-demo-time]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      demoTime = btn.getAttribute('data-demo-time');
-      document.querySelectorAll('[data-demo-time]').forEach((b) => b.classList.toggle('active', b === btn));
+      demoTime = btn.getAttribute('data-demo-time') || 'day';
+      document.querySelectorAll('[data-demo-time]').forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
       updateMapAsset();
-    });
-  });
-
-  document.querySelectorAll('[data-demo-icon]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      selectedIcon = btn.getAttribute('data-demo-icon');
-      document.querySelectorAll('[data-demo-icon]').forEach((b) => b.classList.toggle('active', b === btn));
     });
   });
 
@@ -162,11 +159,11 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
-    scale = Math.max(0.85, Math.min(2.6, scale * factor));
+    scale = Math.max(0.75, Math.min(2.4, scale * factor));
     renderTransform();
   }, { passive: false });
 
-  // Double-click to drop a bookmark icon on the map
+  // Double-click to drop a diamond bookmark on the map
   viewport.addEventListener('dblclick', (e) => {
     if (e.target.closest('button') || e.target.closest('#demo-info-card')) return;
     const rect = canvas.getBoundingClientRect();
@@ -174,16 +171,16 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
     const yPct = ((e.clientY - rect.top) / rect.height) * 100;
     if (xPct < 0 || xPct > 100 || yPct < 0 || yPct > 100) return;
     const pin = document.createElement('img');
-    pin.src = `assets/icons/icon-${selectedIcon}.png`;
+    pin.src = 'assets/icons/icon-diamond.png';
     pin.className = 'dropped-pin pixel';
     pin.style.left = `${xPct}%`;
     pin.style.top = `${yPct}%`;
     pinsLayer.appendChild(pin);
 
-    const lat = (41.8945 - (yPct / 100) * 0.0086).toFixed(5);
-    const lon = (12.4855 + (xPct / 100) * 0.0134).toFixed(5);
-    cardTitle.textContent = `Saved Place (${selectedIcon.replace('_', ' ')})`;
-    cardSub.textContent = 'Custom Bookmark · Dropped just now';
+    const lat = (51.5042 - (yPct / 100) * 0.0070).toFixed(5);
+    const lon = (-0.1325 + (xPct / 100) * 0.0158).toFixed(5);
+    cardTitle.textContent = 'Saved Bookmark (Diamond)';
+    cardSub.textContent = 'Saved place · Dropped just now';
     cardCoords.textContent = `${lat}, ${lon}`;
     infoCard.classList.remove('hidden');
   });
@@ -204,17 +201,17 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
   }
 
   document.getElementById('demo-zoom-in')?.addEventListener('click', () => {
-    scale = Math.min(2.6, scale * 1.25);
+    scale = Math.min(2.4, scale * 1.25);
     renderTransform();
   });
   document.getElementById('demo-zoom-out')?.addEventListener('click', () => {
-    scale = Math.max(0.85, scale / 1.25);
+    scale = Math.max(0.75, scale / 1.25);
     renderTransform();
   });
   document.getElementById('demo-reset')?.addEventListener('click', () => {
     scale = 1.0;
-    panX = -640;
-    panY = -480;
+    panX = -MAP_W / 2;
+    panY = -MAP_H / 2;
     pinsLayer.innerHTML = '';
     renderTransform();
   });
@@ -223,7 +220,7 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
   renderTransform();
 })();
 
-// 5. Fetch latest release tag from GitHub API so hero/footer download buttons and APK filename update automatically (navbar button stays clean without version text)
+// 4. Fetch latest release tag from GitHub API so hero/footer download buttons and APK filename update automatically
 fetch('https://api.github.com/repos/rh45-one/MineMaps/releases/latest')
   .then((r) => (r.ok ? r.json() : null))
   .then((data) => {

@@ -68,7 +68,7 @@ a:hover {
 
 code {
   font-family: var(--font-title);
-  font-size: 0.88em;
+  font-size: 0.86em;
   background: var(--outline);
   padding: 2px 7px;
   border: 1px solid var(--shadow);
@@ -77,7 +77,7 @@ code {
 
 .container {
   width: 100%;
-  max-width: 1220px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 0 clamp(16px, 4vw, 32px);
 }
@@ -90,9 +90,9 @@ code {
   box-shadow:
     inset 3px 3px 0 0 var(--highlight),
     inset -3px -3px 0 0 var(--shadow),
-    0 10px 28px rgba(0, 0, 0, 0.45);
-  padding: clamp(18px, 2.5vw, 26px);
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease, border-color 180ms ease;
+    0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: clamp(20px, 2.8vw, 30px);
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
 }
 
 .tilt-card {
@@ -121,8 +121,8 @@ code {
 /* Scroll reveal animation */
 .reveal {
   opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 480ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform: translateY(18px);
+  transition: opacity 460ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .reveal.visible {
@@ -148,12 +148,6 @@ code {
   background: var(--green-ledge);
   box-shadow: inset 2px 2px 0 0 var(--green);
   color: #b8ff70;
-}
-
-.mc-tag-gold {
-  background: var(--gold-ledge);
-  box-shadow: inset 2px 2px 0 0 #b8860b;
-  color: var(--gold);
 }
 
 /* Chunky 3D Bevel Buttons */
@@ -283,16 +277,15 @@ code {
 .nav-links {
   display: flex;
   align-items: center;
-  gap: clamp(14px, 2vw, 24px);
+  gap: clamp(18px, 2.5vw, 32px);
 }
 
 .nav-links a {
   font-family: var(--font-title);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   color: var(--text-sec);
   text-decoration: none;
   padding: 6px 4px;
-  position: relative;
   transition: color 140ms ease, transform 140ms ease;
 }
 
@@ -301,12 +294,13 @@ code {
   transform: translateY(-1px);
 }
 
-/* Hero Section */
+/* Centered, Breathable Hero */
 .hero {
   position: relative;
-  padding: clamp(40px, 6vw, 72px) 0 clamp(52px, 7vw, 84px);
+  padding: clamp(52px, 7vw, 88px) 0 clamp(56px, 7vw, 88px);
   border-bottom: 4px solid var(--outline);
   overflow: hidden;
+  text-align: center;
 }
 
 .hero-grid-bg {
@@ -324,85 +318,71 @@ code {
 .hero-glow {
   position: absolute;
   inset: 0;
-  background: radial-gradient(600px circle at var(--mx, 50vw) var(--my, 30vh), rgba(82, 165, 53, 0.14), transparent 70%);
+  background: radial-gradient(650px circle at var(--mx, 50vw) var(--my, 30vh), rgba(82, 165, 53, 0.14), transparent 70%);
   pointer-events: none;
 }
 
-.hero-inner {
+.hero-centered {
   position: relative;
-  display: grid;
-  grid-template-columns: 1.12fr 0.88fr;
-  gap: clamp(28px, 4vw, 48px);
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
 }
 
 .badge-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 22px;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 26px;
 }
 
 .hero-logo {
   width: 100%;
-  max-width: 500px;
+  max-width: 520px;
   height: auto;
   display: block;
-  margin-bottom: 20px;
-  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.55));
+  margin-bottom: 24px;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.6));
 }
 
 .hero-title {
   font-family: var(--font-title);
-  font-size: clamp(1.45rem, 2.6vw, 2.2rem);
-  line-height: 1.35;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  line-height: 1.3;
   margin: 0 0 16px;
   color: var(--text);
 }
 
 .hero-lead {
-  font-size: clamp(1rem, 1.25vw, 1.14rem);
+  font-size: clamp(1.05rem, 1.35vw, 1.2rem);
   color: var(--text-sec);
-  margin: 0 0 26px;
-  max-width: 60ch;
+  margin: 0 0 30px;
+  max-width: 58ch;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  justify-content: center;
+  gap: 14px;
   align-items: center;
 }
 
-.hero-meta {
-  margin-top: 16px;
-  font-size: 0.92rem;
-  color: var(--text-sec);
-}
-
-/* Hero Interactive Showcase */
-.showcase-frame {
-  padding: 18px;
-}
-
-.showcase-header {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.showcase-title {
-  font-family: var(--font-title);
-  font-size: 0.78rem;
-  color: var(--gold);
-  letter-spacing: 0.04em;
-}
-
+/* Segmented Controls */
 .mc-segmented {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: inline-grid;
+  gap: 6px;
+}
+
+.demo-seg-3 {
+  grid-template-columns: repeat(3, auto);
+}
+
+.demo-seg-2 {
+  grid-template-columns: repeat(2, auto);
 }
 
 .seg-btn {
@@ -412,7 +392,7 @@ code {
   gap: 8px;
   font-family: var(--font-title);
   font-size: 0.78rem;
-  padding: 9px 12px;
+  padding: 9px 14px;
   color: var(--text);
   background: var(--raised);
   border: 3px solid var(--outline);
@@ -421,6 +401,7 @@ code {
     inset -2px -2px 0 0 var(--shadow),
     0 3px 0 0 var(--stone-ledge);
   cursor: pointer;
+  white-space: nowrap;
   transition: background-color 80ms ease, transform 60ms ease;
 }
 
@@ -436,47 +417,24 @@ code {
     0 3px 0 0 var(--green-ledge);
 }
 
-.hero-image-stage {
-  position: relative;
-  background: var(--outline);
-  border: 3px solid var(--outline);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
+.mini-tex {
+  width: 18px;
+  height: 18px;
 }
 
-.hero-shot {
-  display: none;
-  width: 100%;
-  max-width: 330px;
-  height: auto;
-}
-
-.hero-shot.active {
-  display: block;
-}
-
-.showcase-caption {
-  margin: 12px 0 0;
-  font-size: 0.86rem;
-  color: var(--text-sec);
-  text-align: center;
-}
-
-/* Interactive Demo Section */
+/* Unified Interactive Showcase */
 .demo-wrapper {
-  padding: clamp(14px, 2vw, 22px);
+  padding: clamp(16px, 2.5vw, 26px);
 }
 
 .demo-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding-bottom: 14px;
+  justify-content: center;
+  gap: clamp(14px, 2.5vw, 28px);
+  margin-bottom: 22px;
+  padding-bottom: 18px;
   border-bottom: 3px solid var(--outline);
 }
 
@@ -489,77 +447,65 @@ code {
 
 .demo-label {
   font-family: var(--font-title);
-  font-size: 0.8rem;
-  color: var(--text-sec);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  color: var(--gold);
 }
 
-.demo-seg {
-  display: inline-grid;
-}
-
-.mini-tex {
-  width: 18px;
-  height: 18px;
-}
-
-.demo-icon-picker {
-  display: inline-flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.slot-pick {
-  width: 42px;
-  height: 42px;
-  padding: 4px;
-  background: var(--bg);
-  border: 3px solid var(--outline);
-  box-shadow:
-    inset 2px 2px 0 0 var(--shadow),
-    inset -2px -2px 0 0 var(--highlight);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
+/* Device Stage & Responsive Device Frames (Phone / Tablet / Android Auto) */
+.device-stage {
+  display: flex;
   justify-content: center;
-  transition: transform 80ms ease, border-color 80ms ease;
+  align-items: center;
+  min-height: 540px;
+  padding: 8px 0;
 }
 
-.slot-pick:hover {
-  transform: translateY(-2px);
-}
-
-.slot-pick.active {
-  border-color: #ffffff;
-  box-shadow: 0 0 0 2px var(--green);
-}
-
-.slot-pick img {
-  width: 28px;
-  height: 28px;
-}
-
-.demo-viewport {
+.device-frame {
   position: relative;
-  width: 100%;
-  height: clamp(340px, 56vh, 560px);
   background: #14171c;
-  border: 3px solid var(--outline);
+  border: 6px solid var(--outline);
+  box-shadow:
+    0 0 0 3px var(--highlight),
+    0 20px 50px rgba(0, 0, 0, 0.65);
   overflow: hidden;
   cursor: grab;
   user-select: none;
   touch-action: none;
+  transition: width 320ms cubic-bezier(0.2, 0.8, 0.2, 1), height 320ms cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 320ms ease;
 }
 
-.demo-viewport.dragging {
+.device-frame.dragging {
   cursor: grabbing;
+}
+
+/* 1. Phone Frame (Portrait 9:18.5) */
+.device-frame.device-phone {
+  width: min(390px, 100%);
+  height: 620px;
+  border-radius: 18px;
+}
+
+/* 2. Tablet Frame (Landscape 16:10) */
+.device-frame.device-tablet {
+  width: min(940px, 100%);
+  height: 560px;
+  border-radius: 14px;
+}
+
+/* 3. Android Auto Head Unit Frame (Widescreen 16:9.5) */
+.device-frame.device-car {
+  width: min(980px, 100%);
+  height: 540px;
+  border-radius: 8px;
 }
 
 .demo-canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 1280px;
-  height: 960px;
+  width: 1600px;
+  height: 1200px;
   transform-origin: center center;
   will-change: transform;
 }
@@ -571,6 +517,134 @@ code {
   pointer-events: none;
 }
 
+/* Device-Specific HUD Overlays */
+.hud-phone-top {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.device-tablet .hud-phone-top {
+  width: 340px;
+  right: auto;
+}
+
+.device-car .hud-phone-top {
+  display: none;
+}
+
+.hud-search-box {
+  flex: 1;
+  background: rgba(30, 30, 31, 0.94);
+  border: 3px solid var(--outline);
+  box-shadow: inset 2px 2px 0 0 var(--shadow);
+  padding: 8px 12px;
+  font-family: var(--font-title);
+  font-size: 0.78rem;
+  color: var(--text-sec);
+  display: flex;
+  align-items: center;
+}
+
+.hud-top-btn {
+  width: 40px;
+  height: 40px;
+  background: var(--raised);
+  border: 3px solid var(--outline);
+  box-shadow: inset 2px 2px 0 0 var(--highlight);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-top-btn img {
+  width: 22px;
+  height: 22px;
+}
+
+/* Android Auto Top Banner & Bottom Dock */
+.hud-car-top,
+.hud-car-dock {
+  display: none;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.device-car .hud-car-top {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hud-car-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20, 22, 26, 0.94);
+  border: 3px solid var(--outline);
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.hud-car-banner img {
+  width: 24px;
+  height: 24px;
+}
+
+.hud-car-strip {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.hud-car-chip {
+  font-family: var(--font-title);
+  font-size: 0.78rem;
+  background: rgba(20, 22, 26, 0.92);
+  border: 3px solid var(--outline);
+  padding: 8px 12px;
+  color: var(--text);
+}
+
+.device-car .hud-car-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  background: #0e1013;
+  border-top: 3px solid var(--outline);
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-title);
+  font-size: 0.8rem;
+  color: var(--text-sec);
+}
+
+.car-dock-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.car-dock-app {
+  width: 28px;
+  height: 28px;
+}
+
+/* Hotspots & Dropped Pins */
 .demo-hotspot {
   position: absolute;
   width: 34px;
@@ -578,7 +652,7 @@ code {
   margin-left: -17px;
   margin-top: -17px;
   border: 3px solid #ffffff;
-  background: rgba(82, 165, 53, 0.85);
+  background: rgba(82, 165, 53, 0.88);
   box-shadow: 0 0 0 3px var(--outline);
   cursor: pointer;
   padding: 0;
@@ -589,7 +663,7 @@ code {
 }
 
 .demo-hotspot:hover {
-  transform: scale(1.2);
+  transform: scale(1.22);
   background: var(--gold);
 }
 
@@ -622,46 +696,25 @@ code {
   }
 }
 
-.demo-hud-top {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 72px;
-  pointer-events: none;
-}
-
-.demo-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(30, 30, 31, 0.92);
-  border: 3px solid var(--outline);
-  box-shadow: inset 2px 2px 0 0 var(--highlight);
-  padding: 7px 14px;
-  font-size: 0.85rem;
-  color: var(--text);
-}
-
-.demo-pill img {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-}
-
 .demo-hud-right {
   position: absolute;
   right: 12px;
-  bottom: 14px;
+  bottom: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  z-index: 5;
+}
+
+.device-car .demo-hud-right {
+  bottom: 62px;
 }
 
 .mc-icon-btn {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   font-family: var(--font-title);
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   color: var(--text);
   background: var(--raised);
   border: 3px solid var(--outline);
@@ -674,6 +727,12 @@ code {
   align-items: center;
   justify-content: center;
   transition: transform 60ms ease, background-color 80ms ease;
+}
+
+.mc-icon-btn-sm {
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
 }
 
 .mc-icon-btn:hover {
@@ -696,9 +755,20 @@ code {
   position: absolute;
   left: 12px;
   bottom: 12px;
-  width: min(420px, calc(100% - 84px));
-  padding: 14px 16px;
+  width: min(360px, calc(100% - 76px));
+  padding: 12px 14px;
   z-index: 5;
+}
+
+/* On Tablet, the app places the info card in the left side-panel below search */
+.device-tablet .demo-info-card {
+  top: 62px;
+  bottom: auto;
+  width: 340px;
+}
+
+.device-car .demo-info-card {
+  bottom: 60px;
 }
 
 .demo-info-card.hidden {
@@ -709,24 +779,31 @@ code {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .demo-info-row h4 {
   font-family: var(--font-title);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   margin: 0 0 4px;
 }
 
 .demo-info-row p {
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   color: var(--text-sec);
   margin: 0 0 6px;
 }
 
+.demo-caption {
+  margin: 16px 0 0;
+  font-size: 0.92rem;
+  color: var(--text-sec);
+  text-align: center;
+}
+
 /* Sections */
 .section {
-  padding: clamp(52px, 7vw, 84px) 0;
+  padding: clamp(56px, 7vw, 88px) 0;
   border-bottom: 4px solid var(--outline);
 }
 
@@ -736,92 +813,26 @@ code {
 
 .section-heading {
   text-align: center;
-  max-width: 780px;
-  margin: 0 auto clamp(32px, 5vw, 52px);
+  max-width: 740px;
+  margin: 0 auto clamp(32px, 4.5vw, 48px);
 }
 
 .section-heading h2 {
   font-family: var(--font-title);
-  font-size: clamp(1.3rem, 2.4vw, 1.95rem);
+  font-size: clamp(1.35rem, 2.4vw, 1.95rem);
   line-height: 1.35;
-  margin: 14px 0 12px;
+  margin: 14px 0 10px;
 }
 
 .section-heading p {
   color: var(--text-sec);
-  font-size: clamp(0.98rem, 1.15vw, 1.08rem);
+  font-size: clamp(0.98rem, 1.15vw, 1.06rem);
   margin: 0;
-}
-
-/* Texture Comparison Grid */
-.texture-compare-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.compare-card h3 {
-  font-family: var(--font-title);
-  font-size: 1.15rem;
-  margin: 12px 0 8px;
-}
-
-.compare-card p {
-  color: var(--text-sec);
-  margin: 0 0 18px;
-  font-size: 0.96rem;
-}
-
-.compare-badge-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.compare-loc {
-  font-size: 0.84rem;
-  color: var(--text-sec);
-}
-
-.compare-pair {
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: 14px;
-  align-items: stretch;
-}
-
-.shot-figure {
-  margin: 0;
-  background: var(--bg-alt);
-  border: 3px solid var(--outline);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.shot-figure img {
-  width: 100%;
-  height: clamp(220px, 28vw, 290px);
-  object-fit: cover;
-  object-position: center;
-  border: 2px solid var(--outline);
-  display: block;
-}
-
-.shot-figure figcaption {
-  margin-top: 8px;
-  font-family: var(--font-title);
-  font-size: 0.74rem;
-  color: var(--text-sec);
-  text-align: center;
 }
 
 .legal-note {
-  margin: 24px auto 0;
-  max-width: 960px;
+  margin: 22px auto 0;
+  max-width: 900px;
   font-size: 0.88rem;
   color: var(--text-sec);
   text-align: center;
@@ -874,86 +885,11 @@ code {
   display: block;
 }
 
-/* Android Auto Grid */
-.car-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.car-card {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.car-card img {
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  border: 3px solid var(--outline);
-  background: var(--outline);
-}
-
-.car-card figcaption {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.car-card figcaption strong {
-  font-family: var(--font-title);
-  font-size: 1rem;
-  color: var(--text);
-}
-
-.car-card figcaption span {
-  font-size: 0.95rem;
-  color: var(--text-sec);
-}
-
-/* Navigation Modes & Install Steps */
-.modes-grid,
-.steps-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 22px;
-}
-
-.mode-card h3,
-.step-card h3 {
-  font-family: var(--font-title);
-  font-size: 1.06rem;
-  margin: 14px 0 10px;
-}
-
-.mode-card p,
-.step-card p {
-  margin: 0;
-  color: var(--text-sec);
-  font-size: 0.96rem;
-}
-
-.step-num {
-  width: 44px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-title);
-  font-size: 1.15rem;
-  background: var(--green);
-  color: var(--text);
-  border: 3px solid var(--outline);
-  box-shadow: inset 2px 2px 0 0 var(--green-hl), inset -2px -2px 0 0 var(--green-ledge);
-}
-
 /* Licence Banner */
 .licence-banner {
-  max-width: 920px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: clamp(22px, 4vw, 38px);
+  padding: clamp(24px, 4vw, 40px);
 }
 
 .licence-copy h2 {
@@ -965,7 +901,13 @@ code {
 .licence-copy p {
   color: var(--text-sec);
   font-size: 1.02rem;
-  margin: 0 0 18px;
+  margin: 0 0 16px;
+}
+
+.install-hint {
+  background: rgba(0, 0, 0, 0.25);
+  border-left: 4px solid var(--green-hl);
+  padding: 10px 14px;
 }
 
 /* Footer */
@@ -983,7 +925,7 @@ code {
 }
 
 .footer-logo {
-  height: 52px;
+  height: 50px;
   width: auto;
   max-width: 100%;
   display: block;
@@ -1006,17 +948,9 @@ code {
   opacity: 0.82;
 }
 
-/* Comprehensive Responsiveness across Tablets, Landscape Phones, Small Phones & Ultra-Wide */
-@media (max-width: 1060px) {
-  .hero-inner,
-  .texture-compare-grid,
-  .car-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .features-grid,
-  .modes-grid,
-  .steps-grid {
+/* Comprehensive Responsiveness */
+@media (max-width: 980px) {
+  .features-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -1026,11 +960,7 @@ code {
 }
 
 @media (max-width: 680px) {
-  .features-grid,
-  .modes-grid,
-  .steps-grid,
-  .compare-pair,
-  .mc-segmented {
+  .features-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1058,26 +988,30 @@ code {
 
   .demo-toolbar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
-  .demo-pill span {
-    font-size: 0.76rem;
+  .demo-control-group {
+    justify-content: space-between;
+  }
+
+  .device-frame.device-phone,
+  .device-frame.device-tablet,
+  .device-frame.device-car {
+    height: 460px;
+  }
+
+  .device-stage {
+    min-height: 470px;
+  }
+
+  .hud-car-banner span {
+    font-size: 0.75rem;
   }
 }
 
 @media (max-width: 380px) {
   .brand-text {
     height: 21px;
-  }
-}
-
-@media (max-height: 540px) and (orientation: landscape) {
-  .hero {
-    padding: 28px 0 36px;
-  }
-
-  .demo-viewport {
-    height: 75vh;
   }
 }
