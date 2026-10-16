@@ -13,6 +13,41 @@ object GeoIntent {
     private const val MAX_INPUT = 2000
     private const val MAX_QUERY = 200
     private const val MAX_LABEL = 80
+    private val AT_COORDS = Regex("""@(-?\d+\.\d+),(-?\d+\.\d+)""")
+    private val BANG_COORDS = Regex("""!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)""")
+    private val PLAIN_COORDS = Regex("""(?<!\d)(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})(?!\d)""")
+
+    /** Parses a shared text or URL from Google Maps (or a `geo:` URI) into a [GeoTarget]. */
+    fun parseSharedText(input: String?): GeoTarget? {
+        if (input == null || input.length > MAX_INPUT) return null
+        val trimmed = input.trim()
+        if (trimmed.startsWith("geo:", ignoreCase = true)) return parse(trimmed)
+        BANG_COORDS.find(trimmed)?.let { m ->
+            val c = checked(m.groupValues[1].toDoubleOrNull(), m.groupValues[2].toDoubleOrNull())
+            if (c != null) return GeoTarget.Place(c.first, c.second, extractPlaceNameFromUrl(trimmed))
+        }
+        AT_COORDS.find(trimmed)?.let { m ->
+            val c = checked(m.groupValues[1].toDoubleOrNull(), m.groupValues[2].toDoubleOrNull())
+            if (c != null) return GeoTarget.Place(c.first, c.second, extractPlaceNameFromUrl(trimmed))
+        }
+        val qParam = Regex("""[?&](?:q|query|destination)=([^&#\s]+)""", RegexOption.IGNORE_CASE).find(trimmed)?.groupValues?.get(1)?.let { decode(it) }
+        if (!qParam.isNullOrBlank()) {
+            return parse("geo:0,0?q=$qParam")
+        }
+        PLAIN_COORDS.find(trimmed)?.let { m ->
+            val c = checked(m.groupValues[1].toDoubleOrNull(), m.groupValues[2].toDoubleOrNull())
+            if (c != null) return GeoTarget.Place(c.first, c.second, null)
+        }
+        // Fallback: if the user shared a multi-line "Place Name\nAddress\nhttps://maps.app.goo.gl/..." string from Google Maps, use the text before the URL as a search query.
+        val withoutUrls = trimmed.replace(Regex("""https?://\S+"""), "").lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+        val cleaned = cleanQuery(withoutUrls)
+        return if (cleaned.length >= 2) GeoTarget.Query(cleaned) else null
+    }
+
+    private fun extractPlaceNameFromUrl(text: String): String? {
+        val m = Regex("""/maps/place/([^/@?]+)""").find(text) ?: return null
+        return decode(m.groupValues[1].replace('+', ' '))?.let { cleanLabel(it) }
+    }
 
     fun parse(uri: String?): GeoTarget? {
         if (uri == null || uri.length > MAX_INPUT) return null

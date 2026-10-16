@@ -73,11 +73,17 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     @Volatile
     private var englishNames = true
+
+    @Volatile
+    private var navMode = app.minemaps.data.NavigationMode.STANDALONE
+
+    @Volatile
+    private var googleApiKey = ""
     private val photonCache = ResponseCache<List<SearchResult>>()
 
     private fun lang(): String? = if (englishNames) "en" else Locale.getDefault().language
 
-    private fun cacheKey(q: String) = ResponseCache.key(q, camera?.lat, camera?.lon, lang())
+    private fun cacheKey(q: String) = "${navMode.name}|${googleApiKey.hashCode()}|" + ResponseCache.key(q, camera?.lat, camera?.lon, lang())
 
     private fun localHits(q: String): List<SearchResult> {
         val c = camera
@@ -107,11 +113,23 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     ) { q ->
         val c = camera
         runCatching { android.util.Log.d(PhotonClient.TAG, "typed->request ${android.os.SystemClock.elapsedRealtime() - typedAt}ms") }
-        val r = if (englishNames) {
+        val latinizer: (String) -> String = if (englishNames) {
             val names = container.engine.await().nameResolver(app.minemaps.engine.labels.NameResolver.Mode.ENGLISH)
-            container.photon.search(q, c?.lat, c?.lon, "en", { names.latinize(it) ?: it }, c?.zoom)
+            ({ names.latinize(it) ?: it })
         } else {
-            container.photon.search(q, c?.lat, c?.lon, Locale.getDefault().language, zoom = c?.zoom)
+            { it }
+        }
+        val gKey = if (navMode == app.minemaps.data.NavigationMode.GOOGLE_ASSISTED) googleApiKey.takeIf { it.isNotBlank() } else null
+        val r = if (gKey != null) {
+            try {
+                container.googlePlaces.search(q, gKey, c?.lat, c?.lon, lang(), latinizer)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                container.photon.search(q, c?.lat, c?.lon, lang(), latinizer, c?.zoom)
+            }
+        } else {
+            container.photon.search(q, c?.lat, c?.lon, lang(), latinizer, c?.zoom)
         }
         photonCache.put(cacheKey(q), r)
         runCatching { android.util.Log.d(PhotonClient.TAG, "network results at +${android.os.SystemClock.elapsedRealtime() - sessionStartAt}ms since first key") }
@@ -123,7 +141,16 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     init {
-        viewModelScope.launch { container.settings.settings.collect { englishNames = it.labelNames == app.minemaps.data.LabelNames.ENGLISH } }
+        viewModelScope.launch {
+            container.settings.settings.collect {
+                englishNames = it.labelNames == app.minemaps.data.LabelNames.ENGLISH
+                navMode = it.navigationMode
+                googleApiKey = it.googleApiKey
+            }
+        }
+        viewModelScope.launch {
+            container.navigation.messages.collect { messages.tryEmit(it) }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val persisted = container.mapState.load()
             if (persisted != null) {
@@ -271,6 +298,34 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun setShowStreetNames(v: Boolean) = viewModelScope.launch { container.settings.setShowStreetNames(v) }
 
     fun setLabelNames(v: app.minemaps.data.LabelNames) = viewModelScope.launch { container.settings.setLabelNames(v) }
+
+    fun setNavigationMode(v: app.minemaps.data.NavigationMode) = viewModelScope.launch {
+        container.settings.setNavigationMode(v)
+        if (v == app.minemaps.data.NavigationMode.OFF) container.navigation.stop()
+    }
+
+    fun setMirrorGoogleMaps(v: Boolean) = viewModelScope.launch { container.settings.setMirrorGoogleMaps(v) }
+
+    fun setGoogleApiKey(v: String) = viewModelScope.launch { container.settings.setGoogleApiKey(v) }
+
+    fun handleIncomingTarget(target: app.minemaps.car.GeoTarget, onFlyTo: (Double, Double, Double) -> Unit) {
+        when (target) {
+            is app.minemaps.car.GeoTarget.Place -> {
+                val title = target.label ?: "Shared place"
+                searchPin.value = LatLng(target.lat, target.lon)
+                card.value = InfoCard.Inspect(title, "Shared location", target.lat, target.lon)
+                following.value = false
+                onFlyTo(target.lat, target.lon, 17.0)
+                if (navMode != app.minemaps.data.NavigationMode.OFF) {
+                    container.navigation.startNavigation(target.lat, target.lon, title)
+                }
+            }
+            is app.minemaps.car.GeoTarget.Query -> {
+                screen.value = Screen.MAP
+                onQueryChange(target.text)
+            }
+        }
+    }
 
     fun markPermissionAsked() = viewModelScope.launch { container.settings.setPermissionAsked() }
 

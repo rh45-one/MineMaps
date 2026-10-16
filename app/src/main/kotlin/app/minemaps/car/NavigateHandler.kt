@@ -18,7 +18,7 @@ class NavigateHandler(
         android.util.Log.d("MineMapsCar", "navigate intent: " + (target?.let { it::class.simpleName } ?: "unparseable"))
         when (target) {
             is GeoTarget.Place -> {
-                actions.showPlace(target.lat, target.lon)
+                actions.showPlace(target.lat, target.lon, target.label ?: "Destination")
                 toast(SearchResultsScreen.NO_DIRECTIONS)
             }
             is GeoTarget.Query -> scope.launch {

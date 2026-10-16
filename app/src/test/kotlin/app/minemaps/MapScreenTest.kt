@@ -55,7 +55,7 @@ class MapScreenTest {
             streetNames.value = !streetNames.value
         }
 
-        override fun showPlace(lat: Double, lon: Double) {
+        override fun showPlace(lat: Double, lon: Double, title: String) {
             shown = lat to lon
         }
     }

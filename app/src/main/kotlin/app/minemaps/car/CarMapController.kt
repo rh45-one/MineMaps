@@ -51,8 +51,8 @@ interface CarMapActions {
 
     fun toggleStreetNames()
 
-    /** Centres the map on a place and marks it with the search pin. */
-    fun showPlace(lat: Double, lon: Double)
+    /** Centres the map on a place and marks it with the search pin (and starts routing if enabled). */
+    fun showPlace(lat: Double, lon: Double, title: String = "Destination")
 }
 
 class CarMapController(
@@ -75,6 +75,7 @@ class CarMapController(
     override val networkState = MutableStateFlow(NetState.OK)
     override val streetNames = MutableStateFlow(true)
     private var searchPin: LatLng? = null
+    private var activeRoute: app.minemaps.engine.routing.RoutePlan? = null
 
     private val main = Handler(Looper.getMainLooper())
     private var renderer: MapRenderer? = null
@@ -183,6 +184,12 @@ class CarMapController(
                     requestRender()
                 }
             }
+            launch {
+                container.navigation.activePlan.collect {
+                    activeRoute = it
+                    requestRender()
+                }
+            }
         }
         requestRender()
     }
@@ -255,16 +262,19 @@ class CarMapController(
         scope.launch { container.settings.setShowStreetNames(!showStreetNames) }
     }
 
-    override fun showPlace(lat: Double, lon: Double) {
+    override fun showPlace(lat: Double, lon: Double, title: String) {
         if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) return
         searchPin = LatLng(lat, lon)
-        flyTo(lat, lon)
+        following.value = false
+        animateTo(Mercator.lonToX(lon), Mercator.latToY(lat), FOLLOW_ZOOM, 700L)
+        container.navigation.startNavigation(lat, lon, title)
     }
 
     override fun flyTo(lat: Double, lon: Double) {
         if (!lat.isFinite() || !lon.isFinite()) return
         following.value = false
         animateTo(Mercator.lonToX(lon), Mercator.latToY(lat), FOLLOW_ZOOM, 700L)
+        container.navigation.startNavigation(lat, lon, "Saved place")
     }
 
     // --- SurfaceCallback ---
@@ -406,7 +416,7 @@ class CarMapController(
         val player = l?.let {
             PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f)
         }
-        return MapOverlays(player = player, bookmarks = savedPlaces.map { Bookmark(it.lat, it.lon, it.icon, it.name) }, searchPin = searchPin)
+        return MapOverlays(player = player, bookmarks = savedPlaces.map { Bookmark(it.lat, it.lon, it.icon, it.name) }, searchPin = searchPin, route = activeRoute)
     }
 
     private fun draw() {

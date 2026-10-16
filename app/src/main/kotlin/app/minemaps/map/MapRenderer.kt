@@ -3,6 +3,7 @@ package app.minemaps.map
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.util.Log
@@ -24,6 +25,8 @@ import app.minemaps.engine.layout.LabelLayout
 import app.minemaps.engine.layout.Obstacle
 import app.minemaps.engine.layout.PlacedLayout
 import app.minemaps.engine.layout.RenderProfile
+import app.minemaps.engine.routing.RoutePlan
+import app.minemaps.engine.routing.TrafficSpeed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -187,6 +190,23 @@ class MapRenderer(
         strokeWidth = 2f * density
         isAntiAlias = true
     }
+    private val routeOutlinePaint = Paint().apply {
+        color = 0xFF141516.toInt()
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.SQUARE
+        strokeJoin = Paint.Join.MITER
+        strokeWidth = 10f * density
+        isAntiAlias = false
+    }
+    private val routeFillPaint = Paint().apply {
+        color = 0xFF52A535.toInt()
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.SQUARE
+        strokeJoin = Paint.Join.MITER
+        strokeWidth = 6f * density
+        isAntiAlias = false
+    }
+    private val routePath = Path()
 
     private fun onTile(key: TileKey, night: Boolean, argb: IntArray, gen: Int) {
         if (gen != generation) return
@@ -275,6 +295,7 @@ class MapRenderer(
             lastRetainHash = hash
             retainRing(viewport, z, size)
         }
+        overlays.route?.let { drawRoute(canvas, viewport, it) }
         val t1 = System.nanoTime()
         drawLabels(canvas, viewport, slots.map { it.key }, overlays)
         val t2 = System.nanoTime()
@@ -597,6 +618,47 @@ class MapRenderer(
         val y = pt.y.toFloat()
         if (x < -size || y < -size || x > viewport.widthPx + size || y > viewport.heightPx + size) return
         drawIcon(canvas, "pin", x, y, size)
+    }
+
+    private fun drawRoute(canvas: Canvas, viewport: Viewport, route: RoutePlan) {
+        val pts = route.points
+        if (pts.size < 2) return
+        routePath.reset()
+        val first = viewport.worldToScreen(Mercator.lonToX(pts[0].lng), Mercator.latToY(pts[0].lat))
+        routePath.moveTo(first.x.toFloat(), first.y.toFloat())
+        var lastX = first.x.toFloat()
+        var lastY = first.y.toFloat()
+        val minStepPx = 2f * density
+        for (i in 1 until pts.size) {
+            val p = viewport.worldToScreen(Mercator.lonToX(pts[i].lng), Mercator.latToY(pts[i].lat))
+            val x = p.x.toFloat()
+            val y = p.y.toFloat()
+            if (i == pts.lastIndex || kotlin.math.abs(x - lastX) + kotlin.math.abs(y - lastY) >= minStepPx) {
+                routePath.lineTo(x, y)
+                lastX = x
+                lastY = y
+            }
+        }
+        canvas.drawPath(routePath, routeOutlinePaint)
+        routeFillPaint.color = 0xFF52A535.toInt()
+        canvas.drawPath(routePath, routeFillPaint)
+
+        // Draw slow/jammed traffic segments on top when present (from Google Routes TRAFFIC_ON_POLYLINE).
+        for (iv in route.trafficIntervals) {
+            if (iv.speed == TrafficSpeed.NORMAL) continue
+            val sIdx = iv.startPointIndex.coerceIn(0, pts.lastIndex)
+            val eIdx = iv.endPointIndex.coerceIn(0, pts.lastIndex)
+            if (eIdx <= sIdx) continue
+            routePath.reset()
+            val p0 = viewport.worldToScreen(Mercator.lonToX(pts[sIdx].lng), Mercator.latToY(pts[sIdx].lat))
+            routePath.moveTo(p0.x.toFloat(), p0.y.toFloat())
+            for (i in (sIdx + 1)..eIdx) {
+                val pi = viewport.worldToScreen(Mercator.lonToX(pts[i].lng), Mercator.latToY(pts[i].lat))
+                routePath.lineTo(pi.x.toFloat(), pi.y.toFloat())
+            }
+            routeFillPaint.color = if (iv.speed == TrafficSpeed.TRAFFIC_JAM) 0xFFE53935.toInt() else 0xFFFFB300.toInt()
+            canvas.drawPath(routePath, routeFillPaint)
+        }
     }
 
     companion object {

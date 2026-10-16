@@ -238,6 +238,15 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
             )
             Screen.SETTINGS -> {
                 LaunchedEffect(Unit) { vm.refreshCacheSize() }
+                var listenerGranted by remember { mutableStateOf(app.minemaps.nav.GoogleMapsMirror.isListenerEnabled(ctx)) }
+                val sLifecycle = LocalLifecycleOwner.current
+                DisposableEffect(sLifecycle) {
+                    val obs = LifecycleEventObserver { _, e ->
+                        if (e == Lifecycle.Event.ON_RESUME) listenerGranted = app.minemaps.nav.GoogleMapsMirror.isListenerEnabled(ctx)
+                    }
+                    sLifecycle.lifecycle.addObserver(obs)
+                    onDispose { sLifecycle.lifecycle.removeObserver(obs) }
+                }
                 SettingsScreen(
                     settings, cacheSize, engine::atlas, engine.atlas(settings.texturePack),
                     vanillaAvailable = vanillaAvail,
@@ -250,6 +259,14 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                     onClearCache = { vm.clearCache() },
                     onLicences = { vm.screen.value = Screen.LICENCES },
                     extra = {
+                        NavigationGroup(
+                            settings = settings,
+                            listenerGranted = listenerGranted,
+                            onMode = vm::setNavigationMode,
+                            onMirrorChange = vm::setMirrorGoogleMaps,
+                            onOpenListenerSettings = { runCatching { ctx.startActivity(app.minemaps.nav.GoogleMapsMirror.listenerSettingsIntent()) } },
+                            onApiKeyChange = vm::setGoogleApiKey,
+                        )
                         SavedPlacesGroup(
                             onExport = { exportLauncher.launch("minemaps-places.json") },
                             onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
@@ -341,6 +358,9 @@ private fun MapScreen(
     val saveDialog by vm.saveDialog.collectAsStateWithLifecycle()
     val renameTarget by vm.renameTarget.collectAsStateWithLifecycle()
     val net by renderer.networkState.collectAsStateWithLifecycle()
+    val activePlan by container.navigation.activePlan.collectAsStateWithLifecycle()
+    val navBanner by container.navigation.bannerState.collectAsStateWithLifecycle()
+    val navLoading by container.navigation.loading.collectAsStateWithLifecycle()
 
     val activity = context.findActivity()
     val askedBefore by rememberUpdatedState(settings.permissionAsked)
@@ -397,11 +417,12 @@ private fun MapScreen(
         }
     }
 
-    val overlays = remember(player, saved, searchPin) {
+    val overlays = remember(player, saved, searchPin, activePlan) {
         MapOverlays(
             player = player?.let { PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f) },
             bookmarks = saved.map { Bookmark(it.lat, it.lon, it.icon, it.name) },
             searchPin = searchPin,
+            route = activePlan,
         )
     }
 
@@ -498,6 +519,8 @@ private fun MapScreen(
             }
         }
         val banners: @Composable () -> Unit = {
+            navBanner?.let { b -> ActiveNavBanner(b, onStop = { container.navigation.stop() }) }
+            if (navLoading && navBanner == null) McBanner("Calculating route\u2026", "Cancel", { container.navigation.stop() }, warning = false)
             if (net == app.minemaps.engine.data.NetState.OFFLINE) McBanner("Offline \u2013 showing cached map", null, {})
             if (!granted && !rationaleVisible) {
                 McBanner("Location permission needed", if (permanentlyDenied) "Settings" else "Allow", { if (permanentlyDenied) openAppSettings() else requestPermission() })
@@ -523,12 +546,23 @@ private fun MapScreen(
                 card?.let { cc ->
                     InfoCardView(
                         cc,
+                        navMode = settings.navigationMode,
                         onClose = { vm.dismissCard() },
                         onSaveInspect = { i -> vm.requestSave(i.lat, i.lon, i.title) },
                         onSaveResult = { r -> vm.requestSave(r.lat, r.lon, r.name) },
                         onRename = { vm.renameTarget.value = it },
                         onDelete = { confirmDelete = it.id },
                         onCopy = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) },
+                        onNavigate = { lat, lon, title ->
+                            vm.dismissCard()
+                            vm.startFollowing(null)
+                            container.navigation.startNavigation(lat, lon, title)
+                        },
+                        onGoogleMaps = { lat, lon, title ->
+                            vm.dismissCard()
+                            vm.startFollowing(null)
+                            container.navigation.launchInGoogleMaps(context, lat, lon, title)
+                        },
                     )
                 }
             }
@@ -702,17 +736,26 @@ private fun RationaleCard(onAllow: () -> Unit, onDismiss: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun InfoCardView(
     card: InfoCard,
+    navMode: app.minemaps.data.NavigationMode,
     onClose: () -> Unit,
     onSaveInspect: (InfoCard.Inspect) -> Unit,
     onSaveResult: (SearchResult) -> Unit,
     onRename: (SavedPlace) -> Unit,
     onDelete: (SavedPlace) -> Unit,
     onCopy: (String) -> Unit,
+    onNavigate: (Double, Double, String) -> Unit,
+    onGoogleMaps: (Double, Double, String) -> Unit,
 ) {
     val c = Mc.colors
+    val (targetLat, targetLon, targetTitle) = when (card) {
+        is InfoCard.Inspect -> Triple(card.lat, card.lon, card.title)
+        is InfoCard.Saved -> Triple(card.place.lat, card.place.lon, card.place.name)
+        is InfoCard.Result -> Triple(card.result.lat, card.result.lon, card.result.name)
+    }
     McPanel(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
@@ -736,10 +779,21 @@ private fun InfoCardView(
             McGlyphButton(Glyph.CLOSE, onClose, Modifier.semantics { contentDescription = "Close" }, size = 48.dp)
         }
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (navMode != app.minemaps.data.NavigationMode.OFF) {
+                McButton({ onNavigate(targetLat, targetLon, targetTitle) }, variant = McVariant.PRIMARY) {
+                    PixelGlyph(Glyph.NAV_UP, LocalContentColor.current, size = 18.dp)
+                    Text("Navigate")
+                }
+            }
+            if (navMode == app.minemaps.data.NavigationMode.GOOGLE_ASSISTED) {
+                McButton({ onGoogleMaps(targetLat, targetLon, targetTitle) }) {
+                    Text("Google Maps")
+                }
+            }
             when (card) {
-                is InfoCard.Inspect -> McButton({ onSaveInspect(card) }, variant = McVariant.PRIMARY) { Text("Save place") }
-                is InfoCard.Result -> McButton({ onSaveResult(card.result) }, variant = McVariant.PRIMARY) { Text("Save place") }
+                is InfoCard.Inspect -> McButton({ onSaveInspect(card) }, variant = if (navMode == app.minemaps.data.NavigationMode.OFF) McVariant.PRIMARY else McVariant.SECONDARY) { Text("Save place") }
+                is InfoCard.Result -> McButton({ onSaveResult(card.result) }, variant = if (navMode == app.minemaps.data.NavigationMode.OFF) McVariant.PRIMARY else McVariant.SECONDARY) { Text("Save place") }
                 is InfoCard.Saved -> {
                     McButton({ onRename(card.place) }) { PixelGlyph(Glyph.EDIT, LocalContentColor.current, size = 18.dp); Text("Edit") }
                     McButton({ onDelete(card.place) }, variant = McVariant.DANGER) { PixelGlyph(Glyph.DELETE, LocalContentColor.current, size = 18.dp); Text("Delete") }

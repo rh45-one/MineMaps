@@ -17,6 +17,8 @@ enum class LabelNames { ENGLISH, LOCAL }
 
 enum class UpdateFrequency { LAUNCH, DAILY, WEEKLY, MANUAL }
 
+enum class NavigationMode { OFF, STANDALONE, GOOGLE_ASSISTED }
+
 data class Settings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val showIcons: Boolean = true,
@@ -33,6 +35,9 @@ data class Settings(
     val skippedVersionCode: Int = 0,
     val texturesPending: Boolean = false,
     val pendingSinceVersionCode: Int = 0,
+    val navigationMode: NavigationMode = NavigationMode.STANDALONE,
+    val mirrorGoogleMaps: Boolean = true,
+    val googleApiKey: String = "",
 )
 
 object ArrowColors {
@@ -66,6 +71,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val skippedKey = intPreferencesKey("skipped_version_code")
     private val pendingKey = booleanPreferencesKey("textures_pending")
     private val pendingSinceKey = intPreferencesKey("pending_since_version_code")
+    private val navModeKey = stringPreferencesKey("navigation_mode")
+    private val mirrorGmapsKey = booleanPreferencesKey("mirror_google_maps")
+    private val googleKey = stringPreferencesKey("google_api_key")
 
     val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
@@ -84,6 +92,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             skippedVersionCode = p[skippedKey] ?: 0,
             texturesPending = p[pendingKey] ?: false,
             pendingSinceVersionCode = p[pendingSinceKey] ?: 0,
+            navigationMode = p[navModeKey]?.let { runCatching { NavigationMode.valueOf(it) }.getOrNull() } ?: NavigationMode.STANDALONE,
+            mirrorGoogleMaps = p[mirrorGmapsKey] ?: true,
+            googleApiKey = p[googleKey]?.take(128)?.trim() ?: "",
         )
     }
 
@@ -118,4 +129,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         it[pendingKey] = pending
         it[pendingSinceKey] = sinceVersionCode
     }
+
+    suspend fun setNavigationMode(v: NavigationMode) = store.edit { it[navModeKey] = v.name }
+
+    suspend fun setMirrorGoogleMaps(v: Boolean) = store.edit { it[mirrorGmapsKey] = v }
+
+    suspend fun setGoogleApiKey(v: String) = store.edit { it[googleKey] = v.trim().take(128) }
 }

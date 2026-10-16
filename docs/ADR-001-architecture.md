@@ -46,10 +46,14 @@ not a smooth vector map with a pixel filter.
 - Own minimal MVT (protobuf) decoder, so we don't pull in JTS or protobuf-java.
 - Disk cache of raw `.pbf` (LRU, 200 MB cap, 30-day TTL) + memory LRUs (decoded tiles, class grids, bitmaps).
 
-### 4. Search: Photon (komoot public instance), configurable
-- Built for search-as-you-type; fair-use terms. We debounce (≥3 chars, 450 ms), cancel stale requests,
-  bias results to the camera position, and send a User-Agent. Nominatim was rejected because its policy
-  forbids autocomplete. The base URL is configurable for self-hosting.
+### 4. Search & Routing: OpenStreetMap (Photon + OSRM) with optional Google Maps Assisted mode
+- Default search: Photon (komoot public instance), debounced, camera-biased, merged with the on-device `PlaceIndex`.
+- Three user-selectable navigation modes (`Settings → Navigation`):
+  1. `OFF` — Map only (no route lines or navigation banners).
+  2. `STANDALONE` (default) — Queries the public OSRM driving router (`router.project-osrm.org`), draws a pixel-art route line on the map, tracks progress along the polyline (`RouteTracker`), and shows the next turn/ETA banner on both the phone and Android Auto (`NavigationTemplate` `MessageInfo`).
+  3. `GOOGLE_ASSISTED` — Combines two optional capabilities:
+     - **Companion notification mirroring (`GoogleMapsNotificationService`):** Reads ongoing turn-by-turn notifications from `com.google.android.apps.maps` (when the user grants Notification Access) so Google Maps' live turn instructions and traffic ETA appear in MineMaps' banner alongside the block-map route; also accepts shared Google Maps links/places via `ACTION_SEND` and `geo:` intents and offers a one-tap *Google Maps* handoff button.
+     - **Bring-your-own Google API key:** When a user supplies their own Google Maps Platform API key in Settings, search queries Google Places API v1 (`places:searchText`) and routing queries Google Routes API v2 (`computeRoutes` with `TRAFFIC_AWARE` and `TRAFFIC_ON_POLYLINE`), colouring slow/jammed route segments amber and red.
 
 ### 5. Android Auto: NAVIGATION category (no routing) + `NavigationTemplate` + `ACCESS_SURFACE`
 - Android Auto gives the host's **map slot** (full screen, or the map pane of the split dashboard next to media apps)

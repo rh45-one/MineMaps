@@ -26,7 +26,7 @@ class SearchResultsScreen(
             val row = Row.Builder().setTitle(r.name)
             if (r.subtitle.isNotBlank()) row.addText(r.subtitle)
             row.setOnClickListener {
-                actions.showPlace(r.lat, r.lon)
+                actions.showPlace(r.lat, r.lon, r.name)
                 CarToast.makeText(carContext, NO_DIRECTIONS, CarToast.LENGTH_LONG).show()
                 screenManager.pop()
             }

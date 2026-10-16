@@ -19,16 +19,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.minemaps.BuildConfig
+import app.minemaps.data.NavigationMode
 import app.minemaps.data.Settings
 import app.minemaps.data.UpdateFrequency
+import app.minemaps.engine.routing.TurnDirection
+import app.minemaps.nav.ActiveBannerState
 import app.minemaps.update.ReleaseInfo
 import app.minemaps.update.UpdateUi
+import app.minemaps.ui.theme.Glyph
 import app.minemaps.ui.theme.Mc
 import app.minemaps.ui.theme.McButton
 import app.minemaps.ui.theme.McDialog
+import app.minemaps.ui.theme.McGlyphButton
 import app.minemaps.ui.theme.McSegmented
 import app.minemaps.ui.theme.McSwitch
+import app.minemaps.ui.theme.McTextField
 import app.minemaps.ui.theme.McVariant
+import app.minemaps.ui.theme.PixelGlyph
+import app.minemaps.ui.theme.mcPanel
 import java.text.DateFormat
 import java.util.Date
 
@@ -41,6 +49,109 @@ fun SavedPlacesGroup(onExport: () -> Unit, onImport: () -> Unit) {
             McButton(onExport) { Text("Export") }
             McButton(onImport) { Text("Import") }
         }
+    }
+}
+
+@Composable
+fun NavigationGroup(
+    settings: Settings,
+    listenerGranted: Boolean,
+    onMode: (NavigationMode) -> Unit,
+    onMirrorChange: (Boolean) -> Unit,
+    onOpenListenerSettings: () -> Unit,
+    onApiKeyChange: (String) -> Unit,
+) {
+    val c = Mc.colors
+    Group("Navigation") {
+        val modes = listOf(
+            NavigationMode.OFF to "Off",
+            NavigationMode.STANDALONE to "Standalone",
+            NavigationMode.GOOGLE_ASSISTED to "Google Assisted",
+        )
+        McSegmented(modes.size, modes.indexOfFirst { it.first == settings.navigationMode }.coerceAtLeast(0), { onMode(modes[it].first) }) { i, _ ->
+            Text(modes[i].second, style = MaterialTheme.typography.labelLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+        Spacer(Modifier.height(8.dp))
+        when (settings.navigationMode) {
+            NavigationMode.OFF -> Text(
+                "Map only: hides Navigate buttons and route overlays.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+            )
+            NavigationMode.STANDALONE -> Text(
+                "Calculates driving routes with OpenStreetMap (OSRM) and draws the block-world route path and turn banner with no API keys.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+            )
+            NavigationMode.GOOGLE_ASSISTED -> {
+                Text(
+                    "Combines block-map routing with Google Maps: mirror live Google Maps app turn notifications and/or supply a Google API key for Google Places search and traffic-coloured routes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier.fillMaxWidth().clickable { onMirrorChange(!settings.mirrorGoogleMaps) }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Mirror Google Maps app directions", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            if (listenerGranted) "Notification access granted \u2013 active Google Maps turns appear on the map"
+                            else "Requires Notification Access so MineMaps can read Google Maps' ongoing turn banner",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (listenerGranted) c.greenHighlight else c.textSecondary,
+                        )
+                    }
+                    McSwitch(settings.mirrorGoogleMaps, onMirrorChange)
+                }
+                if (settings.mirrorGoogleMaps && !listenerGranted) {
+                    Spacer(Modifier.height(6.dp))
+                    McButton(onOpenListenerSettings, variant = McVariant.PRIMARY) { Text("Grant notification access") }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Google Maps API Key (optional)", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Enables Google Places business search and Google Routes with live traffic congestion colours (green / amber / red). Leave blank to use OpenStreetMap routing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                )
+                Spacer(Modifier.height(6.dp))
+                McTextField(
+                    value = settings.googleApiKey,
+                    onValueChange = onApiKeyChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = "AIza... (optional)",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ActiveNavBanner(banner: ActiveBannerState, onStop: () -> Unit, modifier: Modifier = Modifier) {
+    val c = Mc.colors
+    val glyph = when (banner.direction) {
+        TurnDirection.LEFT, TurnDirection.SLIGHT_LEFT, TurnDirection.SHARP_LEFT, TurnDirection.U_TURN -> Glyph.NAV_LEFT
+        TurnDirection.RIGHT, TurnDirection.SLIGHT_RIGHT, TurnDirection.SHARP_RIGHT -> Glyph.NAV_RIGHT
+        else -> Glyph.NAV_UP
+    }
+    Row(
+        modifier.fillMaxWidth().mcPanel(c).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.background(c.greenLedge).padding(8.dp), contentAlignment = Alignment.Center) {
+            PixelGlyph(glyph, c.onGreen, size = 24.dp)
+        }
+        Column(Modifier.weight(1f)) {
+            val head = if (banner.distanceText.isNotBlank()) "${banner.distanceText} \u00b7 ${banner.instruction}" else banner.instruction
+            Text(head, style = MaterialTheme.typography.bodyLarge, color = c.text, maxLines = 2)
+            val sub = listOf(banner.etaText, banner.providerLabel).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
+            if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = c.greenHighlight, maxLines = 1)
+        }
+        McGlyphButton(Glyph.CLOSE, onStop, size = 44.dp)
     }
 }
 

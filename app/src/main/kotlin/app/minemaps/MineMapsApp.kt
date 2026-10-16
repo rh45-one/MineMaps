@@ -12,10 +12,13 @@ import app.minemaps.data.savedPlacesStore
 import app.minemaps.data.settingsStore
 import app.minemaps.location.LocationRepository
 import app.minemaps.engine.geo.Mercator
+import app.minemaps.engine.routing.RoutingClient
 import app.minemaps.engine.search.PlaceIndex
 import app.minemaps.engine.search.PlacePrefetcher
 import app.minemaps.map.MapEngine
 import app.minemaps.map.TexturePackManager
+import app.minemaps.nav.NavigationController
+import app.minemaps.search.GooglePlacesClient
 import app.minemaps.search.PhotonClient
 import app.minemaps.update.UpdateManager
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +56,16 @@ class AppContainer(app: Application) {
     val updates = UpdateManager(app, appScope, settings, client = { httpClient.await() })
     val textures = TexturePackManager(app, appScope, settings, engine = { engine.await() }, client = { httpClient.await() })
     val photon = PhotonClient({ httpClient.await() }, BuildConfig.PHOTON_URL, BuildConfig.USER_AGENT)
+    val googlePlaces = GooglePlacesClient({ httpClient.await() }, BuildConfig.USER_AGENT)
+    val routing = RoutingClient({ httpClient.await() }, BuildConfig.USER_AGENT)
+    val navigation = NavigationController(
+        appScope,
+        settings,
+        location,
+        routing,
+        engine = { engine.await() },
+        fallbackOrigin = { mapState.current?.let { it.lat to it.lon } },
+    )
 
     init {
         appScope.launch(Dispatchers.IO.limitedParallelism(1)) { feedPlaceIndex(app) }

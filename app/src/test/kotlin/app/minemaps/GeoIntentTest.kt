@@ -52,6 +52,60 @@ class GeoIntentTest {
         val rnd = java.util.Random(7)
         repeat(2000) { GeoIntent.parse("geo:" + String(CharArray(rnd.nextInt(40)) { (rnd.nextInt(95) + 32).toChar() })) }
     }
+
+    @Test
+    fun parsesSharedGoogleMapsTextAndUrls() {
+        assertEquals(
+            GeoTarget.Place(41.8902, 12.4922, "Colosseum"),
+            GeoIntent.parseSharedText("https://www.google.com/maps/place/Colosseum/@41.8902,12.4922,17z/data=!3m1!4b1"),
+        )
+        assertEquals(
+            GeoTarget.Place(41.89021, 12.49223, "Roman Forum"),
+            GeoIntent.parseSharedText("Check this out: https://www.google.com/maps/place/Roman+Forum/@41.89,12.49,15z/data=!3d41.89021!4d12.49223"),
+        )
+        assertEquals(
+            GeoTarget.Query("Colosseum, Piazza del Colosseo, Rome"),
+            GeoIntent.parseSharedText("Colosseum\nPiazza del Colosseo, Rome\nhttps://maps.app.goo.gl/xyz123"),
+        )
+        assertEquals(
+            GeoTarget.Place(51.5007, -0.1246, null),
+            GeoIntent.parseSharedText("https://maps.google.com/?q=51.5007,-0.1246"),
+        )
+    }
+
+    @Test
+    fun parsesGoogleMapsMirrorNotificationsAndPlacesJson() {
+        val m1 = app.minemaps.nav.GoogleMapsMirror.parseFields("250 m", "Turn right onto Via dei Fori Imperiali", "12 min \u00b7 4.2 km")!!
+        assertEquals("250 m", m1.distanceText)
+        assertEquals("Turn right onto Via dei Fori Imperiali", m1.instruction)
+        assertEquals("12 min \u00b7 4.2 km", m1.etaText)
+        assertEquals(app.minemaps.engine.routing.TurnDirection.RIGHT, m1.direction)
+
+        val m2 = app.minemaps.nav.GoogleMapsMirror.parseFields("Keep left", "1.2 km \u00b7 Corso Vittorio", "5 min")!!
+        assertEquals("1.2 km", m2.distanceText)
+        assertEquals(app.minemaps.engine.routing.TurnDirection.SLIGHT_LEFT, m2.direction)
+        assertNull(app.minemaps.nav.GoogleMapsMirror.parseFields("", "", ""))
+
+        val placesJson = """
+            {
+              "places": [
+                {
+                  "displayName": { "text": "Antico Caff\u00e8 Greco" },
+                  "formattedAddress": "Via dei Condotti, 86, Roma",
+                  "location": { "latitude": 41.9059, "longitude": 12.4809 },
+                  "primaryTypeDisplayName": { "text": "Coffee shop" }
+                }
+              ]
+            }
+        """.trimIndent()
+        val parsed = app.minemaps.search.GooglePlacesParser.parse(placesJson)
+        assertEquals(1, parsed.size)
+        assertEquals("Antico Caff\u00e8 Greco", parsed[0].name)
+        assertEquals("Via dei Condotti, 86, Roma", parsed[0].address)
+        assertEquals("Coffee shop \u00b7 Google", parsed[0].typeLabel)
+        assertEquals(41.9059, parsed[0].lat, 1e-4)
+        assertEquals(12.4809, parsed[0].lon, 1e-4)
+    }
 }
 
 class NavigateHandlerTest {
@@ -71,7 +125,7 @@ class NavigateHandlerTest {
 
         override fun toggleStreetNames() {}
 
-        override fun showPlace(lat: Double, lon: Double) {
+        override fun showPlace(lat: Double, lon: Double, title: String) {
             shown = lat to lon
         }
     }

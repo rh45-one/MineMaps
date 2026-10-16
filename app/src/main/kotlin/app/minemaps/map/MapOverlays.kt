@@ -1,6 +1,7 @@
 package app.minemaps.map
 
 import app.minemaps.engine.geo.LatLng
+import app.minemaps.engine.routing.RoutePlan
 
 class PlayerMarker(
     val lat: Double,
@@ -16,6 +17,7 @@ class MapOverlays(
     val player: PlayerMarker? = null,
     val bookmarks: List<Bookmark> = emptyList(),
     val searchPin: LatLng? = null,
+    val route: RoutePlan? = null,
 ) {
     companion object {
         val EMPTY = MapOverlays()

@@ -26,7 +26,11 @@ Roads, buildings, parks, forests, rivers, and landmarks from around the world ar
 ## What You Can Do
 
 - **Explore the real world in blocks** — Pan, pinch to zoom from a world overview down to individual street blocks, and twist with two fingers to rotate the map (tap the compass to face north again).
-- **Use it in your car with Android Auto** — MineMaps sits in Android Auto's main map slot just like Google Maps or Waze: use it **full screen** or **side-by-side** with your music and media apps. *(MineMaps is a live map only — it does not give turn-by-turn directions, so it won't interrupt voice guidance from another app.)*
+- **Use it in your car with Android Auto** — MineMaps sits in Android Auto's main map slot just like Google Maps or Waze: use it **full screen** or **side-by-side** with your music and media apps.
+- **Three navigation modes (Settings → Navigation):**
+  1. **Standalone (OpenStreetMap / OSRM):** Tap **Navigate** on any place to draw a pixel-art route line across the block map with live turn banners, distance, and ETA — completely free with no API keys.
+  2. **Google Maps Assisted:** Mirror live turn-by-turn notifications from the Google Maps app running on your phone, share places directly from Google Maps into MineMaps, or optionally paste your own Google Maps API key to enable Google Places business search and live traffic-coloured routes (green / amber / red).
+  3. **Off (Map only):** Pure block-world exploration without route lines or navigation banners.
 - **Search & inspect places** — Search for cities, landmarks, streets, and shops, or tap anything on the map to see what it is.
 - **Save your favourite places** — Long-press anywhere on the map (or save from a search result) to bookmark a spot with your choice of 34 pixel-art item icons. Your saved places also show up on the car screen, sorted by distance.
 - **Customise the look** — Switch between day, night, or automatic themes, pick your player arrow colour, toggle street names (`Aa`) or map icons, and display place names in **English (Latin script)** or in each region's local language.
