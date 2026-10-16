@@ -72,7 +72,10 @@ class MapSession : Session() {
                     }
                 },
                 toast = { CarToast.makeText(carContext, it, CarToast.LENGTH_LONG).show() },
-                showResults = { carContext.getCarService(androidx.car.app.ScreenManager::class.java).push(SearchResultsScreen(carContext, it, c)) },
+                showResults = {
+                    carContext.getCarService(androidx.car.app.ScreenManager::class.java)
+                        .push(SearchResultsScreen(carContext, it, c) { container.location.lastKnown() })
+                },
             ).also { navigate = it }
         }
         handler.handle(intent.dataString)

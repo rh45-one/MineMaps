@@ -529,15 +529,20 @@ private fun MapScreen(
             }
         }
         val resultsPanel: @Composable () -> Unit = {
-            SearchResultsPanel(searchState, onSelect = { r ->
-                focus.clearFocus()
-                vm.selectResult(r)
-                val v = controller.view
-                val ex = r.extent
-                if (v != null) {
-                    if (ex != null && (ex[2] - ex[0] > 1e-6 || ex[1] - ex[3] > 1e-6)) v.fitBounds(ex[3], ex[0], ex[1], ex[2]) else v.animateTo(r.lat, r.lon, r.targetZoom())
-                }
-            })
+            SearchResultsPanel(
+                searchState,
+                userLat = player?.latitude,
+                userLon = player?.longitude,
+                onSelect = { r ->
+                    focus.clearFocus()
+                    vm.selectResult(r)
+                    val v = controller.view
+                    val ex = r.extent
+                    if (v != null) {
+                        if (ex != null && (ex[2] - ex[0] > 1e-6 || ex[1] - ex[3] > 1e-6)) v.fitBounds(ex[3], ex[0], ex[1], ex[2]) else v.animateTo(r.lat, r.lon, r.targetZoom())
+                    }
+                },
+            )
         }
         val bottomPanel: @Composable () -> Unit = {
             if (rationaleVisible) {
@@ -547,6 +552,8 @@ private fun MapScreen(
                     InfoCardView(
                         cc,
                         navMode = settings.navigationMode,
+                        userLat = player?.latitude,
+                        userLon = player?.longitude,
                         onClose = { vm.dismissCard() },
                         onSaveInspect = { i -> vm.requestSave(i.lat, i.lon, i.title) },
                         onSaveResult = { r -> vm.requestSave(r.lat, r.lon, r.name) },
@@ -689,8 +696,14 @@ private fun MapScreen(
     }
 }
 
+private fun distanceTextFrom(userLat: Double?, userLon: Double?, targetLat: Double, targetLon: Double): String? {
+    if (userLat == null || userLon == null || !userLat.isFinite() || !userLon.isFinite()) return null
+    val m = app.minemaps.engine.routing.RouteTracker.metersBetween(userLat, userLon, targetLat, targetLon)
+    return app.minemaps.engine.routing.RouteTracker.formatDistance(m)
+}
+
 @Composable
-private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> Unit) {
+private fun SearchResultsPanel(state: SearchState, userLat: Double?, userLon: Double?, onSelect: (SearchResult) -> Unit) {
     val c = Mc.colors
     val maxH = (windowHeightDp() * 0.55f).dp
     McPanel(Modifier.fillMaxWidth().heightIn(max = maxH), contentPadding = 4.dp) {
@@ -703,11 +716,15 @@ private fun SearchResultsPanel(state: SearchState, onSelect: (SearchResult) -> U
             } else {
                 LazyColumn {
                     items(state.items) { r ->
+                        val dist = distanceTextFrom(userLat, userLon, r.lat, r.lon)
                         McListRow(
                             onClick = { onSelect(r) },
                             title = r.name,
                             subtitle = if (r.local) r.address.ifBlank { r.typeLabel.removeSuffix(" \u00b7 nearby") } else r.subtitle,
-                            trailing = { if (r.local) McTag("nearby") },
+                            trailing = {
+                                if (dist != null) McTag(dist)
+                                else if (r.local) McTag("nearby")
+                            },
                         )
                         McDivider()
                     }
@@ -741,6 +758,8 @@ private fun RationaleCard(onAllow: () -> Unit, onDismiss: () -> Unit) {
 private fun InfoCardView(
     card: InfoCard,
     navMode: app.minemaps.data.NavigationMode,
+    userLat: Double?,
+    userLon: Double?,
     onClose: () -> Unit,
     onSaveInspect: (InfoCard.Inspect) -> Unit,
     onSaveResult: (SearchResult) -> Unit,
@@ -756,23 +775,28 @@ private fun InfoCardView(
         is InfoCard.Saved -> Triple(card.place.lat, card.place.lon, card.place.name)
         is InfoCard.Result -> Triple(card.result.lat, card.result.lon, card.result.name)
     }
+    val distText = distanceTextFrom(userLat, userLon, targetLat, targetLon)?.let { "$it away" }
     McPanel(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 when (card) {
                     is InfoCard.Inspect -> {
                         Text(card.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(card.subtitle, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                        val sub = listOfNotNull(distText, card.subtitle.takeIf { it.isNotBlank() }).joinToString(" \u00b7 ")
+                        Text(sub, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
                         CoordsRow(coords(card.lat, card.lon), onCopy)
                     }
                     is InfoCard.Saved -> {
                         Text(card.place.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("Saved place", style = MaterialTheme.typography.bodyMedium, color = c.gold)
+                        val savedSub = if (distText != null) "Saved place \u00b7 $distText" else "Saved place"
+                        Text(savedSub, style = MaterialTheme.typography.bodyMedium, color = c.gold)
                         CoordsRow(coords(card.place.lat, card.place.lon), onCopy)
                     }
                     is InfoCard.Result -> {
                         Text(card.result.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        if (card.result.subtitle.isNotBlank()) Text(card.result.subtitle, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                        val sub = listOfNotNull(distText, card.result.subtitle.takeIf { it.isNotBlank() }).joinToString(" \u00b7 ")
+                        if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                        CoordsRow(coords(card.result.lat, card.result.lon), onCopy)
                     }
                 }
             }

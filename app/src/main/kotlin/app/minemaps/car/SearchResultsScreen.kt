@@ -18,13 +18,20 @@ class SearchResultsScreen(
     carContext: CarContext,
     private val results: List<SearchResult>,
     private val actions: CarMapActions,
+    private val userLocation: (() -> android.location.Location?)? = null,
 ) : Screen(carContext) {
     override fun onGetTemplate(): Template {
         val limit = carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST)
+        val loc = userLocation?.invoke()
         val list = ItemList.Builder()
         for (r in results.take(limit)) {
             val row = Row.Builder().setTitle(r.name)
-            if (r.subtitle.isNotBlank()) row.addText(r.subtitle)
+            val dist = loc?.let {
+                val m = app.minemaps.engine.routing.RouteTracker.metersBetween(it.latitude, it.longitude, r.lat, r.lon)
+                app.minemaps.engine.routing.RouteTracker.formatDistance(m)
+            }
+            val sub = listOfNotNull(dist, r.subtitle.takeIf { it.isNotBlank() }).joinToString(" \u00b7 ")
+            if (sub.isNotBlank()) row.addText(sub)
             row.setOnClickListener {
                 actions.showPlace(r.lat, r.lon, r.name)
                 CarToast.makeText(carContext, NO_DIRECTIONS, CarToast.LENGTH_LONG).show()
