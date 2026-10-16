@@ -76,13 +76,22 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     private var englishNames = true
 
     @Volatile
+    private var appLanguage = app.minemaps.data.AppLanguage.SYSTEM
+
+    @Volatile
     private var navMode = app.minemaps.data.NavigationMode.STANDALONE
 
     @Volatile
     private var googleApiKey = ""
     private val photonCache = ResponseCache<List<SearchResult>>()
 
-    private fun lang(): String? = if (englishNames) "en" else Locale.getDefault().language
+    private fun lang(): String? = when {
+        englishNames -> "en"
+        appLanguage == app.minemaps.data.AppLanguage.SPANISH -> "es"
+        appLanguage == app.minemaps.data.AppLanguage.FRENCH -> "fr"
+        appLanguage == app.minemaps.data.AppLanguage.ENGLISH -> "en"
+        else -> Locale.getDefault().language
+    }
 
     private fun searchCenter(): Pair<Double, Double>? {
         val loc = locationState.value.location
@@ -155,6 +164,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             container.settings.settings.collect {
                 englishNames = it.labelNames == app.minemaps.data.LabelNames.ENGLISH
+                appLanguage = it.appLanguage
                 navMode = it.navigationMode
                 googleApiKey = it.googleApiKey
             }
@@ -335,6 +345,8 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         container.settings.setUpdateFrequency(if (enableAuto) app.minemaps.data.UpdateFrequency.DAILY else app.minemaps.data.UpdateFrequency.MANUAL)
         container.settings.setAutoUpdatePromptHandled(true)
     }
+
+    fun setAppLanguage(v: app.minemaps.data.AppLanguage) = viewModelScope.launch { container.settings.setAppLanguage(v) }
 
     fun handleIncomingTarget(target: app.minemaps.car.GeoTarget, onFlyTo: (Double, Double, Double) -> Unit) {
         when (target) {

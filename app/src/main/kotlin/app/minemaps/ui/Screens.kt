@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.minemaps.R
+import app.minemaps.data.AppLanguage
 import app.minemaps.data.ArrowColors
 import app.minemaps.data.LabelNames
 import app.minemaps.data.SavedPlace
@@ -113,19 +114,20 @@ fun SavedPlacesScreen(
     onDelete: (SavedPlace) -> Unit,
 ) {
     val c = Mc.colors
+    val s = S
     var confirm by rememberSaveable { mutableStateOf<String?>(null) }
     val target = places.firstOrNull { it.id == confirm }
     Box(Modifier.fillMaxSize().background(c.background)) {
         Column(Modifier.fillMaxSize()) {
-            McTopBar("Saved places", onBack, Modifier.windowInsetsPadding(McInsets.only(androidx.compose.foundation.layout.WindowInsetsSides.Top + androidx.compose.foundation.layout.WindowInsetsSides.Horizontal)))
+            McTopBar(s.savedPlaces, onBack, Modifier.windowInsetsPadding(McInsets.only(androidx.compose.foundation.layout.WindowInsetsSides.Top + androidx.compose.foundation.layout.WindowInsetsSides.Horizontal)))
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                 if (places.isEmpty()) {
                     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                         McSlot(size = 88.dp) { PixelIcon(images["pin"], 64.dp) }
                         Spacer(Modifier.height(16.dp))
-                        Text("No saved places yet", style = MaterialTheme.typography.titleMedium, color = c.text)
+                        Text(s.noSavedPlacesYet, style = MaterialTheme.typography.titleMedium, color = c.text)
                         Spacer(Modifier.height(6.dp))
-                        Text("Long-press the map to save a place.", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                        Text(s.longPressToSaveHint, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
                     }
                 } else {
                     LazyColumn(
@@ -138,8 +140,8 @@ fun SavedPlacesScreen(
                                 title = place.name,
                                 subtitle = String.format(Locale.US, "%.5f, %.5f", place.lat, place.lon),
                                 trailing = {
-                                    McGlyphButton(Glyph.EDIT, { onEdit(place) }, Modifier.semantics { contentDescription = "Edit" }, size = 48.dp)
-                                    McGlyphButton(Glyph.DELETE, { confirm = place.id }, Modifier.semantics { contentDescription = "Delete" }, danger = true, size = 48.dp)
+                                    McGlyphButton(Glyph.EDIT, { onEdit(place) }, Modifier.semantics { contentDescription = s.edit }, size = 48.dp)
+                                    McGlyphButton(Glyph.DELETE, { confirm = place.id }, Modifier.semantics { contentDescription = s.delete }, danger = true, size = 48.dp)
                                 },
                             )
                             McDivider()
@@ -151,13 +153,13 @@ fun SavedPlacesScreen(
     }
     target?.let { p ->
         McDialog(
-            "Delete place?",
+            s.deletePlaceTitle,
             onDismiss = { confirm = null },
             buttons = {
-                McButton({ confirm = null }) { Text("Cancel") }
-                McButton({ confirm = null; onDelete(p) }, variant = McVariant.DANGER) { Text("Delete") }
+                McButton({ confirm = null }) { Text(s.cancel) }
+                McButton({ confirm = null; onDelete(p) }, variant = McVariant.DANGER) { Text(s.delete) }
             },
-        ) { Text("\"${p.name}\" will be removed from your saved places.", style = MaterialTheme.typography.bodyMedium) }
+        ) { Text(s.deletePlaceBody(p.name), style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
@@ -192,17 +194,18 @@ enum class SettingsSubmenu(val title: String, val subtitle: String, val iconName
 
 object SettingsSearch {
     private val KEYWORDS: Map<String, List<String>> = mapOf(
-        "textures" to listOf("textures", "pack", "minecraft", "vanilla", "original", "blocks", "resource", "mojang", "skins", "jar", "style"),
-        "theme" to listOf("theme", "dark", "light", "night", "day", "system", "mode", "appearance", "colour", "color", "brightness"),
-        "arrow" to listOf("arrow", "player", "marker", "cursor", "pointer", "colour", "color", "tint", "icon"),
-        "labels" to listOf("label", "names", "language", "english", "latin", "local", "alphabet", "arabic", "cyrillic", "script", "translate", "street"),
-        "details" to listOf("map", "details", "item", "icons", "poi", "shops", "markers", "pins", "symbols"),
-        "navigation" to listOf("navigation", "route", "routing", "directions", "turn", "osrm", "google", "maps", "assisted", "standalone", "mirror", "notification", "api", "key", "places", "traffic", "congestion", "jam", "alerts", "radar", "speed", "camera", "accident", "hazard", "roadworks", "construction", "dynamic", "zoom", "driving", "auto"),
-        "saved_places" to listOf("saved", "places", "bookmarks", "favourites", "favorites", "export", "import", "backup", "restore", "json", "file"),
-        "storage" to listOf("storage", "tile", "cache", "clear", "delete", "disk", "space", "memory", "offline", "megabytes", "mb"),
-        "updates" to listOf("updates", "version", "check", "download", "install", "github", "release", "upgrade", "daily", "weekly", "manual", "launch"),
-        "developer" to listOf("developer", "debug", "leak", "leakcanary", "memory", "notifications", "diagnostics"),
-        "about" to listOf("about", "licences", "licenses", "attribution", "credits", "openstreetmap", "osm", "openmaptiles", "openfreemap", "privacy", "legal", "copyright"),
+        "language" to listOf("language", "english", "spanish", "french", "espanol", "francais", "idioma", "lenguaje", "langue", "translate", "traduccion", "traduction", "locale"),
+        "textures" to listOf("textures", "pack", "minecraft", "vanilla", "original", "blocks", "resource", "mojang", "skins", "jar", "style", "texturas", "bloques"),
+        "theme" to listOf("theme", "dark", "light", "night", "day", "system", "mode", "appearance", "colour", "color", "brightness", "tema", "oscuro", "claro", "noche", "sombre", "clair", "nuit"),
+        "arrow" to listOf("arrow", "player", "marker", "cursor", "pointer", "colour", "color", "tint", "icon", "flecha", "fleche", "jugador"),
+        "labels" to listOf("label", "names", "language", "english", "latin", "local", "alphabet", "arabic", "cyrillic", "script", "translate", "street", "nombres", "calles", "noms", "rues"),
+        "details" to listOf("map", "details", "item", "icons", "poi", "shops", "markers", "pins", "symbols", "iconos", "detalles", "icones", "details"),
+        "navigation" to listOf("navigation", "route", "routing", "directions", "turn", "osrm", "google", "maps", "assisted", "standalone", "mirror", "notification", "api", "key", "places", "traffic", "congestion", "jam", "alerts", "radar", "speed", "camera", "accident", "hazard", "roadworks", "construction", "dynamic", "zoom", "driving", "auto", "navegacion", "ruta", "trafico", "radares", "camaras", "conduccion", "itineraire", "conduite"),
+        "saved_places" to listOf("saved", "places", "bookmarks", "favourites", "favorites", "export", "import", "backup", "restore", "json", "file", "lugares", "guardados", "exportar", "importar", "lieux", "enregistres"),
+        "storage" to listOf("storage", "tile", "cache", "clear", "delete", "disk", "space", "memory", "offline", "megabytes", "mb", "almacenamiento", "vaciar", "stockage", "vider"),
+        "updates" to listOf("updates", "version", "check", "download", "install", "github", "release", "upgrade", "daily", "weekly", "manual", "launch", "actualizaciones", "actualizar", "mises", "jour"),
+        "developer" to listOf("developer", "debug", "leak", "leakcanary", "memory", "notifications", "diagnostics", "desarrollador", "depuracion", "developpeur"),
+        "about" to listOf("about", "licences", "licenses", "attribution", "credits", "openstreetmap", "osm", "openmaptiles", "openfreemap", "privacy", "legal", "copyright", "acerca", "licencias", "propos"),
     )
 
     fun matches(groupKey: String, rawQuery: String): Boolean {
@@ -252,6 +255,7 @@ fun SettingsScreen(
     onTheme: (ThemeMode) -> Unit,
     onIcons: (Boolean) -> Unit,
     onLabelNames: (LabelNames) -> Unit,
+    onAppLanguage: (AppLanguage) -> Unit = {},
     onClearCache: () -> Unit,
     onLicences: () -> Unit,
     navigationGroup: @Composable ColumnScope.() -> Unit = {},
@@ -262,6 +266,7 @@ fun SettingsScreen(
     texturesExtra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val c = Mc.colors
+    val s = S
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var submenuName by rememberSaveable { mutableStateOf<String?>(null) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -273,69 +278,82 @@ fun SettingsScreen(
         if (searchQuery.isNotBlank()) searchQuery = "" else submenuName = null
     }
 
+    val languageBlock: @Composable ColumnScope.() -> Unit = {
+        Group(s.appLanguageHeader) {
+            val langs = listOf(
+                AppLanguage.SYSTEM to s.langSystem,
+                AppLanguage.ENGLISH to "English",
+                AppLanguage.SPANISH to "Espa\u00f1ol",
+                AppLanguage.FRENCH to "Fran\u00e7ais",
+            )
+            McSegmented(langs.size, langs.indexOfFirst { it.first == settings.appLanguage }.coerceAtLeast(0), { onAppLanguage(langs[it].first) }) { i, _ ->
+                Text(langs[i].second, style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+    }
     val texturesBlock: @Composable ColumnScope.() -> Unit = {
-        Group("Textures") {
+        Group(s.texturesHeader) {
             McSegmented(2, if (vanillaSelected) 1 else 0, { if (it == 1 && !vanillaAvailable) onIncludeTextures() else onTexturePack(if (it == 1) TexturePack.VANILLA else TexturePack.ORIGINAL) }) { i, _ ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TexturePreview(atlasOf(if (i == 1 && vanillaAvailable) TexturePack.VANILLA else TexturePack.ORIGINAL), isMinecraftSlot = i == 1, vanillaAvailable = vanillaAvailable)
-                    Text(if (i == 0) "MineMaps original" else "Minecraft textures", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(if (i == 0) s.minemapsOriginal else s.minecraftTextures, style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
             texturesExtra()
         }
     }
     val themeBlock: @Composable ColumnScope.() -> Unit = {
-        Group("Theme") {
-            val modes = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")
+        Group(s.themeHeader) {
+            val modes = listOf(ThemeMode.SYSTEM to s.themeSystem, ThemeMode.LIGHT to s.themeLight, ThemeMode.DARK to s.themeDark)
             McSegmented(3, modes.indexOfFirst { it.first == settings.theme }.coerceAtLeast(0), { onTheme(modes[it].first) }) { i, _ -> Text(modes[i].second, style = labelStyle) }
         }
     }
     val arrowBlock: @Composable ColumnScope.() -> Unit = {
-        Group("Arrow colour") {
+        Group(s.arrowColourHeader) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for ((label, color) in ArrowColors.presets) {
                     val image = remember(activeAtlas, color) { atlasImage(activeAtlas, "player", color) }
-                    McSlot(Modifier.semantics { contentDescription = "Arrow colour $label" }, size = 52.dp, selected = settings.arrowColor == color, onClick = { onArrowColor(color) }) { PixelIcon(image, 36.dp) }
+                    McSlot(Modifier.semantics { contentDescription = "${s.arrowColourHeader} $label" }, size = 52.dp, selected = settings.arrowColor == color, onClick = { onArrowColor(color) }) { PixelIcon(image, 36.dp) }
                 }
             }
         }
     }
     val labelsBlock: @Composable ColumnScope.() -> Unit = {
-        Group("Label names") {
+        Group(s.labelNamesHeader) {
             McSegmented(2, if (settings.labelNames == LabelNames.ENGLISH) 0 else 1, { onLabelNames(if (it == 0) LabelNames.ENGLISH else LabelNames.LOCAL) }) { i, _ ->
-                Text(if (i == 0) "English (Latin script)" else "Local language", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(if (i == 0) s.labelEnglishLatin else s.labelLocalLanguage, style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         }
     }
     val detailsBlock: @Composable ColumnScope.() -> Unit = {
-        Group("Map details") {
+        Group(s.mapDetailsHeader) {
             Row(Modifier.fillMaxWidth().clickable { onIcons(!settings.showIcons) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Show item icons", style = MaterialTheme.typography.bodyLarge)
+                Text(s.showItemIcons, style = MaterialTheme.typography.bodyLarge)
                 McSwitch(settings.showIcons, onIcons)
             }
         }
     }
     val storageBlock: @Composable ColumnScope.() -> Unit = {
-        Group("Storage") {
+        Group(s.storageHeader) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("Tile cache", style = MaterialTheme.typography.bodyLarge)
+                    Text(s.tileCache, style = MaterialTheme.typography.bodyLarge)
                     Text(formatBytes(cacheBytes), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
                 }
-                McButton({ confirmClear = true }, variant = McVariant.DANGER) { Text("Clear") }
+                McButton({ confirmClear = true }, variant = McVariant.DANGER) { Text(s.clear) }
             }
         }
     }
     val aboutBlock: @Composable ColumnScope.() -> Unit = {
-        Group("About") {
+        Group(s.aboutHeader) {
             val book = remember(activeAtlas) { atlasImage(activeAtlas, "book") }
-            McListRow(onClick = onLicences, leading = { McSlot(size = 44.dp) { PixelIcon(book, 28.dp) } }, title = "Licences & attribution")
+            McListRow(onClick = onLicences, leading = { McSlot(size = 44.dp) { PixelIcon(book, 28.dp) } }, title = s.licencesAndAttribution)
             McDivider()
             MapDataCredits(Modifier.padding(top = 8.dp))
         }
     }
 
-    val topTitle = if (activeSubmenu != null && searchQuery.isBlank()) activeSubmenu.title else "Settings"
+    val topTitle = if (activeSubmenu != null && searchQuery.isBlank()) s.submenuTitle(activeSubmenu) else s.settings
     val handleTopBack: () -> Unit = {
         if (searchQuery.isNotBlank()) searchQuery = ""
         else if (activeSubmenu != null) submenuName = null
@@ -347,7 +365,7 @@ fun SettingsScreen(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            placeholder = "Search settings (e.g. dark, traffic, cache)",
+            placeholder = s.searchSettingsPlaceholder,
             leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, size = 20.dp) },
             trailing = {
                 if (searchQuery.isNotEmpty()) {
@@ -360,6 +378,7 @@ fun SettingsScreen(
 
         if (searchQuery.isNotBlank()) {
             var anyShown = false
+            if (SettingsSearch.matches("language", searchQuery)) { anyShown = true; languageBlock() }
             if (SettingsSearch.matches("textures", searchQuery)) { anyShown = true; texturesBlock() }
             if (SettingsSearch.matches("theme", searchQuery)) { anyShown = true; themeBlock() }
             if (SettingsSearch.matches("arrow", searchQuery)) { anyShown = true; arrowBlock() }
@@ -373,7 +392,7 @@ fun SettingsScreen(
             if (SettingsSearch.matches("about", searchQuery)) { anyShown = true; aboutBlock() }
             if (!anyShown) {
                 McPanel(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                    Text("No settings match \"$searchQuery\"", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                    Text(s.noSettingsMatch(searchQuery), style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
                 }
             }
         } else if (activeSubmenu == null) {
@@ -384,8 +403,8 @@ fun SettingsScreen(
                     McListRow(
                         onClick = { submenuName = item.name },
                         leading = { McSlot(size = 46.dp) { PixelIcon(iconImg, 30.dp) } },
-                        title = item.title,
-                        subtitle = item.subtitle,
+                        title = s.submenuTitle(item),
+                        subtitle = s.submenuSubtitle(item),
                         trailing = { PixelGlyph(Glyph.CHEVRON_RIGHT, c.textSecondary, size = 18.dp) },
                     )
                     if (idx < menus.lastIndex) McDivider()
@@ -401,6 +420,7 @@ fun SettingsScreen(
                     arrowBlock()
                 }
                 SettingsSubmenu.MAP_LABELS -> {
+                    languageBlock()
                     labelsBlock()
                     detailsBlock()
                 }
@@ -421,13 +441,13 @@ fun SettingsScreen(
     }
     if (confirmClear) {
         McDialog(
-            "Clear tile cache?",
+            s.clearCacheTitle,
             onDismiss = { confirmClear = false },
             buttons = {
-                McButton({ confirmClear = false }) { Text("Cancel") }
-                McButton({ confirmClear = false; onClearCache() }, variant = McVariant.DANGER) { Text("Clear") }
+                McButton({ confirmClear = false }) { Text(s.cancel) }
+                McButton({ confirmClear = false; onClearCache() }, variant = McVariant.DANGER) { Text(s.clear) }
             },
-        ) { Text("Downloaded map tiles (${formatBytes(cacheBytes)}) are deleted and fetched again when needed.", style = MaterialTheme.typography.bodyMedium) }
+        ) { Text(s.clearCacheBody(formatBytes(cacheBytes)), style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
@@ -452,7 +472,8 @@ private val licences = listOf(
 @Composable
 fun LicencesScreen(oflText: String, vanillaActive: Boolean, onBack: () -> Unit) {
     val c = Mc.colors
-    ScreenFrame("Licences", onBack) {
+    val s = S
+    ScreenFrame(s.licencesScreenTitle, onBack) {
         for (l in licences) {
             McPanel(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 Text(l.title, style = MaterialTheme.typography.titleMedium, color = c.text)

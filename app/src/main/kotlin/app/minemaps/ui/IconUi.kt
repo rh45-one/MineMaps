@@ -69,11 +69,12 @@ fun IconNameDialog(
     var icon by rememberSaveable { mutableStateOf(if (initialIcon in atlas.bookmarkIcons) initialIcon else "pin") }
     val images = rememberBookmarkImages(atlas)
     val gridHeight = minOf(240, (windowHeightDp() * 0.4f).toInt()).dp
+    val s = S
     McDialog(
         title = title,
         onDismiss = onDismiss,
         buttons = {
-            McButton(onDismiss) { Text("Cancel", style = androidx.compose.material3.MaterialTheme.typography.labelLarge) }
+            McButton(onDismiss) { Text(s.cancel, style = androidx.compose.material3.MaterialTheme.typography.labelLarge) }
             McButton({ onConfirm(SavedPlaceNames.clean(name), icon) }, variant = McVariant.PRIMARY) { Text(confirmLabel, style = androidx.compose.material3.MaterialTheme.typography.labelLarge) }
         },
     ) {
@@ -81,13 +82,13 @@ fun IconNameDialog(
             value = name,
             onValueChange = { name = it.take(SavedPlaceNames.MAX_LENGTH) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = "Name",
+            placeholder = s.nameLabel,
             keyboardActions = KeyboardActions.Default,
         )
         Spacer(Modifier.height(12.dp))
         LazyVerticalGrid(columns = GridCells.Adaptive(56.dp), modifier = Modifier.fillMaxWidth().height(gridHeight)) {
             items(atlas.bookmarkIcons) { n ->
-                McSlot(Modifier.padding(2.dp).semantics { contentDescription = "Icon $n" }, size = 52.dp, selected = n == icon, onClick = { icon = n }) { PixelIcon(images[n], 36.dp) }
+                McSlot(Modifier.padding(2.dp).semantics { contentDescription = "${s.iconLabel} $n" }, size = 52.dp, selected = n == icon, onClick = { icon = n }) { PixelIcon(images[n], 36.dp) }
             }
         }
     }

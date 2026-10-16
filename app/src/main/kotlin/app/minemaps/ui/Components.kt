@@ -52,9 +52,10 @@ enum class LocationIconState { NOT_FOLLOWING, FOLLOWING, NO_PERMISSION, GPS_OFF 
 
 @Composable
 fun LocationButton(state: LocationIconState, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val s = S
     val following = state == LocationIconState.FOLLOWING
     val problem = state == LocationIconState.NO_PERMISSION || state == LocationIconState.GPS_OFF
-    McIconButton(onClick, modifier.semantics { contentDescription = "My location" }, active = following, danger = problem) {
+    McIconButton(onClick, modifier.semantics { contentDescription = s.myLocation }, active = following, danger = problem) {
         val tint = androidx.compose.material3.LocalContentColor.current
         Box(
             Modifier.drawBehind {
@@ -82,7 +83,8 @@ fun McBanner(text: String, actionLabel: String?, onAction: () -> Unit, modifier:
 
 @Composable
 fun StreetNamesButton(on: Boolean, onClick: () -> Unit) {
-    McIconButton(onClick, Modifier.semantics { contentDescription = if (on) "Hide street names" else "Show street names" }, active = on) {
+    val s = S
+    McIconButton(onClick, Modifier.semantics { contentDescription = if (on) s.hideStreetNames else s.showStreetNames }, active = on) {
         val color = androidx.compose.material3.LocalContentColor.current
         Text(
             "Aa",
@@ -97,9 +99,10 @@ fun StreetNamesButton(on: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Unit) {
+    val s = S
     val visible by remember { derivedStateOf { bearing.value > 0.5 && bearing.value < 359.5 } }
     AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut()) {
-        McIconButton(onClick, Modifier.semantics { contentDescription = "Reset map to north" }) {
+        McIconButton(onClick, Modifier.semantics { contentDescription = s.resetMapToNorth }) {
             Box(
                 Modifier.size(34.dp).graphicsLayer { rotationZ = -bearing.value.toFloat() }.drawBehind {
                     val w = size.width
@@ -123,7 +126,8 @@ fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Uni
 /** Small "i" button (48 dp touch target, same bevelled button surface as the map controls). */
 @Composable
 fun CreditsButton(onClick: () -> Unit) {
-    Box(Modifier.size(48.dp).semantics { contentDescription = "Map credits" }, contentAlignment = Alignment.Center) {
+    val s = S
+    Box(Modifier.size(48.dp).semantics { contentDescription = s.mapCredits }, contentAlignment = Alignment.Center) {
         McIconButton(onClick, size = 32.dp) {
             PixelGlyph(Glyph.INFO, androidx.compose.material3.LocalContentColor.current, size = 16.dp)
         }

@@ -24,10 +24,12 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.minemaps.AppContainer
 import app.minemaps.R
+import app.minemaps.data.AppLanguage
 import app.minemaps.data.SavedPlace
 import app.minemaps.engine.data.NetState
 import app.minemaps.location.LocationState
 import app.minemaps.location.LocationStatus
+import app.minemaps.ui.AppStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,6 +37,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -105,6 +109,7 @@ class MapScreen(
     private val contentLimit: () -> Int,
     private val scheduler: InvalidateScheduler = HandlerInvalidateScheduler(),
     private val icons: ItemIcons = NoItemIcons,
+    private val languageFlow: Flow<AppLanguage> = flowOf(AppLanguage.ENGLISH),
 ) : Screen(carContext) {
     data class PlaceRow(val place: SavedPlace, val distanceBucket: Int?)
 
@@ -113,6 +118,7 @@ class MapScreen(
         val statusText: String?,
         val rows: List<PlaceRow>,
         val iconsVersion: Int = 0,
+        val lang: AppLanguage = AppLanguage.ENGLISH,
     )
 
     private var places: List<SavedPlace> = emptyList()
@@ -120,6 +126,7 @@ class MapScreen(
     private var net: NetState = NetState.OK
     private var following = false
     private var iconsVersion = 0
+    private var appLanguage = AppLanguage.ENGLISH
     private var state = compute()
     private var collectors: Job? = null
     private var scope: CoroutineScope? = null
@@ -135,6 +142,7 @@ class MapScreen(
                     launch { actions.networkState.collect { net = it; refresh() } }
                     launch { icons.version.collect { iconsVersion = it; refresh() } }
                     launch { actions.following.collect { following = it; requestInvalidate() } }
+                    launch { languageFlow.collect { appLanguage = it; refresh() } }
                 }
                 refresh()
             }
@@ -147,13 +155,16 @@ class MapScreen(
         })
     }
 
+    private fun strings(): AppStrings = AppStrings.forLanguage(appLanguage)
+
     private fun compute(): ContentState {
         val permission = hasPermission()
+        val str = strings()
         val statusText = when {
-            net == NetState.OFFLINE -> "Offline \u2013 showing cached map"
+            net == NetState.OFFLINE -> str.offlineShowingCached
             !permission -> null
-            location.status == LocationStatus.DISABLED -> "Location is off"
-            location.status == LocationStatus.SEARCHING -> "Finding your location\u2026"
+            location.status == LocationStatus.DISABLED -> str.locationIsOff
+            location.status == LocationStatus.SEARCHING -> str.findingYourLocation
             else -> null
         }
         val loc = location.location
@@ -161,7 +172,7 @@ class MapScreen(
             val bucket = loc?.let { (distanceMeters(it, p) / DISTANCE_STEP_M).toInt() }
             PlaceRow(p, bucket)
         }.let { list -> if (loc != null) list.sortedBy { it.distanceBucket } else list }
-        return ContentState(permission, statusText, rows, iconsVersion)
+        return ContentState(permission, statusText, rows, iconsVersion, appLanguage)
     }
 
     private fun refresh() {
@@ -197,11 +208,11 @@ class MapScreen(
         MapController.Builder().setMapActionStrip(CarStrips.mapActionStrip(carContext, actions, following)).build()
 
     private fun permissionTemplate(): Template =
-        MessageTemplate.Builder("Location permission is needed to show your position")
+        MessageTemplate.Builder(strings().locationPermissionCarMessage)
             .setTitle(carContext.getString(R.string.app_name))
             .addAction(
                 Action.Builder()
-                    .setTitle("Grant on phone")
+                    .setTitle(strings().grantOnPhone)
                     .setOnClickListener(
                         ParkedOnlyOnClickListener.create {
                             carContext.requestPermissions(
@@ -237,10 +248,10 @@ class MapScreen(
             list.addItem(row.build())
             budget--
         }
-        list.setNoItemsMessage("Save places on your phone to see them here")
+        list.setNoItemsMessage(strings().savePlacesOnPhoneCarHint)
         return ListTemplate.Builder()
             .setSingleList(list.build())
-            .setTitle("Places")
+            .setTitle(if (appLanguage == AppLanguage.ENGLISH) "Places" else strings().savedPlaces)
             .setHeaderAction(Action.BACK)
             .build()
     }
@@ -259,6 +270,7 @@ class MapScreen(
                 { container.location.refresh(); controller.recenter() },
                 { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) },
                 icons = icons,
+                languageFlow = container.settings.settings.map { it.appLanguage },
             )
 
         fun distanceMeters(from: Location, p: SavedPlace): Float {

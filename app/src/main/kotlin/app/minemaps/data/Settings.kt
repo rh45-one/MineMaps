@@ -19,6 +19,8 @@ enum class UpdateFrequency { LAUNCH, DAILY, WEEKLY, MANUAL }
 
 enum class NavigationMode { OFF, STANDALONE, GOOGLE_ASSISTED }
 
+enum class AppLanguage { SYSTEM, ENGLISH, SPANISH, FRENCH }
+
 data class Settings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val showIcons: Boolean = true,
@@ -42,6 +44,7 @@ data class Settings(
     val showRoadAlerts: Boolean = true,
     val dynamicDrivingZoom: Boolean = true,
     val autoUpdatePromptHandled: Boolean = false,
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
 )
 
 object ArrowColors {
@@ -82,6 +85,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val alertsKey = booleanPreferencesKey("show_road_alerts")
     private val dynZoomKey = booleanPreferencesKey("dynamic_driving_zoom")
     private val autoUpdatePromptKey = booleanPreferencesKey("auto_update_prompt_handled")
+    private val appLangKey = stringPreferencesKey("app_language")
 
     val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
@@ -107,6 +111,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             showRoadAlerts = p[alertsKey] ?: true,
             dynamicDrivingZoom = p[dynZoomKey] ?: true,
             autoUpdatePromptHandled = p[autoUpdatePromptKey] ?: false,
+            appLanguage = p[appLangKey]?.let { runCatching { AppLanguage.valueOf(it) }.getOrNull() } ?: AppLanguage.SYSTEM,
         )
     }
 
@@ -155,4 +160,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setDynamicDrivingZoom(v: Boolean) = store.edit { it[dynZoomKey] = v }
 
     suspend fun setAutoUpdatePromptHandled(v: Boolean = true) = store.edit { it[autoUpdatePromptKey] = v }
+
+    suspend fun setAppLanguage(v: AppLanguage) = store.edit { it[appLangKey] = v.name }
 }

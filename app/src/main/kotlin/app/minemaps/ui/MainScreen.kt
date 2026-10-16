@@ -158,7 +158,10 @@ fun MineMapsRoot(vm: MainViewModel, container: AppContainer, applyBars: (Boolean
         val cam = initial
         val eng = engine
         if (s != null && cam != null && eng != null) {
-            MainContent(vm, container, eng, cam, s, dark)
+            val strings = remember(s.appLanguage) { AppStrings.forLanguage(s.appLanguage) }
+            androidx.compose.runtime.CompositionLocalProvider(LocalStrings provides strings) {
+                MainContent(vm, container, eng, cam, s, dark)
+            }
         } else {
             Box(Modifier.fillMaxSize().background(if (dark) Color(0xFF14171C) else Color(0xFFC9D6B6)))
         }
@@ -215,13 +218,14 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
     val packLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) container.textures.importFromFile(uri) }
     LaunchedEffect(Unit) { container.textures.messages.collect { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_LONG).show() } }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val str = AppStrings.forLanguage(settings.appLanguage)
         if (uri != null) scope.launch {
             val msg = withContext(Dispatchers.IO) {
                 runCatching {
                     val text = container.savedPlaces.exportJson()
                     ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(text.toByteArray()) }
-                    "Saved places exported"
-                }.getOrElse { "Export failed" }
+                    str.savedPlacesExported
+                }.getOrElse { str.exportFailed }
             }
             android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
         }
@@ -280,6 +284,7 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                     onTheme = { vm.setTheme(it) },
                     onIcons = { vm.setShowIcons(it) },
                     onLabelNames = { vm.setLabelNames(it) },
+                    onAppLanguage = { vm.setAppLanguage(it) },
                     onClearCache = { vm.clearCache() },
                     onLicences = { vm.screen.value = Screen.LICENCES },
                     navigationGroup = {
@@ -578,20 +583,21 @@ private fun MapScreen(
         val bottomPad = if (!sidePanel && hasBottomPanel && bottomPanelPx > 0) with(density2) { bottomPanelPx.toDp() } + 24.dp else 16.dp
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
+        val s = S
         val searchRow: @Composable () -> Unit = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 McTextField(
                     value = text,
                     onValueChange = vm::onQueryChange,
-                    modifier = Modifier.weight(1f).onFocusChanged { s: FocusState ->
-                        if (s.isFocused) vm.onSearchFocus()
-                        if (s.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
+                    modifier = Modifier.weight(1f).onFocusChanged { fs: FocusState ->
+                        if (fs.isFocused) vm.onSearchFocus()
+                        if (fs.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
                     },
-                    placeholder = "Search places",
+                    placeholder = s.searchPlacesPlaceholder,
                     leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, size = 20.dp) },
                     trailing = {
                         if (text.isNotEmpty() || searchPin != null) {
-                            Box(Modifier.size(48.dp).semantics { contentDescription = "Clear search" }.clickable { vm.clearSearch() }, contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(48.dp).semantics { contentDescription = s.clearSearch }.clickable { vm.clearSearch() }, contentAlignment = Alignment.Center) {
                                 PixelGlyph(Glyph.CLOSE, c.text, size = 16.dp)
                             }
                         }
@@ -599,8 +605,8 @@ private fun MapScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 )
                 val pinImage = remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "pin") }
-                McIconButton({ vm.screen.value = Screen.SAVED }, Modifier.semantics { contentDescription = "Saved places" }, size = 48.dp) { PixelIcon(pinImage, 28.dp) }
-                McGlyphButton(Glyph.SETTINGS, { vm.screen.value = Screen.SETTINGS }, Modifier.semantics { contentDescription = "Settings" }, size = 48.dp)
+                McIconButton({ vm.screen.value = Screen.SAVED }, Modifier.semantics { contentDescription = s.savedPlaces }, size = 48.dp) { PixelIcon(pinImage, 28.dp) }
+                McGlyphButton(Glyph.SETTINGS, { vm.screen.value = Screen.SETTINGS }, Modifier.semantics { contentDescription = s.settings }, size = 48.dp)
             }
         }
         val banners: @Composable () -> Unit = {
@@ -614,12 +620,12 @@ private fun MapScreen(
                     onClick = { showDirectionsDialog = true },
                 )
             }
-            if (navLoading && navBanner == null) McBanner("Calculating route\u2026", "Cancel", { container.navigation.stop() }, warning = false)
-            if (net == app.minemaps.engine.data.NetState.OFFLINE) McBanner("Offline \u2013 showing cached map", null, {})
+            if (navLoading && navBanner == null) McBanner(s.calculatingRoute, s.cancel, { container.navigation.stop() }, warning = false)
+            if (net == app.minemaps.engine.data.NetState.OFFLINE) McBanner(s.offlineShowingCached, null, {})
             if (!granted && !rationaleVisible) {
-                McBanner("Location permission needed", if (permanentlyDenied) "Settings" else "Allow", { if (permanentlyDenied) openAppSettings() else requestPermission() })
+                McBanner(s.locationPermissionNeeded, if (permanentlyDenied) s.settings else s.allow, { if (permanentlyDenied) openAppSettings() else requestPermission() })
             } else if (granted && loc.status == LocationStatus.DISABLED) {
-                McBanner("Location is off", "Turn on", { openLocationSettings() })
+                McBanner(s.locationIsOff, s.turnOn, { openLocationSettings() })
             }
         }
         val resultsPanel: @Composable () -> Unit = {
@@ -731,8 +737,8 @@ private fun MapScreen(
             )
         }
         val zoomControls: @Composable () -> Unit = {
-            McGlyphButton(Glyph.PLUS, { controller.zoomIn() }, Modifier.semantics { contentDescription = "Zoom in" })
-            McGlyphButton(Glyph.MINUS, { controller.zoomOut() }, Modifier.semantics { contentDescription = "Zoom out" })
+            McGlyphButton(Glyph.PLUS, { controller.zoomIn() }, Modifier.semantics { contentDescription = s.zoomIn })
+            McGlyphButton(Glyph.MINUS, { controller.zoomOut() }, Modifier.semantics { contentDescription = s.zoomOut })
         }
         Row(
             Modifier.align(Alignment.BottomEnd).windowInsetsPadding(McInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.End)).padding(end = 12.dp, bottom = bottomPad),
@@ -771,28 +777,29 @@ private fun MapScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = c.text,
                     )
-                    Text("Licences", Modifier.clickable { vm.screen.value = Screen.LICENCES }.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = c.greenHighlight)
+                    Text(s.licencesShort, Modifier.clickable { vm.screen.value = Screen.LICENCES }.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = c.greenHighlight)
                 }
             }
             AnimatedVisibility(!creditShown, enter = fadeIn(), exit = fadeOut()) { CreditsButton { creditShown = true; creditTick++ } }
         }
     }
 
+    val s = S
     saveDialog?.let { d ->
-        IconNameDialog("Save place", d.suggestedName, "pin", engine.atlas(settings.texturePack), "Save", onConfirm = { n, i -> vm.confirmSave(n, i) }, onDismiss = { vm.cancelSave() })
+        IconNameDialog(s.savePlace, d.suggestedName, "pin", engine.atlas(settings.texturePack), s.save, onConfirm = { n, i -> vm.confirmSave(n, i) }, onDismiss = { vm.cancelSave() })
     }
     renameTarget?.let { p ->
-        IconNameDialog("Edit place", p.name, p.icon, engine.atlas(settings.texturePack), "Save", onConfirm = { n, i -> vm.edit(p, n, i) }, onDismiss = { vm.renameTarget.value = null })
+        IconNameDialog(s.editPlace, p.name, p.icon, engine.atlas(settings.texturePack), s.save, onConfirm = { n, i -> vm.edit(p, n, i) }, onDismiss = { vm.renameTarget.value = null })
     }
     saved.firstOrNull { it.id == confirmDelete }?.let { p ->
         McDialog(
-            "Delete place?",
+            s.deletePlaceTitle,
             onDismiss = { confirmDelete = null },
             buttons = {
-                McButton({ confirmDelete = null }) { Text("Cancel") }
-                McButton({ confirmDelete = null; vm.delete(p) }, variant = McVariant.DANGER) { Text("Delete") }
+                McButton({ confirmDelete = null }) { Text(s.cancel) }
+                McButton({ confirmDelete = null; vm.delete(p) }, variant = McVariant.DANGER) { Text(s.delete) }
             },
-        ) { Text("\"${p.name}\" will be removed from your saved places.", style = MaterialTheme.typography.bodyMedium) }
+        ) { Text(s.deletePlaceBody(p.name), style = MaterialTheme.typography.bodyMedium) }
     }
     val curBanner = navBanner
     if (showDirectionsDialog && curBanner != null) {
@@ -822,14 +829,15 @@ private fun distanceTextFrom(userLat: Double?, userLon: Double?, targetLat: Doub
 @Composable
 private fun SearchResultsPanel(state: SearchState, userLat: Double?, userLon: Double?, onSelect: (SearchResult) -> Unit) {
     val c = Mc.colors
+    val s = S
     val maxH = (windowHeightDp() * 0.55f).dp
     McPanel(Modifier.fillMaxWidth().heightIn(max = maxH), contentPadding = 4.dp) {
         when (state) {
-            SearchState.Idle -> Text("Type at least 2 characters", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
-            SearchState.Loading -> Text("Searching\u2026", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
-            is SearchState.Error -> Text("Search unavailable: ${state.message}", Modifier.padding(12.dp), color = c.danger, style = MaterialTheme.typography.bodyMedium)
+            SearchState.Idle -> Text(s.typeAtLeastTwoChars, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+            SearchState.Loading -> Text(s.searching, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+            is SearchState.Error -> Text(s.searchUnavailable(state.message), Modifier.padding(12.dp), color = c.danger, style = MaterialTheme.typography.bodyMedium)
             is SearchState.Results -> if (state.items.isEmpty()) {
-                Text(if (state.updating) "Searching\u2026" else "No results", Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+                Text(if (state.updating) s.searching else s.noResults, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
             } else {
                 LazyColumn {
                     items(state.items) { r ->
@@ -840,12 +848,12 @@ private fun SearchResultsPanel(state: SearchState, userLat: Double?, userLon: Do
                             subtitle = if (r.local) r.address.ifBlank { r.typeLabel.removeSuffix(" \u00b7 nearby") } else r.subtitle,
                             trailing = {
                                 if (dist != null) McTag(dist)
-                                else if (r.local) McTag("nearby")
+                                else if (r.local) McTag(s.nearbyBadge)
                             },
                         )
                         McDivider()
                     }
-                    if (state.updating) item { Text("Updating\u2026", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = c.textSecondary) }
+                    if (state.updating) item { Text(s.updating, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = c.textSecondary) }
                 }
             }
         }
@@ -854,18 +862,19 @@ private fun SearchResultsPanel(state: SearchState, userLat: Double?, userLon: Do
 
 @Composable
 private fun RationaleCard(onAllow: () -> Unit, onDismiss: () -> Unit) {
+    val s = S
     McPanel(Modifier.fillMaxWidth()) {
-        Text("Show your position on the map?", style = MaterialTheme.typography.titleMedium)
+        Text(s.showPositionTitle, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
         Text(
-            "MineMaps uses your location only while the app is open, to centre the map on you. You can use the map without it.",
+            s.showPositionBody,
             style = MaterialTheme.typography.bodyMedium,
             color = Mc.colors.textSecondary,
         )
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-            McButton(onDismiss) { Text("Not now") }
-            McButton(onAllow, variant = McVariant.PRIMARY) { Text("Allow location") }
+            McButton(onDismiss) { Text(s.notNow) }
+            McButton(onAllow, variant = McVariant.PRIMARY) { Text(s.allowLocation) }
         }
     }
 }
@@ -887,12 +896,13 @@ private fun InfoCardView(
     onGoogleMaps: (Double, Double, String) -> Unit,
 ) {
     val c = Mc.colors
+    val s = S
     val (targetLat, targetLon, targetTitle) = when (card) {
         is InfoCard.Inspect -> Triple(card.lat, card.lon, card.title)
         is InfoCard.Saved -> Triple(card.place.lat, card.place.lon, card.place.name)
         is InfoCard.Result -> Triple(card.result.lat, card.result.lon, card.result.name)
     }
-    val distText = distanceTextFrom(userLat, userLon, targetLat, targetLon)?.let { "$it away" }
+    val distText = distanceTextFrom(userLat, userLon, targetLat, targetLon)?.let { s.awayFormat(it) }
     McPanel(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
@@ -905,7 +915,7 @@ private fun InfoCardView(
                     }
                     is InfoCard.Saved -> {
                         Text(card.place.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        val savedSub = if (distText != null) "Saved place \u00b7 $distText" else "Saved place"
+                        val savedSub = if (distText != null) "${s.savedPlaceLabel} \u00b7 $distText" else s.savedPlaceLabel
                         Text(savedSub, style = MaterialTheme.typography.bodyMedium, color = c.gold)
                         CoordsRow(coords(card.place.lat, card.place.lon), onCopy)
                     }
@@ -917,14 +927,14 @@ private fun InfoCardView(
                     }
                 }
             }
-            McGlyphButton(Glyph.CLOSE, onClose, Modifier.semantics { contentDescription = "Close" }, size = 48.dp)
+            McGlyphButton(Glyph.CLOSE, onClose, Modifier.semantics { contentDescription = s.close }, size = 48.dp)
         }
         Spacer(Modifier.height(8.dp))
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (navMode != app.minemaps.data.NavigationMode.OFF) {
                 McButton({ onNavigate(targetLat, targetLon, targetTitle) }, variant = McVariant.PRIMARY) {
                     PixelGlyph(Glyph.NAV_UP, LocalContentColor.current, size = 18.dp)
-                    Text("Navigate")
+                    Text(s.navigate)
                 }
             }
             if (navMode == app.minemaps.data.NavigationMode.GOOGLE_ASSISTED) {
@@ -933,11 +943,11 @@ private fun InfoCardView(
                 }
             }
             when (card) {
-                is InfoCard.Inspect -> McButton({ onSaveInspect(card) }, variant = if (navMode == app.minemaps.data.NavigationMode.OFF) McVariant.PRIMARY else McVariant.SECONDARY) { Text("Save place") }
-                is InfoCard.Result -> McButton({ onSaveResult(card.result) }, variant = if (navMode == app.minemaps.data.NavigationMode.OFF) McVariant.PRIMARY else McVariant.SECONDARY) { Text("Save place") }
+                is InfoCard.Inspect -> McButton({ onSaveInspect(card) }, variant = if (navMode == app.minemaps.data.NavigationMode.OFF) McVariant.PRIMARY else McVariant.SECONDARY) { Text(s.savePlace) }
+                is InfoCard.Result -> McButton({ onSaveResult(card.result) }, variant = if (navMode == app.minemaps.data.NavigationMode.OFF) McVariant.PRIMARY else McVariant.SECONDARY) { Text(s.savePlace) }
                 is InfoCard.Saved -> {
-                    McButton({ onRename(card.place) }) { PixelGlyph(Glyph.EDIT, LocalContentColor.current, size = 18.dp); Text("Edit") }
-                    McButton({ onDelete(card.place) }, variant = McVariant.DANGER) { PixelGlyph(Glyph.DELETE, LocalContentColor.current, size = 18.dp); Text("Delete") }
+                    McButton({ onRename(card.place) }) { PixelGlyph(Glyph.EDIT, LocalContentColor.current, size = 18.dp); Text(s.edit) }
+                    McButton({ onDelete(card.place) }, variant = McVariant.DANGER) { PixelGlyph(Glyph.DELETE, LocalContentColor.current, size = 18.dp); Text(s.delete) }
                 }
             }
         }
@@ -946,9 +956,10 @@ private fun InfoCardView(
 
 @Composable
 private fun CoordsRow(text: String, onCopy: (String) -> Unit) {
+    val s = S
     Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = Mc.colors.textSecondary)
-        Box(Modifier.size(40.dp).semantics { contentDescription = "Copy coordinates" }.clickable { onCopy(text) }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(40.dp).semantics { contentDescription = s.copyCoordinates }.clickable { onCopy(text) }, contentAlignment = Alignment.Center) {
             PixelGlyph(Glyph.COPY, Mc.colors.textSecondary, size = 16.dp)
         }
     }
