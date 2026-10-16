@@ -191,7 +191,7 @@ fun SettingsScreen(
             McSegmented(2, if (vanillaSelected) 1 else 0, { if (it == 1 && !vanillaAvailable) onIncludeTextures() else onTexturePack(if (it == 1) TexturePack.VANILLA else TexturePack.ORIGINAL) }) { i, _ ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TexturePreview(atlasOf(if (i == 1 && vanillaAvailable) TexturePack.VANILLA else TexturePack.ORIGINAL))
-                    Text(if (i == 0) "MineMaps original" else if (vanillaAvailable) "Minecraft textures" else "Include Minecraft textures", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(if (i == 0) "MineMaps original" else "Minecraft textures", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
             texturesExtra()

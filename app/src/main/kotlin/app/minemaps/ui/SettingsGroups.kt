@@ -270,13 +270,13 @@ fun TexturesExtra(available: Boolean, bundled: Boolean, source: String?, pending
 @Composable
 fun IncludeTexturesDialog(sizeMb: Long, metered: Boolean, onNow: () -> Unit, onNextUpdate: () -> Unit, onCancel: () -> Unit) {
     McDialog(
-        title = "Include Minecraft textures",
+        title = "Minecraft textures",
         onDismiss = onCancel,
         buttons = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     McButton(onCancel, Modifier.weight(1f), fullWidth = true) { Text("Cancel", maxLines = 1) }
-                    McButton(onNextUpdate, Modifier.weight(1f), fullWidth = true) { Text("At next update", maxLines = 1) }
+                    McButton(onNextUpdate, Modifier.weight(1f), fullWidth = true) { Text("Next update", maxLines = 1) }
                 }
                 McButton(onNow, variant = McVariant.PRIMARY, fullWidth = true) { Text("Download now", maxLines = 1) }
             }
@@ -287,7 +287,7 @@ fun IncludeTexturesDialog(sizeMb: Long, metered: Boolean, onNow: () -> Unit, onN
             style = MaterialTheme.typography.bodyMedium,
         )
         if (metered) Text("You are on a metered connection: downloading now uses mobile data.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = Mc.colors.gold)
-        Text("\"At next update\" downloads them automatically on Wi-Fi after the app is next updated.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = Mc.colors.textSecondary)
+        Text("\"Next update\" downloads them automatically on Wi-Fi after the app is next updated.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = Mc.colors.textSecondary)
     }
 }
 
