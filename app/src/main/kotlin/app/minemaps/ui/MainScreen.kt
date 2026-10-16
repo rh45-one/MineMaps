@@ -413,6 +413,7 @@ private fun MapScreen(
     val navLoading by container.navigation.loading.collectAsStateWithLifecycle()
     val roadAlerts by container.roadAlerts.collectAsStateWithLifecycle()
     var showDirectionsDialog by rememberSaveable { mutableStateOf(false) }
+    var quickMenuOpen by rememberSaveable { mutableStateOf(false) }
 
     val activity = context.findActivity()
     val askedBefore by rememberUpdatedState(settings.permissionAsked)
@@ -541,10 +542,12 @@ private fun MapScreen(
                 v.onUserMoved = {
                     vm.onUserMoved()
                     creditShown = false
+                    quickMenuOpen = false
                 }
                 v.onTap = { vp, sx, sy ->
                     focus.clearFocus()
                     vm.resultsVisible.value = false
+                    quickMenuOpen = false
                     val hit = saved.firstOrNull { nearPin(vp, it.lat, it.lon, sx, sy, density) }
                     val alertHit = if (hit == null && settings.showRoadAlerts) {
                         visibleAlerts.firstOrNull { nearPin(vp, it.lat, it.lon, sx, sy, density) }
@@ -584,29 +587,54 @@ private fun MapScreen(
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
         val s = S
+        val pinImage = remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "pin") }
         val searchRow: @Composable () -> Unit = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                McTextField(
-                    value = text,
-                    onValueChange = vm::onQueryChange,
-                    modifier = Modifier.weight(1f).onFocusChanged { fs: FocusState ->
-                        if (fs.isFocused) vm.onSearchFocus()
-                        if (fs.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
-                    },
-                    placeholder = s.searchPlacesPlaceholder,
-                    leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, size = 20.dp) },
-                    trailing = {
-                        if (text.isNotEmpty() || searchPin != null) {
-                            Box(Modifier.size(48.dp).semantics { contentDescription = s.clearSearch }.clickable { vm.clearSearch() }, contentAlignment = Alignment.Center) {
-                                PixelGlyph(Glyph.CLOSE, c.text, size = 16.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    McTextField(
+                        value = text,
+                        onValueChange = vm::onQueryChange,
+                        modifier = Modifier.weight(1f).onFocusChanged { fs: FocusState ->
+                            if (fs.isFocused) {
+                                vm.onSearchFocus()
+                                quickMenuOpen = false
                             }
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                )
-                val pinImage = remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "pin") }
-                McIconButton({ vm.screen.value = Screen.SAVED }, Modifier.semantics { contentDescription = s.savedPlaces }, size = 48.dp) { PixelIcon(pinImage, 28.dp) }
-                McGlyphButton(Glyph.SETTINGS, { vm.screen.value = Screen.SETTINGS }, Modifier.semantics { contentDescription = s.settings }, size = 48.dp)
+                            if (fs.isFocused && text.isNotBlank()) vm.resultsVisible.value = true
+                        },
+                        placeholder = s.searchPlacesPlaceholder,
+                        leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, size = 20.dp) },
+                        trailing = {
+                            if (text.isNotEmpty() || searchPin != null) {
+                                Box(Modifier.size(48.dp).semantics { contentDescription = s.clearSearch }.clickable { vm.clearSearch() }, contentAlignment = Alignment.Center) {
+                                    PixelGlyph(Glyph.CLOSE, c.text, size = 16.dp)
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    )
+                    McIconButton(
+                        { quickMenuOpen = !quickMenuOpen },
+                        Modifier.semantics { contentDescription = s.savedPlaces },
+                        active = quickMenuOpen,
+                        size = 48.dp,
+                    ) {
+                        PixelGlyph(Glyph.LAYERS, LocalContentColor.current, size = 22.dp)
+                    }
+                    McGlyphButton(Glyph.SETTINGS, { vm.screen.value = Screen.SETTINGS }, Modifier.semantics { contentDescription = s.settings }, size = 48.dp)
+                }
+                AnimatedVisibility(quickMenuOpen) {
+                    QuickMapMenuBar(
+                        pinIcon = pinImage,
+                        streetNamesOn = settings.showStreetNames,
+                        trafficOn = settings.showTraffic,
+                        onOpenSavedPlaces = {
+                            quickMenuOpen = false
+                            vm.screen.value = Screen.SAVED
+                        },
+                        onToggleStreetNames = { vm.setShowStreetNames(!settings.showStreetNames) },
+                        onToggleTraffic = { vm.setShowTraffic(!settings.showTraffic) },
+                    )
+                }
             }
         }
         val banners: @Composable () -> Unit = {
@@ -708,7 +736,6 @@ private fun MapScreen(
         val compassIcon = remember(settings.texturePack) { atlasImage(engine.atlas(settings.texturePack), "compass") }
         val navControls: @Composable () -> Unit = {
             CompassButton(bearingState, compassIcon) { controller.view?.animateBearing(0.0, 300L) }
-            StreetNamesButton(settings.showStreetNames) { vm.setShowStreetNames(!settings.showStreetNames) }
         }
         val locationButton: @Composable () -> Unit = {
             LocationButton(

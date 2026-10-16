@@ -35,9 +35,12 @@ import app.minemaps.ui.theme.Mc
 import app.minemaps.ui.theme.McButton
 import app.minemaps.ui.theme.McIconButton
 import app.minemaps.ui.theme.McPanel
+import app.minemaps.ui.theme.McVariant
 import app.minemaps.ui.theme.PixelGlyph
+import app.minemaps.ui.theme.TrafficLightGlyph
 import app.minemaps.ui.theme.mcPanel
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.text.style.TextOverflow
 
 class MapController {
     var view: MapView? = null
@@ -94,6 +97,60 @@ fun StreetNamesButton(on: Boolean, onClick: () -> Unit) {
             style = MaterialTheme.typography.labelLarge,
             color = color,
         )
+    }
+}
+
+@Composable
+fun QuickMapMenuBar(
+    pinIcon: ImageBitmap?,
+    streetNamesOn: Boolean,
+    trafficOn: Boolean,
+    onOpenSavedPlaces: () -> Unit,
+    onToggleStreetNames: () -> Unit,
+    onToggleTraffic: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val s = S
+    Row(
+        modifier.fillMaxWidth().mcPanel(Mc.colors).padding(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        McButton(
+            onClick = onOpenSavedPlaces,
+            modifier = Modifier.weight(1f),
+            variant = McVariant.SECONDARY,
+            fullWidth = true,
+        ) {
+            PixelIcon(pinIcon, 18.dp)
+            Text(s.placesShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+        }
+        McButton(
+            onClick = onToggleStreetNames,
+            modifier = Modifier.weight(1f),
+            variant = if (streetNamesOn) McVariant.PRIMARY else McVariant.SECONDARY,
+            fullWidth = true,
+        ) {
+            val color = androidx.compose.material3.LocalContentColor.current
+            Text(
+                "Aa",
+                Modifier.drawBehind {
+                    if (!streetNamesOn) drawLine(color, Offset(0f, size.height), Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = color,
+            )
+            Text(s.streetsShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+        }
+        McButton(
+            onClick = onToggleTraffic,
+            modifier = Modifier.weight(1f),
+            variant = if (trafficOn) McVariant.PRIMARY else McVariant.SECONDARY,
+            fullWidth = true,
+        ) {
+            TrafficLightGlyph(active = trafficOn, size = 18.dp)
+            Text(s.trafficShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+        }
     }
 }
 
