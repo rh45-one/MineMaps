@@ -1,4 +1,6 @@
-# MineMaps
+<p align="center">
+  <img src="docs/images/logo-combined.png" alt="MineMaps Logo" width="620" />
+</p>
 
 **MineMaps** turns the real world into a Minecraft-style block map on your Android phone and in your car with **Android Auto**.
 

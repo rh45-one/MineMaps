@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
 SRC = os.path.join(ROOT, 'tools', 'art', 'out', 'app_icon_16.png')
 RES = os.path.join(ROOT, 'app', 'src', 'main', 'res')
-BG = (0x69, 0xa8, 0x3f, 255)
+BG = (0x27, 0x29, 0x2c, 255)
 SIZES = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
 
 
@@ -20,7 +20,9 @@ def main():
         d = os.path.join(RES, f'mipmap-{density}')
         os.makedirs(d, exist_ok=True)
         square = Image.new('RGBA', (px, px), BG)
-        square.alpha_composite(icon.resize((px, px), Image.NEAREST))
+        pad = max(2, px // 12)
+        inner = px - pad * 2
+        square.alpha_composite(icon.resize((inner, inner), Image.NEAREST), (pad, pad))
         square.save(os.path.join(d, 'ic_launcher.png'))
         mask = Image.new('L', (px * 4, px * 4), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, px * 4 - 1, px * 4 - 1), fill=255)
@@ -30,7 +32,8 @@ def main():
     nodpi = os.path.join(RES, 'drawable-nodpi')
     os.makedirs(nodpi, exist_ok=True)
     fg = Image.new('RGBA', (432, 432), (0, 0, 0, 0))
-    fg.alpha_composite(icon.resize((288, 288), Image.NEAREST), (72, 72))
+    # 32x32 * 8 = 256x256, centred at (88, 88) inside the 66dp (288px) safe zone
+    fg.alpha_composite(icon.resize((256, 256), Image.NEAREST), (88, 88))
     fg.save(os.path.join(nodpi, 'ic_launcher_foreground.png'))
     anydpi = os.path.join(RES, 'mipmap-anydpi-v26')
     os.makedirs(anydpi, exist_ok=True)
@@ -43,7 +46,7 @@ def main():
         with open(os.path.join(anydpi, name), 'w') as f:
             f.write(xml)
     with open(os.path.join(RES, 'values', 'ic_launcher_background.xml'), 'w') as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#69a83f</color>\n</resources>\n')
+        f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#27292c</color>\n</resources>\n')
     print('icons written')
 
 

@@ -7,10 +7,10 @@ All artwork is original and generated reproducibly; no Minecraft files are used.
 - `python3 tools/art/make_atlas.py` writes `tools/art/out/atlas.png`, `atlas.json`, `preview.png` (8x), and `app_icon_16.png`
   (+192/512 px previews). `tools/art/out/` is git-ignored.
 - Copy `atlas.png` and `atlas.json` to `mapengine/src/main/resources/minemaps/` (that copy is what ships).
-- `python3 tools/art/make_android_icons.py` builds the launcher icons from `app_icon_16.png`: legacy `mipmap-*/ic_launcher(.png|_round.png)`
-  at 48/72/96/144/192 px (nearest neighbour, background `#69a83f`), the adaptive icon (`mipmap-anydpi-v26`, background colour
-  `@color/ic_launcher_background`, foreground `drawable-nodpi/ic_launcher_foreground.png` = the 16 px icon scaled to 288 px,
-  centred in 432x432, inside the 66 dp safe zone).
+- `python3 tools/art/make_android_icons.py` builds the launcher icons from `app_icon_16.png` (a 32×32 isometric voxel terrain block with river, road, dirt/stone strata and a gold-rimmed ruby map pin): legacy `mipmap-*/ic_launcher(.png|_round.png)`
+  at 48/72/96/144/192 px (nearest neighbour, dark slate background `#27292c`), the adaptive icon (`mipmap-anydpi-v26`, background colour
+  `@color/ic_launcher_background`, foreground `drawable-nodpi/ic_launcher_foreground.png` = the 32 px icon scaled 8× to 256 px,
+  centred in 432x432, inside the 66 dp safe zone). Brand assets (`logo-icon.png`, `logo-text.png`, `logo-combined.png`) live in `docs/images/`.
 - Font: Monocraft (OFL 1.1), `mapengine/src/main/resources/minemaps/fonts/Monocraft.ttf` with `OFL.txt` beside it.
 
 ## Texture packs

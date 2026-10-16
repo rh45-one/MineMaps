@@ -1144,14 +1144,98 @@ PIN_OVER = [  # drawn over the bottom-right of the app icon
 
 
 def app_icon():
-    pal, rows = APP_ICON
-    rows = [r.replace('.', 'g') for r in rows]
-    img = draw_icon(pal, rows, 'app_icon'); px = img.load()
-    for y, row in enumerate(PIN_OVER):
-        for x, ch in enumerate(row):
+    """32x32 isometric voxel terrain block (grass, river, stone road, dirt/stone strata) crowned with a gold-rimmed ruby map pin."""
+    pal = {
+        'k': '#141517',
+        'L': '#86d64b', 'g': '#64b338', 'G': '#4a8f28', 'f': '#39731d',
+        'W': '#66b3ff', 'w': '#3b7de8', 'u': '#2656b0',
+        'S': '#d6dade', 's': '#9ea4ab', 'z': '#6c7278',
+        'd': '#a67244', 'D': '#875831', 'b': '#6b4322',
+        'e': '#734926', 'E': '#57351a', 'c': '#474b52', 'C': '#31343a',
+        'y': '#fff394', 'Y': '#f5c22b', 'o': '#bd8512',
+        'h': '#ff8a80', 'r': '#e53935', 'R': '#9e1c1c', 'p': '#ffffff',
+    }
+    im = Image.new('RGBA', (32, 32), (0, 0, 0, 0))
+    px = im.load()
+
+    def put(x, y, c):
+        if 0 <= x < 32 and 0 <= y < 32 and c != '.':
+            px[x, y] = hexc(pal[c])
+
+    for y in range(6, 31):
+        for x in range(2, 30):
+            dx = abs(x - 15.5)
+            top_y = 7.0 + dx * 0.52
+            mid_y = 20.5 - dx * 0.52
+            bot_y = 30.0 - dx * 0.52
+            if top_y - 1.1 <= y <= bot_y + 1.0 and dx <= 13.5:
+                if y < top_y or y > bot_y or dx > 12.5:
+                    put(x, y, 'k')
+                    continue
+                if y <= mid_y:
+                    river_d = (x - 17.5) + (y - 13.5) * 1.4
+                    road_d = (x - 13.5) - (y - 14.0) * 1.4
+                    if -1.8 <= river_d <= 1.8:
+                        put(x, y, 'W' if river_d < -0.5 else ('w' if river_d < 0.8 else 'u'))
+                    elif -1.5 <= road_d <= 1.5:
+                        put(x, y, 'S' if road_d < -0.3 else ('s' if road_d < 0.7 else 'z'))
+                    else:
+                        if y < top_y + 1.5 and x < 16:
+                            put(x, y, 'L')
+                        elif (x + y * 3) % 7 == 0:
+                            put(x, y, 'L')
+                        elif (x * 2 + y) % 5 == 0:
+                            put(x, y, 'G')
+                        else:
+                            put(x, y, 'g')
+                else:
+                    depth = y - mid_y
+                    turf_h = 2.6 if (int(dx) % 3 != 0) else 3.5
+                    if abs(x - 15.5) < 0.6:
+                        put(x, y, 'G' if depth <= turf_h else 'b')
+                    elif x < 15.5:
+                        if depth <= turf_h:
+                            put(x, y, 'g' if depth < turf_h - 0.8 else 'G')
+                        elif y > bot_y - 2.2:
+                            put(x, y, 'c' if (x + y) % 2 == 0 else 'C')
+                        else:
+                            put(x, y, 'd' if (x * 3 + y) % 4 != 0 else ('D' if (x + y) % 2 == 0 else 'b'))
+                    else:
+                        if depth <= turf_h:
+                            put(x, y, 'G' if depth < turf_h - 0.8 else 'f')
+                        elif y > bot_y - 2.2:
+                            put(x, y, 'C')
+                        else:
+                            put(x, y, 'e' if (x * 2 + y) % 4 != 0 else 'E')
+
+    for sx in range(13, 19):
+        for sy in range(14, 17):
+            if abs(sx - 15.5) + abs(sy - 15.0) * 1.5 <= 3.2:
+                put(sx, sy, 'k')
+
+    pin_rows = [
+        "....kkkkkk....",
+        "..kkYYYYYYkk..",
+        ".kYYyrrrrrYYk.",
+        ".kYhrhhrrrrYk.",
+        "kYhrhkkkhrrrYk",
+        "kYrrkpppkrrrRk",
+        "kYrrkpppkrrRRk",
+        "kYrrkpppkrrRRk",
+        ".kYrrkkkrrrRk.",
+        ".kYrrrrrrrRRk.",
+        "..kYrrrrrRRk..",
+        "...kYrrrRRk...",
+        "....kYrrRk....",
+        ".....kYRk.....",
+        "......kk......",
+    ]
+    for ry, row in enumerate(pin_rows):
+        for rx, ch in enumerate(row):
             if ch != '.':
-                px[8 + x, 7 + y] = hexc(pal[ch])
-    return img
+                put(9 + rx, 1 + ry, ch)
+
+    return im
 
 
 def main():
