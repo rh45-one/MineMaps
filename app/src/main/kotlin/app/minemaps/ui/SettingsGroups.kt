@@ -101,10 +101,12 @@ fun UpdateDialog(ui: UpdateUi, offer: ReleaseInfo, onUpdate: () -> Unit, onLater
             when {
                 busy -> McButton(onCancel) { Text("Cancel") }
                 ui is UpdateUi.Failed -> McButton(onDismissFailure, variant = McVariant.PRIMARY) { Text("OK") }
-                else -> {
-                    McButton(onSkip) { Text("Skip this version") }
-                    McButton(onLater) { Text("Later") }
-                    McButton(onUpdate, variant = McVariant.PRIMARY) { Text("Update") }
+                else -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        McButton(onSkip, Modifier.weight(1f), fullWidth = true) { Text("Skip version", maxLines = 1) }
+                        McButton(onLater, Modifier.weight(1f), fullWidth = true) { Text("Later", maxLines = 1) }
+                    }
+                    McButton(onUpdate, variant = McVariant.PRIMARY, fullWidth = true) { Text("Update now", maxLines = 1) }
                 }
             }
         },
@@ -160,9 +162,13 @@ fun IncludeTexturesDialog(sizeMb: Long, metered: Boolean, onNow: () -> Unit, onN
         title = "Include Minecraft textures",
         onDismiss = onCancel,
         buttons = {
-            McButton(onCancel) { Text("Cancel") }
-            McButton(onNextUpdate) { Text("At next update") }
-            McButton(onNow, variant = McVariant.PRIMARY) { Text("Download now") }
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    McButton(onCancel, Modifier.weight(1f), fullWidth = true) { Text("Cancel", maxLines = 1) }
+                    McButton(onNextUpdate, Modifier.weight(1f), fullWidth = true) { Text("At next update", maxLines = 1) }
+                }
+                McButton(onNow, variant = McVariant.PRIMARY, fullWidth = true) { Text("Download now", maxLines = 1) }
+            }
         },
     ) {
         Text(

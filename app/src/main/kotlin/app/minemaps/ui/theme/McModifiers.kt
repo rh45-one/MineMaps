@@ -1,12 +1,12 @@
 package app.minemaps.ui.theme
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,14 +38,9 @@ private fun DrawScope.drawBevelFrame(b: Float, outline: Color, topLeft: Color, b
     drawRect(outline, Offset(w - b, 0f), Size(b, h))
 }
 
-/** Consumes any pointer events that were not already handled by child controls, so taps/drags on a panel do not fall through to the map View behind it. */
+/** Consumes taps, double-taps, and long-presses on a floating map overlay panel so they do not fall through to the map View behind it, without blocking parent scroll containers on full screens. */
 fun Modifier.consumeTouches(): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent(PointerEventPass.Final)
-            event.changes.forEach { it.consume() }
-        }
-    }
+    detectTapGestures(onPress = { tryAwaitRelease() }, onTap = {}, onDoubleTap = {}, onLongPress = {})
 }
 
 fun Modifier.mcPanel(colors: McColors, raised: Boolean = true): Modifier =

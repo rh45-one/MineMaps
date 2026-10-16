@@ -92,6 +92,7 @@ private fun BevelBox(
         else -> c.stoneLedge
     }
     val onFill = if (variant == McVariant.DANGER || green) c.onGreen else c.text
+    val fillWidth = minWidth == Dp.Unspecified
     Box(
         modifier
             .alpha(if (enabled) 1f else 0.5f)
@@ -108,7 +109,7 @@ private fun BevelBox(
             Modifier
                 .padding(bottom = LedgeHeight)
                 .offset { IntOffset(0, drop.roundToPx()) }
-                .widthIn(min = minWidth)
+                .let { if (fillWidth) it.fillMaxWidth() else it.widthIn(min = minWidth) }
                 .heightIn(min = minHeight)
                 .mcBevel(fill, if (focused) c.focus else c.outline, if (green) c.greenHighlight else if (variant == McVariant.DANGER) Color(0xFFE06060) else c.highlight, if (green) c.greenLedge else if (variant == McVariant.DANGER) c.dangerLedge else c.shadow),
             contentAlignment = Alignment.Center,
@@ -124,9 +125,10 @@ fun McButton(
     modifier: Modifier = Modifier,
     variant: McVariant = McVariant.SECONDARY,
     enabled: Boolean = true,
+    fullWidth: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    BevelBox(onClick, modifier, variant, enabled, Role.Button, 44.dp, 64.dp, false) {
+    BevelBox(onClick, if (fullWidth) modifier.fillMaxWidth() else modifier, variant, enabled, Role.Button, 44.dp, if (fullWidth) Dp.Unspecified else 64.dp, false) {
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
