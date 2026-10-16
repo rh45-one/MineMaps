@@ -109,3 +109,7 @@ Query: every token must be a prefix of a name token (English or local), accents 
 
 ## Label obstacles
 Bookmarks suppress POI icons (obstacles added after place labels). The player arrow (arrow box + 4 dp) and the search pin are priority obstacles, registered before any label, so place/water/road labels and icons never sit under them; the layout key includes the marker positions. Search ranking: exact name, then all-token matches (local before network), then partial matches; local POIs are weighted by OMT rank and landmark classes.
+
+## Texture pack importer and resolution
+`MinecraftImporter` (package `art.importer`) is a Kotlin port of `tools/art/import_minecraft.py`: same recipes, frame/tint/over/flatten/biome/rotations/scale_icon/center_x, HD downscale with Pillow's premultiplied BOX resample, fallback to the original cells, pin anchor [8,16], atlas layout 16 columns of 16 px cells, and the same `atlas.json` shape. Images are non-premultiplied ARGB (`Rgba`); PNG decode is a platform hook (`PngDecoder`), encoding is `PngWriter` (exact, filter 0). Constants: `PINNED_VERSION=26.3`, `PINNED_SHA1`, `PINNED_SIZE`, `IMPORTER_VERSION=1`; download URL `https://piston-data.mojang.com/v1/objects/<sha1>/client.jar`.
+Resolution of `TexturePack.VANILLA`: the pack bundled on the classpath (self-builds) if present, else the stored pack in `filesDir/packs/vanilla/` if valid (parses, has every texture/icon name of the original atlas, files match `meta.json`'s sha256), else the original pack.

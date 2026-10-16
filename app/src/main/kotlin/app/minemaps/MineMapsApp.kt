@@ -15,6 +15,7 @@ import app.minemaps.engine.geo.Mercator
 import app.minemaps.engine.search.PlaceIndex
 import app.minemaps.engine.search.PlacePrefetcher
 import app.minemaps.map.MapEngine
+import app.minemaps.map.TexturePackManager
 import app.minemaps.search.PhotonClient
 import app.minemaps.update.UpdateManager
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +51,7 @@ class AppContainer(app: Application) {
     val settings = SettingsRepository(app.settingsStore)
     val mapState = MapStateRepository(app.cameraStore)
     val updates = UpdateManager(app, appScope, settings, client = { httpClient.await() })
+    val textures = TexturePackManager(app, appScope, settings, engine = { engine.await() }, client = { httpClient.await() })
     val photon = PhotonClient({ httpClient.await() }, BuildConfig.PHOTON_URL, BuildConfig.USER_AGENT)
 
     init {
@@ -99,6 +101,7 @@ class MineMapsApp : Application() {
         }
         DebugTools.apply(false)
         container = AppContainer(this)
+        container.textures.start()
         container.appScope.launch {
             container.settings.settings.map { it.debugMode }.distinctUntilChanged().collect { DebugTools.apply(it) }
         }

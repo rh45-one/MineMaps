@@ -4,7 +4,7 @@
 MineMaps does not ship any Mojang assets. This script reads them locally and writes a git-ignored pack that only ends
 up in APKs you build yourself. Such builds are for personal use and must not be distributed.
 
-    python3 tools/art/import_minecraft.py                      # official client jar of the latest release, from Mojang
+    python3 tools/art/import_minecraft.py                      # official client jar of the pinned release (26.3), from Mojang
     python3 tools/art/import_minecraft.py --version 1.21.5     # a specific release
     python3 tools/art/import_minecraft.py --jar PATH.jar       # a jar you already have (~/.minecraft/versions/<v>/<v>.jar)
     python3 tools/art/import_minecraft.py --resource-pack P    # a resource pack (.zip or folder) layered on top
@@ -29,6 +29,7 @@ ORIGINAL = os.path.join(ROOT, 'mapengine/src/main/resources/minemaps')
 OUT = os.path.join(ORIGINAL, 'packs/vanilla')
 CACHE = os.path.expanduser('~/.cache/minemaps-mc')
 MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+PINNED_VERSION = '26.3'  # same as MinecraftImporter.PINNED_VERSION in the app
 PREFIX = 'assets/minecraft/textures/'
 T, COLS = 16, 16
 WATER = (0x3F, 0x76, 0xE4)
@@ -44,7 +45,7 @@ def fetch(url):
 def get_jar(version):
     os.makedirs(CACHE, exist_ok=True)
     manifest = json.loads(fetch(MANIFEST))
-    version = version or manifest['latest']['release']
+    version = version or PINNED_VERSION
     entry = next((v for v in manifest['versions'] if v['id'] == version), None)
     if not entry:
         sys.exit(f'unknown Minecraft version {version}')
@@ -238,7 +239,7 @@ def recipes(tx):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--jar', help='Minecraft Java client jar you already have')
-    ap.add_argument('--version', help='release to download from Mojang (default: latest)')
+    ap.add_argument('--version', help=f'release to download from Mojang (default: {PINNED_VERSION}, the version the app pins)')
     ap.add_argument('--resource-pack', action='append', default=[], metavar='PATH',
                     help='resource pack .zip or folder searched before the jar (repeatable, first wins)')
     ap.add_argument('--offline', action='store_true', help='never download the client jar')

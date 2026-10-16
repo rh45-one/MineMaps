@@ -145,6 +145,10 @@ Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 ## Distribution
 - Versioned from git tags, signed with the release keystore in CI (`docs/RELEASING.md`); in-app updater (release builds only), saved-places export/import, debug-mode switch for LeakCanary (debug builds only).
 
+## Minecraft textures on device
+- `mapengine` has a pure-JVM Kotlin port of `tools/art/import_minecraft.py` (`engine/art/importer/`, Pillow-exact `Rgba` ops, `PngWriter`); a golden test checks it is pixel-identical to the Python output for the pinned client jar 26.3 (runs when `~/.cache/minemaps-mc/client-26.3.jar` and the bundled vanilla pack exist).
+- The app imports the pack into `filesDir/packs/vanilla/` (atomic, sha256-checked `meta.json`), from the pinned jar (download now / after the next update on unmetered Wi-Fi) or from a file; a bundled pack wins over the stored one.
+
 ## Known limitations
 
 - The updater was verified end to end on the emulator only (local fake GitHub API); the first real update will be the first run against api.github.com. Play Protect can block self-updates from an unknown developer (INSTALL_FAILED_VERIFICATION_FAILURE is shown in the dialog).

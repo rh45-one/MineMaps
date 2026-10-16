@@ -72,6 +72,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.minemaps.AppContainer
 import app.minemaps.data.Camera
 import app.minemaps.data.LabelNames
+import app.minemaps.engine.art.importer.MinecraftImporter
+import app.minemaps.map.PackUi
 import app.minemaps.update.UpdateUi
 import app.minemaps.data.BackupFormatException
 import app.minemaps.data.SavedPlacesBackup
@@ -178,6 +180,13 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
     val offer by container.updates.offer.collectAsStateWithLifecycle()
     val offerVisible by container.updates.dialogVisible.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { container.updates.checkIfDue() }
+    val packUi by container.textures.state.collectAsStateWithLifecycle()
+    val packRevision by engine.packRevision.collectAsStateWithLifecycle()
+    val vanillaAvail = remember(packRevision) { engine.isPackAvailable(TexturePack.VANILLA) }
+    val storedSource = remember(packRevision) { engine.storedPack?.source?.lineSequence()?.firstOrNull()?.take(120) }
+    var showInclude by rememberSaveable { mutableStateOf(false) }
+    val packLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) container.textures.importFromFile(uri) }
+    LaunchedEffect(Unit) { container.textures.messages.collect { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_LONG).show() } }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val msg = withContext(Dispatchers.IO) {
@@ -228,7 +237,7 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                 LaunchedEffect(Unit) { vm.refreshCacheSize() }
                 SettingsScreen(
                     settings, cacheSize, engine::atlas, engine.atlas(settings.texturePack),
-                    vanillaAvailable = engine.isPackAvailable(TexturePack.VANILLA),
+                    vanillaAvailable = vanillaAvail,
                     onTexturePack = { vm.setTexturePack(it) },
                     onArrowColor = { vm.setArrowColor(it) },
                     onBack = { vm.screen.value = Screen.MAP },
@@ -245,10 +254,32 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                         UpdatesGroup(settings, container.updates.enabled, updateUi, offer, vm::setUpdateFrequency, container.updates::checkNow, container.updates::install)
                         if (BuildConfig.DEBUG) DeveloperGroup(settings.debugMode) { vm.setDebugMode(it) }
                     },
+                    onIncludeTextures = { showInclude = true },
+                    texturesExtra = {
+                        TexturesExtra(
+                            available = vanillaAvail,
+                            bundled = engine.bundledVanilla,
+                            source = storedSource,
+                            pending = settings.texturesPending,
+                            onNow = { container.textures.importNow() },
+                            onRemove = { container.textures.remove() },
+                            onImportFile = { packLauncher.launch(arrayOf("application/java-archive", "application/zip", "application/octet-stream")) },
+                        )
+                    },
                 )
             }
             Screen.LICENCES -> LicencesScreen(oflText, engine.resolve(settings.texturePack) == TexturePack.VANILLA, onBack = { vm.screen.value = Screen.SETTINGS })
         }
+    }
+    if (packUi !is PackUi.Idle) PackProgressDialog(packUi, container.textures::cancel, container.textures::dismissFailure)
+    if (showInclude && packUi is PackUi.Idle) {
+        IncludeTexturesDialog(
+            sizeMb = MinecraftImporter.PINNED_SIZE / 1_000_000,
+            metered = container.textures.isMetered(),
+            onNow = { showInclude = false; container.textures.importNow() },
+            onNextUpdate = { showInclude = false; container.textures.armPending() },
+            onCancel = { showInclude = false },
+        )
     }
     val o = offer
     if (o != null && (offerVisible || updateUi !is UpdateUi.Idle && updateUi !is UpdateUi.Checking)) {
@@ -344,7 +375,8 @@ private fun MapScreen(
 
     LaunchedEffect(settings.showIcons) { renderer.showIcons = settings.showIcons }
     LaunchedEffect(settings.arrowColor) { renderer.arrowColor = settings.arrowColor }
-    LaunchedEffect(settings.texturePack) { renderer.pack = settings.texturePack }
+    val packRev by engine.packRevision.collectAsStateWithLifecycle()
+    LaunchedEffect(settings.texturePack, packRev) { renderer.pack = settings.texturePack }
     LaunchedEffect(settings.labelNames) { renderer.nameMode = if (settings.labelNames == LabelNames.LOCAL) NameResolver.Mode.LOCAL else NameResolver.Mode.ENGLISH }
     LaunchedEffect(settings.showStreetNames) { renderer.showStreetNames = settings.showStreetNames }
 

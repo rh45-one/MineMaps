@@ -43,7 +43,17 @@ Android Auto (POI category, `MapWithContentTemplate`, car API level 7)
   `cmdline-tools/latest/bin`, `platform-tools` and `emulator` on `PATH`, and adds the extracted DHU shared libraries
   (see below) to `LD_LIBRARY_PATH`. Source it in every shell that uses `adb`, `emulator` or the DHU.
 
+## Minecraft textures (optional)
+
+MineMaps releases contain only the app's own original art. Minecraft's textures belong to Mojang Studios, so they are never in the repository or in a release APK. You can add them on your phone:
+
+- **In the app:** Settings > Textures > *Include Minecraft textures*. Choose *Download now* (downloads the official Minecraft 26.3 client jar, about 41 MB, directly from Mojang, checks its SHA-1, builds the texture pack on the phone and deletes the jar) or *At next update* (the same download happens automatically on Wi-Fi after the app is next updated). You should own Minecraft Java Edition.
+- **From a file:** Settings > Textures > *Import from file...* takes a client jar or a resource-pack zip (HD packs are scaled to 16x16); works offline.
+- The imported pack lives in the app's private storage, survives app updates, and can be removed in Settings. If the stored pack is damaged or made by an older importer, the original art is used until it is re-imported (automatically on Wi-Fi).
+
 ## Optional: build it yourself with Minecraft's textures
+
+If you build the app from source you can instead bundle the textures into your own APK (a bundled pack takes precedence over the imported one):
 
 MineMaps ships only its own original art. It can also show Minecraft's real block textures, item icons, map arrow and
 banner markers (Settings > Textures > Minecraft), but those belong to Mojang Studios and are **not included in this
@@ -77,7 +87,7 @@ Where the textures come from, in order of preference:
 | Command | Source |
 |---|---|
 | `tools/build-minecraft.sh --jar ~/.minecraft/versions/1.21.5/1.21.5.jar` | The game you already have installed (path differs per launcher). |
-| `tools/build-minecraft.sh` | The official client jar for the latest release, downloaded directly from Mojang's own launcher servers (the same file the Minecraft launcher fetches), SHA-1 verified, cached in `~/.cache/minemaps-mc`. `--version 1.21.5` picks a release. |
+| `tools/build-minecraft.sh` | The official client jar for the pinned release (26.3), downloaded directly from Mojang's own launcher servers (the same file the Minecraft launcher fetches), SHA-1 verified, cached in `~/.cache/minemaps-mc`. The default is the version the app pins (26.3); `--version 1.21.5` picks another release. |
 | `tools/build-minecraft.sh --resource-pack MyPack.zip` | Any Minecraft resource pack (zip or folder) layered on top of the game textures. HD packs are scaled to 16x16. Add `--offline` to use only the pack; whatever it lacks keeps the MineMaps art. |
 
 The importer (`tools/art/import_minecraft.py`, also usable on its own with the same options) never downloads from

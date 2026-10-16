@@ -31,6 +31,8 @@ data class Settings(
     val lastUpdateCheck: Long = 0L,
     val lastUpdateResult: String = "",
     val skippedVersionCode: Int = 0,
+    val texturesPending: Boolean = false,
+    val pendingSinceVersionCode: Int = 0,
 )
 
 object ArrowColors {
@@ -62,6 +64,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val lastCheckKey = longPreferencesKey("last_update_check")
     private val lastResultKey = stringPreferencesKey("last_update_result")
     private val skippedKey = intPreferencesKey("skipped_version_code")
+    private val pendingKey = booleanPreferencesKey("textures_pending")
+    private val pendingSinceKey = intPreferencesKey("pending_since_version_code")
 
     val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
@@ -78,6 +82,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             lastUpdateCheck = p[lastCheckKey] ?: 0L,
             lastUpdateResult = p[lastResultKey]?.take(200) ?: "",
             skippedVersionCode = p[skippedKey] ?: 0,
+            texturesPending = p[pendingKey] ?: false,
+            pendingSinceVersionCode = p[pendingSinceKey] ?: 0,
         )
     }
 
@@ -107,4 +113,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     }
 
     suspend fun setSkippedVersion(code: Int) = store.edit { it[skippedKey] = code }
+
+    suspend fun setTexturesPending(pending: Boolean, sinceVersionCode: Int) = store.edit {
+        it[pendingKey] = pending
+        it[pendingSinceKey] = sinceVersionCode
+    }
 }

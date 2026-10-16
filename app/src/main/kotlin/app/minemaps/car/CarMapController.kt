@@ -139,6 +139,7 @@ class CarMapController(
             container.register(r)
             renderer = r
             launch { r.networkState.collect { networkState.value = it } }
+            launch { engine.packRevision.collect { r.pack = texturePack } }
             requestRender()
         }
     }

@@ -53,6 +53,7 @@ class MapRenderer(
     private var nameResolver = engine.nameResolver(NameResolver.Mode.ENGLISH)
     private var generation = 0
     private var activePack: TexturePack = engine.resolve(initialPack)
+    private var appliedRevision = engine.packRevision.value
     private var atlas: TextureAtlas = engine.atlas(activePack)
     private val _networkState = MutableStateFlow(NetState.OK)
     private var networkJob: Job? = null
@@ -85,7 +86,9 @@ class MapRenderer(
         get() = activePack
         set(value) {
             val resolved = engine.resolve(value)
-            if (resolved == activePack) return
+            val revision = engine.packRevision.value
+            if (resolved == activePack && (resolved == TexturePack.ORIGINAL || revision == appliedRevision)) return
+            appliedRevision = revision
             val old = provider
             old.retainOnly(emptyList())
             activePack = resolved

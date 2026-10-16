@@ -45,3 +45,6 @@ Release candidate: `git tag -a v1.2.0-rc.1 -m "rc 1" && git push origin v1.2.0-r
 
 ## Self-built APKs
 A local build is update-compatible with official releases only when signed with the same key (`~/.config/minemaps/keystore.properties`). `tools/phone.sh --release` and `tools/build-minecraft.sh --release` warn when the key is missing. A build that includes the Minecraft texture pack must never be distributed.
+
+## Minecraft textures never ship
+The release workflow refuses to publish an APK that contains `minemaps/packs/vanilla` (see `tools/ci/verify-apk.sh`). Users add the textures on the device (Settings > Textures), which downloads Mojang's client jar and builds the pack locally; the pinned version lives in `MinecraftImporter` (`PINNED_VERSION`, `PINNED_SHA1`, `PINNED_SIZE`) and in `tools/art/import_minecraft.py` (`PINNED_VERSION`). Bump the importer version constant when the recipes change so installed packs are rebuilt on Wi-Fi.

@@ -177,6 +177,8 @@ fun SettingsScreen(
     onClearCache: () -> Unit,
     onLicences: () -> Unit,
     extra: @Composable ColumnScope.() -> Unit = {},
+    onIncludeTextures: () -> Unit = {},
+    texturesExtra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val c = Mc.colors
     val win = rememberMcWindow()
@@ -186,15 +188,13 @@ fun SettingsScreen(
 
     val left: @Composable ColumnScope.() -> Unit = {
         Group("Textures") {
-            McSegmented(2, if (vanillaSelected) 1 else 0, { onTexturePack(if (it == 1) TexturePack.VANILLA else TexturePack.ORIGINAL) }, enabled = { it == 0 || vanillaAvailable }) { i, _ ->
+            McSegmented(2, if (vanillaSelected) 1 else 0, { if (it == 1 && !vanillaAvailable) onIncludeTextures() else onTexturePack(if (it == 1) TexturePack.VANILLA else TexturePack.ORIGINAL) }) { i, _ ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TexturePreview(atlasOf(if (i == 1 && vanillaAvailable) TexturePack.VANILLA else TexturePack.ORIGINAL))
-                    Text(if (i == 0) "MineMaps original" else "Minecraft (from your game files)", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(if (i == 0) "MineMaps original" else if (vanillaAvailable) "Minecraft textures" else "Include Minecraft textures", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
-            if (!vanillaAvailable) {
-                Text("Run tools/art/import_minecraft.py, then rebuild", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
-            }
+            texturesExtra()
         }
         Group("Theme") {
             val modes = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")

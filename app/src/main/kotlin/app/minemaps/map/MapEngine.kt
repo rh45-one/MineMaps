@@ -9,6 +9,8 @@ import app.minemaps.BuildConfig
 import app.minemaps.engine.art.EngineResources
 import app.minemaps.engine.art.TextureAtlas
 import app.minemaps.engine.art.TexturePack
+import app.minemaps.engine.art.importer.MinecraftImporter
+import kotlinx.serialization.json.jsonObject
 import app.minemaps.engine.labels.NameResolver
 import app.minemaps.engine.data.DiskTileCache
 import app.minemaps.engine.data.OpenMapTilesSource
@@ -27,6 +29,11 @@ class MapEngine(context: Context, val client: OkHttpClient, placeIndex: PlaceInd
         }
     }
     private val atlases = HashMap<TexturePack, TextureAtlas>()
+    val packStore = TexturePackStore(context.filesDir)
+
+    @Volatile
+    private var stored: StoredPack? = null
+    val packRevision = kotlinx.coroutines.flow.MutableStateFlow(0)
     val transliterator = AndroidTransliterator()
 
     fun nameResolver(mode: NameResolver.Mode) = NameResolver(mode, transliterator)
@@ -34,12 +41,35 @@ class MapEngine(context: Context, val client: OkHttpClient, placeIndex: PlaceInd
     val typeface: Typeface = loadTypeface(context)
     val memoryClassMb: Int = context.getSystemService(ActivityManager::class.java).memoryClass
 
+    private val requiredNames: Set<String> = run {
+        val root = kotlinx.serialization.json.Json.parseToJsonElement(EngineResources.atlasJson(TexturePack.ORIGINAL)).jsonObject
+        (root["textures"]?.jsonObject?.keys.orEmpty().map { "t:$it" } + root["icons"]?.jsonObject?.keys.orEmpty().map { "i:$it" }).toSet()
+    }
+
     init {
+        reloadStoredPack(notify = false)
         atlas(TexturePack.ORIGINAL)
         if (isPackAvailable(TexturePack.VANILLA)) atlas(TexturePack.VANILLA)
     }
 
-    fun isPackAvailable(pack: TexturePack): Boolean = EngineResources.isAvailable(pack)
+    val bundledVanilla: Boolean get() = EngineResources.isAvailable(TexturePack.VANILLA)
+
+    val storedPack: StoredPack? get() = stored
+
+    /** A stored pack exists on disk but is invalid or was made by an older importer. */
+    val storedPackNeedsReimport: Boolean
+        get() = !bundledVanilla && (stored == null && packStore.exists || (stored?.meta?.importerVersion ?: Int.MAX_VALUE) < MinecraftImporter.IMPORTER_VERSION)
+
+    /** Re-reads the stored pack from disk (after an import or removal) and drops its cached atlas. */
+    @Synchronized
+    fun reloadStoredPack(notify: Boolean = true) {
+        stored = packStore.load(requiredNames)?.takeIf { runCatching { decode(it.atlasPng, it.atlasJson) }.isSuccess }
+        atlases.remove(TexturePack.VANILLA)
+        if (notify) packRevision.value = packRevision.value + 1
+    }
+
+    /** Bundled pack (self-builds) wins over the imported one. */
+    fun isPackAvailable(pack: TexturePack): Boolean = pack == TexturePack.ORIGINAL || bundledVanilla || stored != null
 
     /** The pack to actually use: the requested one if it is bundled, otherwise the original. */
     fun resolve(pack: TexturePack): TexturePack = if (isPackAvailable(pack)) pack else TexturePack.ORIGINAL
@@ -48,7 +78,14 @@ class MapEngine(context: Context, val client: OkHttpClient, placeIndex: PlaceInd
     fun atlas(pack: TexturePack): TextureAtlas = atlases.getOrPut(resolve(pack)) { decodeAtlas(resolve(pack)) }
 
     private fun decodeAtlas(pack: TexturePack): TextureAtlas {
-        val bytes = EngineResources.atlasPng(pack)
+        if (pack == TexturePack.VANILLA && !bundledVanilla) {
+            val s = stored ?: error("no stored pack")
+            return decode(s.atlasPng, s.atlasJson)
+        }
+        return decode(EngineResources.atlasPng(pack), EngineResources.atlasJson(pack))
+    }
+
+    private fun decode(bytes: ByteArray, json: String): TextureAtlas {
         val options = BitmapFactory.Options().apply {
             inPremultiplied = false
             inPreferredConfig = Bitmap.Config.ARGB_8888
@@ -56,7 +93,7 @@ class MapEngine(context: Context, val client: OkHttpClient, placeIndex: PlaceInd
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         val pixels = IntArray(bmp.width * bmp.height)
         bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-        val atlas = TextureAtlas(bmp.width, bmp.height, pixels, EngineResources.atlasJson(pack))
+        val atlas = TextureAtlas(bmp.width, bmp.height, pixels, json)
         bmp.recycle()
         return atlas
     }

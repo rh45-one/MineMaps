@@ -130,3 +130,73 @@ fun UpdateDialog(ui: UpdateUi, offer: ReleaseInfo, onUpdate: () -> Unit, onLater
         }
     }
 }
+
+@Composable
+fun TexturesExtra(available: Boolean, bundled: Boolean, source: String?, pending: Boolean, onNow: () -> Unit, onRemove: () -> Unit, onImportFile: () -> Unit) {
+    val c = Mc.colors
+    Spacer(Modifier.height(8.dp))
+    when {
+        available && bundled -> Text("Minecraft textures are bundled in this build.", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+        available -> {
+            if (!source.isNullOrBlank()) Text(source, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            Spacer(Modifier.height(8.dp))
+            McButton(onRemove, variant = McVariant.DANGER) { Text("Remove") }
+        }
+        pending -> {
+            Text("Will download after the next update (on Wi-Fi)", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            Spacer(Modifier.height(8.dp))
+            McButton(onNow) { Text("Download now") }
+        }
+    }
+    if (!(available && bundled)) {
+        Spacer(Modifier.height(8.dp))
+        McButton(onImportFile) { Text("Import from file\u2026") }
+    }
+}
+
+@Composable
+fun IncludeTexturesDialog(sizeMb: Long, metered: Boolean, onNow: () -> Unit, onNextUpdate: () -> Unit, onCancel: () -> Unit) {
+    McDialog(
+        title = "Include Minecraft textures",
+        onDismiss = onCancel,
+        buttons = {
+            McButton(onCancel) { Text("Cancel") }
+            McButton(onNextUpdate) { Text("At next update") }
+            McButton(onNow, variant = McVariant.PRIMARY) { Text("Download now") }
+        },
+    ) {
+        Text(
+            "Minecraft's textures (\u00a9 Mojang) are downloaded from Mojang's servers (Minecraft ${app.minemaps.engine.art.importer.MinecraftImporter.PINNED_VERSION}, about $sizeMb MB) and kept on this phone for your personal use. You should own Minecraft Java Edition.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (metered) Text("You are on a metered connection: downloading now uses mobile data.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = Mc.colors.gold)
+        Text("\"At next update\" downloads them automatically on Wi-Fi after the app is next updated.", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = Mc.colors.textSecondary)
+    }
+}
+
+@Composable
+fun PackProgressDialog(ui: app.minemaps.map.PackUi, onCancel: () -> Unit, onDismissFailure: () -> Unit) {
+    val c = Mc.colors
+    val failed = ui is app.minemaps.map.PackUi.Failed
+    McDialog(
+        title = if (failed) "Textures failed" else "Minecraft textures",
+        onDismiss = { if (failed) onDismissFailure() },
+        buttons = {
+            if (failed) McButton(onDismissFailure, variant = McVariant.PRIMARY) { Text("OK") } else McButton(onCancel) { Text("Cancel") }
+        },
+    ) {
+        if (ui is app.minemaps.map.PackUi.Failed) {
+            Text(ui.message, style = MaterialTheme.typography.bodyMedium, color = c.danger)
+            return@McDialog
+        }
+        val (label, fraction) = when (ui) {
+            is app.minemaps.map.PackUi.Downloading -> (if (ui.total > 0) "Downloading\u2026 ${ui.bytes / 1_000_000} / ${ui.total / 1_000_000} MB" else "Reading file\u2026 ${ui.bytes / 1_000_000} MB") to (if (ui.total > 0) ui.bytes.toFloat() / ui.total else 0f)
+            is app.minemaps.map.PackUi.Importing -> "Building the texture pack\u2026 ${ui.percent}%" to ui.percent / 100f
+            else -> "" to 0f
+        }
+        Text(label, Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodyMedium)
+        Box(Modifier.fillMaxWidth().height(14.dp).background(c.outline).padding(2.dp)) {
+            Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).fillMaxHeight().background(c.green))
+        }
+    }
+}
