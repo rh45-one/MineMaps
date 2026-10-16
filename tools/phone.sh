@@ -44,7 +44,7 @@ if [[ $REINSTALL -eq 1 ]]; then
   A uninstall "$PKG" >/dev/null 2>&1 || true
 fi
 echo "Installing $(basename "$APK")..."
-if ! OUT="$(A install -r "$APK" 2>&1)"; then
+if ! OUT="$(A install -r -i com.android.vending "$APK" 2>&1)"; then
   echo "$OUT" >&2
   if grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE\|signatures do not match" <<<"$OUT"; then
     die "the installed MineMaps is signed with a different key. Rerun with --reinstall (this deletes saved places on the phone)."
