@@ -215,4 +215,34 @@ object RouteTracker {
         val mins = max(1, (seconds / 60.0).toInt())
         return if (mins < 60) "$mins min" else "${mins / 60} h ${mins % 60} min"
     }
+
+    /** Cycles through zoom presets (Overview 14.5 -> Street 16.5 -> Block Close-up 18.5) when tapping the recenter button repeatedly while already following. */
+    fun nextRecenterZoom(currentZoom: Double): Double = when {
+        currentZoom < 15.8 -> 16.5
+        currentZoom < 17.8 -> 18.5
+        else -> 14.5
+    }
+
+    /** Computes the Google-Maps-style dynamic driving zoom based on speed (m/s) and optional OpenMapTiles road class. */
+    fun targetDrivingZoom(speedMps: Float, roadClass: String? = null): Double? {
+        if (!speedMps.isFinite() || speedMps < 1.5f) return null
+        val kmh = speedMps * 3.6
+        val bySpeed = when {
+            kmh >= 100.0 -> 14.5
+            kmh >= 70.0 -> 15.2
+            kmh >= 40.0 -> 16.0
+            kmh >= 15.0 -> 16.8
+            else -> 17.5
+        }
+        val byRoad = when (roadClass) {
+            "motorway" -> 14.5
+            "trunk" -> 15.0
+            "primary" -> 15.6
+            "secondary", "tertiary" -> 16.3
+            "minor", "service" -> 17.0
+            "path", "track", "pedestrian" -> 17.6
+            else -> null
+        }
+        return if (byRoad != null) (bySpeed * 0.6 + byRoad * 0.4) else bySpeed
+    }
 }

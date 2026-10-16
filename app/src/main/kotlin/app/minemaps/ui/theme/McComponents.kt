@@ -36,7 +36,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -77,14 +83,20 @@ private fun BevelBox(
 ) {
     val c = Mc.colors
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
+    val isHeld by source.collectIsPressedAsState()
+    var tapHold by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(isHeld) {
+        if (isHeld) tapHold = true
+    }
+    val depressed = (isHeld || tapHold) && enabled
     val focused by source.collectIsFocusedAsState()
-    val drop by animateDpAsState(if (pressed && enabled) LedgeHeight else 0.dp, tween(60), label = "press")
+    val drop by animateDpAsState(if (depressed) LedgeHeight else 0.dp, tween(45), label = "press")
     val green = variant == McVariant.PRIMARY || selected
     val fill = when {
         variant == McVariant.DANGER -> c.danger
-        green -> if (pressed) c.greenHighlight else c.green
-        else -> if (pressed) c.highlight else c.raised
+        green -> if (depressed) c.greenHighlight else c.green
+        else -> if (depressed) c.highlight else c.raised
     }
     val ledge = when {
         variant == McVariant.DANGER -> c.dangerLedge
@@ -103,7 +115,20 @@ private fun BevelBox(
                 drawRect(ledge, Offset(b, size.height - l), Size(size.width - 2 * b, l - b))
             }
             .semantics { this.selected = selected }
-            .clickable(interactionSource = source, indication = null, enabled = enabled, role = role, onClick = onClick),
+            .clickable(
+                interactionSource = source,
+                indication = null,
+                enabled = enabled,
+                role = role,
+                onClick = {
+                    tapHold = true
+                    scope.launch {
+                        delay(115)
+                        tapHold = false
+                        onClick()
+                    }
+                },
+            ),
     ) {
         Box(
             Modifier
@@ -186,9 +211,24 @@ fun McTextField(
     val c = Mc.colors
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
+    var tfv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(value)) }
+    if (tfv.text != value) {
+        tfv = androidx.compose.ui.text.input.TextFieldValue(
+            text = value,
+            selection = if (focused) androidx.compose.ui.text.TextRange(value.length) else androidx.compose.ui.text.TextRange.Zero,
+        )
+    }
+    LaunchedEffect(focused) {
+        if (!focused && tfv.selection != androidx.compose.ui.text.TextRange.Zero) {
+            tfv = tfv.copy(selection = androidx.compose.ui.text.TextRange.Zero)
+        }
+    }
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = tfv,
+        onValueChange = { next ->
+            tfv = next
+            if (next.text != value) onValueChange(next.text)
+        },
         modifier = modifier,
         singleLine = true,
         interactionSource = source,

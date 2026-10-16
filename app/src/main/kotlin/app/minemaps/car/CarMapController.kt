@@ -76,6 +76,7 @@ class CarMapController(
     override val streetNames = MutableStateFlow(true)
     private var searchPin: LatLng? = null
     private var activeRoute: app.minemaps.engine.routing.RoutePlan? = null
+    private var roadAlerts: List<app.minemaps.engine.routing.RoadAlert> = emptyList()
 
     private val main = Handler(Looper.getMainLooper())
     private var renderer: MapRenderer? = null
@@ -115,6 +116,12 @@ class CarMapController(
     private var arrowColor: Int = app.minemaps.data.ArrowColors.DEFAULT
     private var gotFix = false
     private var cameraLoaded = false
+    private var dynamicZoom = true
+    private var showTraffic = true
+    private var showRoadAlerts = true
+    private var lastManualRecenterMs = 0L
+    private var lastRoadProbeMs = 0L
+    private var detectedRoadClass: String? = null
 
     private val frameCallback = Choreographer.FrameCallback { frameNs ->
         frameQueued = false
@@ -171,6 +178,9 @@ class CarMapController(
                     renderer?.pack = it.texturePack
                     nameMode = names(it)
                     showStreetNames = it.showStreetNames
+                    dynamicZoom = it.dynamicDrivingZoom
+                    showTraffic = it.showTraffic
+                    showRoadAlerts = it.showRoadAlerts
                     streetNames.value = it.showStreetNames
                     renderer?.nameMode = names(it)
                     renderer?.showStreetNames = it.showStreetNames
@@ -187,6 +197,12 @@ class CarMapController(
             launch {
                 container.navigation.activePlan.collect {
                     activeRoute = it
+                    requestRender()
+                }
+            }
+            launch {
+                container.roadAlerts.collect {
+                    roadAlerts = it
                     requestRender()
                 }
             }
@@ -221,8 +237,22 @@ class CarMapController(
         if (l != null) {
             gotFix = true
             if (following.value) {
-                val z = if (first && zoom < 14.0) FOLLOW_ZOOM else zoom
-                animateTo(Mercator.lonToX(l.longitude), Mercator.latToY(l.latitude), z)
+                val now = System.currentTimeMillis()
+                var targetZ = if (first && zoom < 14.0) FOLLOW_ZOOM else zoom
+                if (dynamicZoom && l.hasSpeed() && l.speed >= 1.5f && now - lastManualRecenterMs > 12_000L) {
+                    if (now - lastRoadProbeMs > 5_000L) {
+                        lastRoadProbeMs = now
+                        val wx = Mercator.lonToX(l.longitude)
+                        val wy = Mercator.latToY(l.latitude)
+                        scope.launch {
+                            detectedRoadClass = runCatching { renderer?.inspect(wx - Math.floor(wx), wy, 17.0)?.roadClass }.getOrNull()
+                        }
+                    }
+                    app.minemaps.engine.routing.RouteTracker.targetDrivingZoom(l.speed, detectedRoadClass)?.let { dynZ ->
+                        if (kotlin.math.abs(zoom - dynZ) >= 0.35) targetZ = dynZ
+                    }
+                }
+                animateTo(Mercator.lonToX(l.longitude), Mercator.latToY(l.latitude), targetZ)
             }
         }
         requestRender()
@@ -250,10 +280,19 @@ class CarMapController(
     }
 
     override fun recenter() {
+        val wasFollowing = following.value
         following.value = true
         val l = location.location
+        val targetZ = if (wasFollowing) {
+            lastManualRecenterMs = System.currentTimeMillis()
+            app.minemaps.engine.routing.RouteTracker.nextRecenterZoom(zoom)
+        } else {
+            if (zoom < 14.0) FOLLOW_ZOOM else zoom
+        }
         if (l != null) {
-            animateTo(Mercator.lonToX(l.longitude), Mercator.latToY(l.latitude), if (zoom < 14.0) FOLLOW_ZOOM else zoom)
+            animateTo(Mercator.lonToX(l.longitude), Mercator.latToY(l.latitude), targetZ)
+        } else if (wasFollowing) {
+            animateTo(cx, cy, targetZ, 300L)
         }
         requestRender()
     }
@@ -416,7 +455,14 @@ class CarMapController(
         val player = l?.let {
             PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f)
         }
-        return MapOverlays(player = player, bookmarks = savedPlaces.map { Bookmark(it.lat, it.lon, it.icon, it.name) }, searchPin = searchPin, route = activeRoute)
+        return MapOverlays(
+            player = player,
+            bookmarks = savedPlaces.map { Bookmark(it.lat, it.lon, it.icon, it.name) },
+            searchPin = searchPin,
+            route = activeRoute,
+            showTraffic = showTraffic,
+            roadAlerts = if (showRoadAlerts) roadAlerts else emptyList(),
+        )
     }
 
     private fun draw() {

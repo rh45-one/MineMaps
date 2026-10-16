@@ -1,6 +1,7 @@
 package app.minemaps.map
 
 import app.minemaps.engine.geo.LatLng
+import app.minemaps.engine.routing.RoadAlert
 import app.minemaps.engine.routing.RoutePlan
 
 class PlayerMarker(
@@ -18,6 +19,8 @@ class MapOverlays(
     val bookmarks: List<Bookmark> = emptyList(),
     val searchPin: LatLng? = null,
     val route: RoutePlan? = null,
+    val showTraffic: Boolean = true,
+    val roadAlerts: List<RoadAlert> = emptyList(),
 ) {
     companion object {
         val EMPTY = MapOverlays()

@@ -12,6 +12,9 @@ import app.minemaps.data.savedPlacesStore
 import app.minemaps.data.settingsStore
 import app.minemaps.location.LocationRepository
 import app.minemaps.engine.geo.Mercator
+import app.minemaps.engine.routing.RoadAlert
+import app.minemaps.engine.routing.RoadAlertsClient
+import app.minemaps.engine.routing.RouteTracker
 import app.minemaps.engine.routing.RoutingClient
 import app.minemaps.engine.search.PlaceIndex
 import app.minemaps.engine.search.PlacePrefetcher
@@ -28,6 +31,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -58,6 +62,8 @@ class AppContainer(app: Application) {
     val photon = PhotonClient({ httpClient.await() }, BuildConfig.PHOTON_URL, BuildConfig.USER_AGENT)
     val googlePlaces = GooglePlacesClient({ httpClient.await() }, BuildConfig.USER_AGENT)
     val routing = RoutingClient({ httpClient.await() }, BuildConfig.USER_AGENT)
+    val roadAlertsClient = RoadAlertsClient({ httpClient.await() }, BuildConfig.USER_AGENT)
+    val roadAlerts = kotlinx.coroutines.flow.MutableStateFlow<List<RoadAlert>>(emptyList())
     val navigation = NavigationController(
         appScope,
         settings,
@@ -69,6 +75,33 @@ class AppContainer(app: Application) {
 
     init {
         appScope.launch(Dispatchers.IO.limitedParallelism(1)) { feedPlaceIndex(app) }
+        appScope.launch(Dispatchers.IO) { feedRoadAlerts(app) }
+    }
+
+    private suspend fun feedRoadAlerts(app: Application) {
+        val connectivity = app.getSystemService(ConnectivityManager::class.java)
+        fun online() = connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        var lastLat = Double.NaN
+        var lastLon = Double.NaN
+        var lastFetchMs = 0L
+        while (true) {
+            val s = settings.settings.firstOrNull()
+            val c = mapState.current
+            if (s == null || !s.showRoadAlerts || c == null || c.zoom < 12.0 || !online()) {
+                if (s != null && !s.showRoadAlerts && roadAlerts.value.isNotEmpty()) roadAlerts.value = emptyList()
+                delay(5_000)
+                continue
+            }
+            val now = System.currentTimeMillis()
+            val movedM = if (lastLat.isFinite() && lastLon.isFinite()) RouteTracker.metersBetween(lastLat, lastLon, c.lat, c.lon) else Double.MAX_VALUE
+            if (movedM > 4_000.0 || now - lastFetchMs > 5 * 60_000L) {
+                lastLat = c.lat
+                lastLon = c.lon
+                lastFetchMs = now
+                runCatching { roadAlertsClient.fetchNearby(c.lat, c.lon) }.onSuccess { roadAlerts.value = it }
+            }
+            delay(10_000)
+        }
     }
 
     private suspend fun feedPlaceIndex(app: Application) {

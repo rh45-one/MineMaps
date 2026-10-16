@@ -158,4 +158,43 @@ class RoutingTest {
         assertEquals(true, endProg.arrived)
         assertEquals(0.0, endProg.remainingDistanceMeters, 1e-3)
     }
+
+    @Test
+    fun parsesOverpassRoadAlertsAndComputesDynamicZoomAndRecenterCycle() {
+        val sample = """
+            {
+              "elements": [
+                {
+                  "type": "node",
+                  "id": 101,
+                  "lat": 41.8902,
+                  "lon": 12.4922,
+                  "tags": { "highway": "speed_camera", "maxspeed": "50" }
+                },
+                {
+                  "type": "way",
+                  "id": 202,
+                  "center": { "lat": 41.8910, "lon": 12.4950 },
+                  "tags": { "highway": "construction" }
+                }
+              ]
+            }
+        """.trimIndent()
+        val alerts = app.minemaps.engine.routing.RoadAlertsParser.parseOverpass(sample)
+        assertEquals(2, alerts.size)
+        assertEquals(app.minemaps.engine.routing.RoadAlertKind.SPEED_CAMERA, alerts[0].kind)
+        assertEquals("Limit: 50 km/h", alerts[0].detail)
+        assertEquals(app.minemaps.engine.routing.RoadAlertKind.HAZARD, alerts[1].kind)
+
+        // Recenter zoom cycling
+        assertEquals(16.5, RouteTracker.nextRecenterZoom(14.5), 1e-3)
+        assertEquals(18.5, RouteTracker.nextRecenterZoom(16.5), 1e-3)
+        assertEquals(14.5, RouteTracker.nextRecenterZoom(18.5), 1e-3)
+
+        // Dynamic driving zoom
+        assertNull(RouteTracker.targetDrivingZoom(0.5f, "minor"))
+        val highwayZ = RouteTracker.targetDrivingZoom(30f, "motorway")!!
+        val streetZ = RouteTracker.targetDrivingZoom(6f, "minor")!!
+        assertTrue(highwayZ < streetZ, "highway zoom ($highwayZ) should be more zoomed-out than city street ($streetZ)")
+    }
 }

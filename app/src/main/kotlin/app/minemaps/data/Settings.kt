@@ -38,6 +38,9 @@ data class Settings(
     val navigationMode: NavigationMode = NavigationMode.STANDALONE,
     val mirrorGoogleMaps: Boolean = true,
     val googleApiKey: String = "",
+    val showTraffic: Boolean = true,
+    val showRoadAlerts: Boolean = true,
+    val dynamicDrivingZoom: Boolean = true,
 )
 
 object ArrowColors {
@@ -74,6 +77,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val navModeKey = stringPreferencesKey("navigation_mode")
     private val mirrorGmapsKey = booleanPreferencesKey("mirror_google_maps")
     private val googleKey = stringPreferencesKey("google_api_key")
+    private val trafficKey = booleanPreferencesKey("show_traffic")
+    private val alertsKey = booleanPreferencesKey("show_road_alerts")
+    private val dynZoomKey = booleanPreferencesKey("dynamic_driving_zoom")
 
     val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
@@ -95,6 +101,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             navigationMode = p[navModeKey]?.let { runCatching { NavigationMode.valueOf(it) }.getOrNull() } ?: NavigationMode.STANDALONE,
             mirrorGoogleMaps = p[mirrorGmapsKey] ?: true,
             googleApiKey = p[googleKey]?.take(128)?.trim() ?: "",
+            showTraffic = p[trafficKey] ?: true,
+            showRoadAlerts = p[alertsKey] ?: true,
+            dynamicDrivingZoom = p[dynZoomKey] ?: true,
         )
     }
 
@@ -135,4 +144,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setMirrorGoogleMaps(v: Boolean) = store.edit { it[mirrorGmapsKey] = v }
 
     suspend fun setGoogleApiKey(v: String) = store.edit { it[googleKey] = v.trim().take(128) }
+
+    suspend fun setShowTraffic(v: Boolean) = store.edit { it[trafficKey] = v }
+
+    suspend fun setShowRoadAlerts(v: Boolean) = store.edit { it[alertsKey] = v }
+
+    suspend fun setDynamicDrivingZoom(v: Boolean) = store.edit { it[dynZoomKey] = v }
 }

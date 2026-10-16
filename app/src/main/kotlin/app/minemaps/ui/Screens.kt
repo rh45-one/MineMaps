@@ -1,5 +1,8 @@
 package app.minemaps.ui
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,7 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,6 +46,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.minemaps.R
 import app.minemaps.data.ArrowColors
 import app.minemaps.data.LabelNames
 import app.minemaps.data.SavedPlace
@@ -46,6 +54,7 @@ import app.minemaps.data.Settings
 import app.minemaps.data.ThemeMode
 import app.minemaps.engine.art.TextureAtlas
 import app.minemaps.engine.art.TexturePack
+import app.minemaps.engine.search.PlaceIndex
 import app.minemaps.ui.theme.Glyph
 import app.minemaps.ui.theme.Mc
 import app.minemaps.ui.theme.McButton
@@ -59,8 +68,10 @@ import app.minemaps.ui.theme.McSectionHeader
 import app.minemaps.ui.theme.McSegmented
 import app.minemaps.ui.theme.McSlot
 import app.minemaps.ui.theme.McSwitch
+import app.minemaps.ui.theme.McTextField
 import app.minemaps.ui.theme.McTopBar
 import app.minemaps.ui.theme.McVariant
+import app.minemaps.ui.theme.PixelGlyph
 import app.minemaps.ui.theme.rememberMcWindow
 import java.util.Locale
 import androidx.compose.runtime.setValue
@@ -151,12 +162,79 @@ fun SavedPlacesScreen(
 }
 
 @Composable
-private fun TexturePreview(atlas: TextureAtlas) {
+private fun TexturePreview(atlas: TextureAtlas, isMinecraftSlot: Boolean, vanillaAvailable: Boolean) {
+    val ctx = LocalContext.current
+    if (isMinecraftSlot && !vanillaAvailable) {
+        val strip = remember {
+            val opts = BitmapFactory.Options().apply { inScaled = false }
+            BitmapFactory.decodeResource(ctx.resources, R.drawable.preview_pack_minecraft, opts)?.asImageBitmap()
+        }
+        if (strip != null) {
+            Image(bitmap = strip, contentDescription = null, modifier = Modifier.width(92.dp).height(28.dp), filterQuality = FilterQuality.None)
+            return
+        }
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         for (n in listOf("grass", "water", "stone_bricks")) {
             val img = remember(atlas, n) { terrainImage(atlas, n) }
             PixelIcon(img, 28.dp)
         }
+    }
+}
+
+enum class SettingsSubmenu(val title: String, val subtitle: String, val iconName: String) {
+    TEXTURES_APPEARANCE("Textures & Appearance", "Texture pack, theme, arrow colour", "emerald"),
+    MAP_LABELS("Map & Labels", "Place language, POI item icons", "map"),
+    NAVIGATION("Navigation & Driving", "Routing, Google Maps, traffic, radars, auto-zoom", "compass"),
+    PLACES_STORAGE("Saved Places & Storage", "Export/import backups, tile cache", "chest"),
+    UPDATES_ABOUT("Updates & About", "Version checks, licences, OpenStreetMap credits", "book"),
+}
+
+object SettingsSearch {
+    private val KEYWORDS: Map<String, List<String>> = mapOf(
+        "textures" to listOf("textures", "pack", "minecraft", "vanilla", "original", "blocks", "resource", "mojang", "skins", "jar", "style"),
+        "theme" to listOf("theme", "dark", "light", "night", "day", "system", "mode", "appearance", "colour", "color", "brightness"),
+        "arrow" to listOf("arrow", "player", "marker", "cursor", "pointer", "colour", "color", "tint", "icon"),
+        "labels" to listOf("label", "names", "language", "english", "latin", "local", "alphabet", "arabic", "cyrillic", "script", "translate", "street"),
+        "details" to listOf("map", "details", "item", "icons", "poi", "shops", "markers", "pins", "symbols"),
+        "navigation" to listOf("navigation", "route", "routing", "directions", "turn", "osrm", "google", "maps", "assisted", "standalone", "mirror", "notification", "api", "key", "places", "traffic", "congestion", "jam", "alerts", "radar", "speed", "camera", "accident", "hazard", "roadworks", "construction", "dynamic", "zoom", "driving", "auto"),
+        "saved_places" to listOf("saved", "places", "bookmarks", "favourites", "favorites", "export", "import", "backup", "restore", "json", "file"),
+        "storage" to listOf("storage", "tile", "cache", "clear", "delete", "disk", "space", "memory", "offline", "megabytes", "mb"),
+        "updates" to listOf("updates", "version", "check", "download", "install", "github", "release", "upgrade", "daily", "weekly", "manual", "launch"),
+        "developer" to listOf("developer", "debug", "leak", "leakcanary", "memory", "notifications", "diagnostics"),
+        "about" to listOf("about", "licences", "licenses", "attribution", "credits", "openstreetmap", "osm", "openmaptiles", "openfreemap", "privacy", "legal", "copyright"),
+    )
+
+    fun matches(groupKey: String, rawQuery: String): Boolean {
+        val q = PlaceIndex.normalize(rawQuery)
+        if (q.isEmpty()) return true
+        val tokens = q.split(' ').filter { it.isNotEmpty() }
+        val pool = KEYWORDS[groupKey].orEmpty()
+        return tokens.all { qt ->
+            pool.any { kw -> kw.startsWith(qt) || qt in kw || fuzzyTokenMatch(qt, kw) }
+        }
+    }
+
+    private fun fuzzyTokenMatch(a: String, b: String): Boolean {
+        if (a.length < 3 || b.length < 3) return false
+        val target = if (b.length > a.length + 1) b.substring(0, a.length) else b
+        if (kotlin.math.abs(a.length - target.length) > 1) return false
+        var i = 0
+        var j = 0
+        var diffs = 0
+        while (i < a.length && j < target.length) {
+            if (a[i] == target[j]) {
+                i++
+                j++
+            } else {
+                if (++diffs > 1) return false
+                if (a.length > target.length) i++ else if (target.length > a.length) j++ else {
+                    i++
+                    j++
+                }
+            }
+        }
+        return true
     }
 }
 
@@ -176,30 +254,43 @@ fun SettingsScreen(
     onLabelNames: (LabelNames) -> Unit,
     onClearCache: () -> Unit,
     onLicences: () -> Unit,
-    extra: @Composable ColumnScope.() -> Unit = {},
+    navigationGroup: @Composable ColumnScope.() -> Unit = {},
+    savedPlacesGroup: @Composable ColumnScope.() -> Unit = {},
+    updatesGroup: @Composable ColumnScope.() -> Unit = {},
+    developerGroup: (@Composable ColumnScope.() -> Unit)? = null,
     onIncludeTextures: () -> Unit = {},
     texturesExtra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val c = Mc.colors
-    val win = rememberMcWindow()
     var confirmClear by rememberSaveable { mutableStateOf(false) }
+    var submenuName by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val activeSubmenu = submenuName?.let { runCatching { SettingsSubmenu.valueOf(it) }.getOrNull() }
     val labelStyle = MaterialTheme.typography.labelLarge
     val vanillaSelected = settings.texturePack == TexturePack.VANILLA && vanillaAvailable
 
-    val left: @Composable ColumnScope.() -> Unit = {
+    BackHandler(enabled = activeSubmenu != null || searchQuery.isNotBlank()) {
+        if (searchQuery.isNotBlank()) searchQuery = "" else submenuName = null
+    }
+
+    val texturesBlock: @Composable ColumnScope.() -> Unit = {
         Group("Textures") {
             McSegmented(2, if (vanillaSelected) 1 else 0, { if (it == 1 && !vanillaAvailable) onIncludeTextures() else onTexturePack(if (it == 1) TexturePack.VANILLA else TexturePack.ORIGINAL) }) { i, _ ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TexturePreview(atlasOf(if (i == 1 && vanillaAvailable) TexturePack.VANILLA else TexturePack.ORIGINAL))
+                    TexturePreview(atlasOf(if (i == 1 && vanillaAvailable) TexturePack.VANILLA else TexturePack.ORIGINAL), isMinecraftSlot = i == 1, vanillaAvailable = vanillaAvailable)
                     Text(if (i == 0) "MineMaps original" else "Minecraft textures", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
             texturesExtra()
         }
+    }
+    val themeBlock: @Composable ColumnScope.() -> Unit = {
         Group("Theme") {
             val modes = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")
             McSegmented(3, modes.indexOfFirst { it.first == settings.theme }.coerceAtLeast(0), { onTheme(modes[it].first) }) { i, _ -> Text(modes[i].second, style = labelStyle) }
         }
+    }
+    val arrowBlock: @Composable ColumnScope.() -> Unit = {
         Group("Arrow colour") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for ((label, color) in ArrowColors.presets) {
@@ -209,18 +300,22 @@ fun SettingsScreen(
             }
         }
     }
-    val right: @Composable ColumnScope.() -> Unit = {
+    val labelsBlock: @Composable ColumnScope.() -> Unit = {
         Group("Label names") {
             McSegmented(2, if (settings.labelNames == LabelNames.ENGLISH) 0 else 1, { onLabelNames(if (it == 0) LabelNames.ENGLISH else LabelNames.LOCAL) }) { i, _ ->
                 Text(if (i == 0) "English (Latin script)" else "Local language", style = labelStyle, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         }
+    }
+    val detailsBlock: @Composable ColumnScope.() -> Unit = {
         Group("Map details") {
             Row(Modifier.fillMaxWidth().clickable { onIcons(!settings.showIcons) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Show item icons", style = MaterialTheme.typography.bodyLarge)
                 McSwitch(settings.showIcons, onIcons)
             }
         }
+    }
+    val storageBlock: @Composable ColumnScope.() -> Unit = {
         Group("Storage") {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
@@ -230,7 +325,8 @@ fun SettingsScreen(
                 McButton({ confirmClear = true }, variant = McVariant.DANGER) { Text("Clear") }
             }
         }
-        extra()
+    }
+    val aboutBlock: @Composable ColumnScope.() -> Unit = {
         Group("About") {
             val book = remember(activeAtlas) { atlasImage(activeAtlas, "book") }
             McListRow(onClick = onLicences, leading = { McSlot(size = 44.dp) { PixelIcon(book, 28.dp) } }, title = "Licences & attribution")
@@ -238,15 +334,89 @@ fun SettingsScreen(
             MapDataCredits(Modifier.padding(top = 8.dp))
         }
     }
-    ScreenFrame("Settings", onBack, maxWidth = if (win.expanded) 980.dp else 640.dp) {
-        if (win.expanded) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Column(Modifier.weight(1f), content = left)
-                Column(Modifier.weight(1f), content = right)
+
+    val topTitle = if (activeSubmenu != null && searchQuery.isBlank()) activeSubmenu.title else "Settings"
+    val handleTopBack: () -> Unit = {
+        if (searchQuery.isNotBlank()) searchQuery = ""
+        else if (activeSubmenu != null) submenuName = null
+        else onBack()
+    }
+
+    ScreenFrame(topTitle, handleTopBack, maxWidth = 680.dp) {
+        McTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            placeholder = "Search settings (e.g. dark, traffic, cache)",
+            leading = { PixelGlyph(Glyph.SEARCH, c.textSecondary, size = 20.dp) },
+            trailing = {
+                if (searchQuery.isNotEmpty()) {
+                    Box(Modifier.size(44.dp).clickable { searchQuery = "" }, contentAlignment = Alignment.Center) {
+                        PixelGlyph(Glyph.CLOSE, c.text, size = 16.dp)
+                    }
+                }
+            },
+        )
+
+        if (searchQuery.isNotBlank()) {
+            var anyShown = false
+            if (SettingsSearch.matches("textures", searchQuery)) { anyShown = true; texturesBlock() }
+            if (SettingsSearch.matches("theme", searchQuery)) { anyShown = true; themeBlock() }
+            if (SettingsSearch.matches("arrow", searchQuery)) { anyShown = true; arrowBlock() }
+            if (SettingsSearch.matches("labels", searchQuery)) { anyShown = true; labelsBlock() }
+            if (SettingsSearch.matches("details", searchQuery)) { anyShown = true; detailsBlock() }
+            if (SettingsSearch.matches("navigation", searchQuery)) { anyShown = true; navigationGroup() }
+            if (SettingsSearch.matches("saved_places", searchQuery)) { anyShown = true; savedPlacesGroup() }
+            if (SettingsSearch.matches("storage", searchQuery)) { anyShown = true; storageBlock() }
+            if (SettingsSearch.matches("updates", searchQuery)) { anyShown = true; updatesGroup() }
+            if (developerGroup != null && SettingsSearch.matches("developer", searchQuery)) { anyShown = true; developerGroup() }
+            if (SettingsSearch.matches("about", searchQuery)) { anyShown = true; aboutBlock() }
+            if (!anyShown) {
+                McPanel(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text("No settings match \"$searchQuery\"", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                }
             }
+        } else if (activeSubmenu == null) {
+            McPanel(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentPadding = 6.dp) {
+                val menus = SettingsSubmenu.entries
+                menus.forEachIndexed { idx, item ->
+                    val iconImg = remember(activeAtlas, item.iconName) { atlasImage(activeAtlas, item.iconName) }
+                    McListRow(
+                        onClick = { submenuName = item.name },
+                        leading = { McSlot(size = 46.dp) { PixelIcon(iconImg, 30.dp) } },
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        trailing = { PixelGlyph(Glyph.CHEVRON_RIGHT, c.textSecondary, size = 18.dp) },
+                    )
+                    if (idx < menus.lastIndex) McDivider()
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            MapDataCredits(Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
         } else {
-            left()
-            right()
+            when (activeSubmenu) {
+                SettingsSubmenu.TEXTURES_APPEARANCE -> {
+                    texturesBlock()
+                    themeBlock()
+                    arrowBlock()
+                }
+                SettingsSubmenu.MAP_LABELS -> {
+                    labelsBlock()
+                    detailsBlock()
+                }
+                SettingsSubmenu.NAVIGATION -> {
+                    navigationGroup()
+                }
+                SettingsSubmenu.PLACES_STORAGE -> {
+                    savedPlacesGroup()
+                    storageBlock()
+                }
+                SettingsSubmenu.UPDATES_ABOUT -> {
+                    updatesGroup()
+                    if (developerGroup != null) developerGroup()
+                    aboutBlock()
+                }
+            }
         }
     }
     if (confirmClear) {

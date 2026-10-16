@@ -59,6 +59,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     val saveDialog = MutableStateFlow<SaveDialog?>(null)
     val renameTarget = MutableStateFlow<SavedPlace?>(null)
     val searchPin = MutableStateFlow<LatLng?>(null)
+    private var lastSelectedResult: SearchResult? = null
     val text = MutableStateFlow("")
     val resultsVisible = MutableStateFlow(false)
     val cacheSize = MutableStateFlow(0L)
@@ -83,12 +84,21 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun lang(): String? = if (englishNames) "en" else Locale.getDefault().language
 
-    private fun cacheKey(q: String) = "${navMode.name}|${googleApiKey.hashCode()}|" + ResponseCache.key(q, camera?.lat, camera?.lon, lang())
+    private fun searchCenter(): Pair<Double, Double>? {
+        val loc = locationState.value.location
+        if (loc != null && loc.latitude.isFinite() && loc.longitude.isFinite()) return loc.latitude to loc.longitude
+        return camera?.let { it.lat to it.lon }
+    }
+
+    private fun cacheKey(q: String): String {
+        val c = searchCenter()
+        return "${navMode.name}|${googleApiKey.hashCode()}|" + ResponseCache.key(q, c?.first, c?.second, lang())
+    }
 
     private fun localHits(q: String): List<SearchResult> {
-        val c = camera
-        val wx = c?.let { Mercator.lonToX(it.lon) } ?: 0.5
-        val wy = c?.let { Mercator.latToY(it.lat) } ?: 0.5
+        val c = searchCenter()
+        val wx = c?.let { Mercator.lonToX(it.second) } ?: 0.5
+        val wy = c?.let { Mercator.latToY(it.first) } ?: 0.5
         val hits = container.placeIndex.query(q, wx, wy, localNames = !englishNames)
         runCatching { android.util.Log.d(PhotonClient.TAG, "local results n=${hits.size} at +${android.os.SystemClock.elapsedRealtime() - sessionStartAt}ms since first key") }
         return hits.map { h ->
@@ -107,11 +117,12 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     val searchState: StateFlow<SearchState> = searchStates(
         typed,
-        center = { camera?.let { it.lat to it.lon } },
+        center = { searchCenter() },
         local = { q -> localHits(q) },
         cached = { q -> photonCache.get(cacheKey(q)) },
     ) { q ->
-        val c = camera
+        val c = searchCenter()
+        val z = camera?.zoom
         runCatching { android.util.Log.d(PhotonClient.TAG, "typed->request ${android.os.SystemClock.elapsedRealtime() - typedAt}ms") }
         val latinizer: (String) -> String = if (englishNames) {
             val names = container.engine.await().nameResolver(app.minemaps.engine.labels.NameResolver.Mode.ENGLISH)
@@ -122,14 +133,14 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         val gKey = if (navMode == app.minemaps.data.NavigationMode.GOOGLE_ASSISTED) googleApiKey.takeIf { it.isNotBlank() } else null
         val r = if (gKey != null) {
             try {
-                container.googlePlaces.search(q, gKey, c?.lat, c?.lon, lang(), latinizer)
+                container.googlePlaces.search(q, gKey, c?.first, c?.second, lang(), latinizer)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
-                container.photon.search(q, c?.lat, c?.lon, lang(), latinizer, c?.zoom)
+                container.photon.search(q, c?.first, c?.second, lang(), latinizer, z)
             }
         } else {
-            container.photon.search(q, c?.lat, c?.lon, lang(), latinizer, c?.zoom)
+            container.photon.search(q, c?.first, c?.second, lang(), latinizer, z)
         }
         photonCache.put(cacheKey(q), r)
         runCatching { android.util.Log.d(PhotonClient.TAG, "network results at +${android.os.SystemClock.elapsedRealtime() - sessionStartAt}ms since first key") }
@@ -210,6 +221,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         typed.value = ""
         resultsVisible.value = false
         searchPin.value = null
+        lastSelectedResult = null
         if (card.value is InfoCard.Result) card.value = null
     }
 
@@ -218,8 +230,13 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         typed.value = ""
         resultsVisible.value = false
         searchPin.value = LatLng(r.lat, r.lon)
+        lastSelectedResult = r
         card.value = InfoCard.Result(r)
         following.value = false
+    }
+
+    fun restoreSelectedResultCard() {
+        lastSelectedResult?.let { card.value = InfoCard.Result(it) }
     }
 
     fun showInspect(result: InspectResult?, lat: Double, lon: Double) {
@@ -307,6 +324,12 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun setMirrorGoogleMaps(v: Boolean) = viewModelScope.launch { container.settings.setMirrorGoogleMaps(v) }
 
     fun setGoogleApiKey(v: String) = viewModelScope.launch { container.settings.setGoogleApiKey(v) }
+
+    fun setShowTraffic(v: Boolean) = viewModelScope.launch { container.settings.setShowTraffic(v) }
+
+    fun setShowRoadAlerts(v: Boolean) = viewModelScope.launch { container.settings.setShowRoadAlerts(v) }
+
+    fun setDynamicDrivingZoom(v: Boolean) = viewModelScope.launch { container.settings.setDynamicDrivingZoom(v) }
 
     fun handleIncomingTarget(target: app.minemaps.car.GeoTarget, onFlyTo: (Double, Double, Double) -> Unit) {
         when (target) {

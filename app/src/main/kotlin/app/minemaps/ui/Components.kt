@@ -120,12 +120,13 @@ fun CompassButton(bearing: State<Double>, icon: ImageBitmap?, onClick: () -> Uni
     }
 }
 
-/** Small "i" button (48 dp touch target, subtle square visual). */
+/** Small "i" button (48 dp touch target, same bevelled button surface as the map controls). */
 @Composable
 fun CreditsButton(onClick: () -> Unit) {
-    val c = Mc.colors
-    Box(Modifier.size(48.dp).semantics { contentDescription = "Map credits" }.clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(28.dp).mcPanel(c), contentAlignment = Alignment.Center) { PixelGlyph(Glyph.INFO, c.text, size = 16.dp) }
+    Box(Modifier.size(48.dp).semantics { contentDescription = "Map credits" }, contentAlignment = Alignment.Center) {
+        McIconButton(onClick, size = 32.dp) {
+            PixelGlyph(Glyph.INFO, androidx.compose.material3.LocalContentColor.current, size = 16.dp)
+        }
     }
 }
 

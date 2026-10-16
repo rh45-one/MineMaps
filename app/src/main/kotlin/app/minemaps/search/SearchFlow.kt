@@ -53,17 +53,27 @@ fun mergeResults(local: List<SearchResult>, network: List<SearchResult>, query: 
     }
     val collapsed = network.filter { !isLowValue(it) || best[PlaceIndex.normalize(it.name) + "|" + (if (it.osmKey == "office") "office" else it.osmValue)] === it }
     val lastMatch = collapsed.indexOfLast { !isTransit(it) && matchesAll(it, tokens) }
-    val net = if (lastMatch < 0) collapsed else {
+    val rawNet = if (lastMatch < 0) collapsed else {
         val transit = collapsed.take(lastMatch + 1).filter { isTransit(it) }
         collapsed.take(lastMatch + 1).filter { !isTransit(it) } + transit + collapsed.drop(lastMatch + 1)
+    }
+    // Promote nearby non-transit results (within 25 km) ahead of far-away (> 100 km) results when a centre is known.
+    val net = if (centerLat != null && centerLon != null && rawNet.any { metersTo(it, centerLat, centerLon) <= 25_000.0 } && rawNet.any { metersTo(it, centerLat, centerLon) > 100_000.0 }) {
+        val near = rawNet.filter { !isTransit(it) && metersTo(it, centerLat, centerLon) <= 25_000.0 }
+        val rest = rawNet.filter { it !in near }
+        near + rest
+    } else {
+        rawNet
     }
     val fresh = local.filter { l ->
         val n = PlaceIndex.normalize(l.name)
         net.none { PlaceIndex.normalize(it.name) == n && meters(it, l) < 250.0 }
     }
-    val networkMatches = net.any { matchesAll(it, tokens) }
+    val networkHasNearbyMatch = net.any {
+        matchesAll(it, tokens) && (centerLat == null || centerLon == null || metersTo(it, centerLat, centerLon) <= 50_000.0)
+    }
     val first = fresh.filter { l ->
-        (l.landmark || !networkMatches) && matchesAll(l, tokens) && (centerLat == null || centerLon == null || metersTo(l, centerLat, centerLon) <= 5_000.0)
+        (l.landmark || !networkHasNearbyMatch) && matchesAll(l, tokens) && (centerLat == null || centerLon == null || metersTo(l, centerLat, centerLon) <= 15_000.0)
     }.take(3)
     return first + net + fresh.filter { it !in first }
 }

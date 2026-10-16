@@ -21,6 +21,38 @@ data class MirroredNavInfo(
 object GoogleMapsMirror {
     const val GMAPS_PACKAGE = "com.google.android.apps.maps"
     val active = MutableStateFlow<MirroredNavInfo?>(null)
+    @Volatile
+    private var dismissedSession = false
+    @Volatile
+    private var exitAction: android.app.PendingIntent? = null
+
+    /** Dismisses the mirrored Google Maps banner and triggers Google Maps' notification "Exit navigation" action if available. */
+    fun dismissAndExitGoogleMaps() {
+        dismissedSession = true
+        active.value = null
+        val pending = exitAction
+        exitAction = null
+        if (pending != null) {
+            runCatching { pending.send() }
+        }
+    }
+
+    /** Clears the dismissed-session flag when the user explicitly starts a new navigation from MineMaps. */
+    fun resetDismissed() {
+        dismissedSession = false
+    }
+
+    internal fun onNotificationUpdated(info: MirroredNavInfo?, exit: android.app.PendingIntent?) {
+        exitAction = exit
+        if (dismissedSession) return
+        active.value = info
+    }
+
+    internal fun onNotificationCleared() {
+        dismissedSession = false
+        exitAction = null
+        active.value = null
+    }
 
     fun isListenerEnabled(context: Context): Boolean = runCatching {
         val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners").orEmpty()
@@ -101,14 +133,14 @@ class GoogleMapsNotificationService : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn?.packageName == GoogleMapsMirror.GMAPS_PACKAGE) {
-            GoogleMapsMirror.active.value = null
+            GoogleMapsMirror.onNotificationCleared()
         }
     }
 
     private fun refreshFromActive() {
         runCatching {
             val gmaps = activeNotifications?.firstOrNull { it.packageName == GoogleMapsMirror.GMAPS_PACKAGE }
-            if (gmaps != null) updateFrom(gmaps) else GoogleMapsMirror.active.value = null
+            if (gmaps != null) updateFrom(gmaps) else GoogleMapsMirror.onNotificationCleared()
         }
     }
 
@@ -121,6 +153,10 @@ class GoogleMapsNotificationService : NotificationListenerService() {
         val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val big = ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
         val sub = ex.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
-        GoogleMapsMirror.active.value = GoogleMapsMirror.parseFields(title, text, sub, big)
+        val exitIntent = n.actions?.firstOrNull { a ->
+            val label = a.title?.toString()?.lowercase().orEmpty()
+            "exit" in label || "stop" in label || "cancel" in label || "close" in label || "salir" in label || "cerrar" in label
+        }?.actionIntent ?: n.actions?.firstOrNull()?.actionIntent
+        GoogleMapsMirror.onNotificationUpdated(GoogleMapsMirror.parseFields(title, text, sub, big), exitIntent)
     }
 }

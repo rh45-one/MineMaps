@@ -14,7 +14,7 @@ import kotlin.math.pow
 
 enum class InspectKind { POI, BUILDING, ROAD, WATER, LAND }
 
-class InspectResult(val title: String, val subtitle: String, val kind: InspectKind, val wx: Double, val wy: Double)
+class InspectResult(val title: String, val subtitle: String, val kind: InspectKind, val wx: Double, val wy: Double, val roadClass: String? = null)
 
 object FeatureInspector {
     private const val POI_RADIUS_PX = 24.0
@@ -103,7 +103,7 @@ object FeatureInspector {
             best?.let { f ->
                 val cls = f.tags["class"] as? String ?: "road"
                 val name = nearestName(tile.layers["transportation_name"], f, px, py, NAME_RADIUS_PX * upp, cls)
-                return InspectResult(name ?: roadTitle(cls), roadTitle(cls), InspectKind.ROAD, wx, wy)
+                return InspectResult(name ?: roadTitle(cls), roadTitle(cls), InspectKind.ROAD, wx, wy, roadClass = cls)
             }
         }
 

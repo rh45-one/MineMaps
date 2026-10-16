@@ -168,6 +168,7 @@ object UpdateInstaller {
 
 object UpdateEvents {
     val status = kotlinx.coroutines.flow.MutableSharedFlow<Pair<Int, String?>>(extraBufferCapacity = 4)
+    val confirmIntent = kotlinx.coroutines.flow.MutableStateFlow<Intent?>(null)
 }
 
 class UpdateInstallReceiver : BroadcastReceiver() {
@@ -176,7 +177,11 @@ class UpdateInstallReceiver : BroadcastReceiver() {
         if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
             @Suppress("DEPRECATION")
             val confirm = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) else intent.getParcelableExtra(Intent.EXTRA_INTENT)
-            confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)?.let { runCatching { context.startActivity(it) } }
+            if (confirm != null) {
+                confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                UpdateEvents.confirmIntent.value = confirm
+                runCatching { context.startActivity(confirm) }
+            }
         }
         UpdateEvents.status.tryEmit(status to intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
     }

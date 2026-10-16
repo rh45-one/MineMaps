@@ -110,13 +110,13 @@ class PhotonClient(private val clientProvider: suspend () -> OkHttpClient, priva
         val url = baseUrl.toHttpUrl().newBuilder()
             .addPathSegment("api").addPathSegment("")
             .addQueryParameter("q", query.take(MAX_QUERY_CHARS))
-            .addQueryParameter("limit", "8")
+            .addQueryParameter("limit", "12")
             .apply {
                 if (biasLat != null && biasLon != null) {
                     addQueryParameter("lat", "%.5f".format(java.util.Locale.US, biasLat))
                     addQueryParameter("lon", "%.5f".format(java.util.Locale.US, biasLon))
-                    addQueryParameter("location_bias_scale", "0.2")
-                    if (zoom != null && zoom.isFinite()) addQueryParameter("zoom", Math.round(zoom).toInt().coerceIn(10, 16).toString())
+                    addQueryParameter("location_bias_scale", "0.55")
+                    if (zoom != null && zoom.isFinite()) addQueryParameter("zoom", Math.round(zoom).toInt().coerceIn(12, 16).toString())
                 }
                 if (lang in SUPPORTED_LANGS) addQueryParameter("lang", lang)
             }

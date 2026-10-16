@@ -25,6 +25,8 @@ import app.minemaps.engine.layout.LabelLayout
 import app.minemaps.engine.layout.Obstacle
 import app.minemaps.engine.layout.PlacedLayout
 import app.minemaps.engine.layout.RenderProfile
+import app.minemaps.engine.routing.RoadAlert
+import app.minemaps.engine.routing.RoadAlertKind
 import app.minemaps.engine.routing.RoutePlan
 import app.minemaps.engine.routing.TrafficSpeed
 import kotlinx.coroutines.CoroutineScope
@@ -295,7 +297,7 @@ class MapRenderer(
             lastRetainHash = hash
             retainRing(viewport, z, size)
         }
-        overlays.route?.let { drawRoute(canvas, viewport, it) }
+        overlays.route?.let { drawRoute(canvas, viewport, it, overlays.showTraffic) }
         val t1 = System.nanoTime()
         drawLabels(canvas, viewport, slots.map { it.key }, overlays)
         val t2 = System.nanoTime()
@@ -588,6 +590,9 @@ class MapRenderer(
             }
         }
         drawBookmarks(canvas, viewport, overlays.bookmarks)
+        if (overlays.roadAlerts.isNotEmpty() && viewport.zoom >= 12.5) {
+            drawRoadAlerts(canvas, viewport, overlays.roadAlerts)
+        }
         overlays.searchPin?.let { drawPin(canvas, viewport, it.lat, it.lng, size) }
         overlays.player?.let { p ->
             val pt = viewport.worldToScreen(Mercator.lonToX(p.lon), Mercator.latToY(p.lat))
@@ -620,7 +625,7 @@ class MapRenderer(
         drawIcon(canvas, "pin", x, y, size)
     }
 
-    private fun drawRoute(canvas: Canvas, viewport: Viewport, route: RoutePlan) {
+    private fun drawRoute(canvas: Canvas, viewport: Viewport, route: RoutePlan, showTraffic: Boolean) {
         val pts = route.points
         if (pts.size < 2) return
         routePath.reset()
@@ -643,7 +648,8 @@ class MapRenderer(
         routeFillPaint.color = 0xFF52A535.toInt()
         canvas.drawPath(routePath, routeFillPaint)
 
-        // Draw slow/jammed traffic segments on top when present (from Google Routes TRAFFIC_ON_POLYLINE).
+        // Draw slow/jammed traffic segments on top when enabled (from Google Routes TRAFFIC_ON_POLYLINE).
+        if (!showTraffic) return
         for (iv in route.trafficIntervals) {
             if (iv.speed == TrafficSpeed.NORMAL) continue
             val sIdx = iv.startPointIndex.coerceIn(0, pts.lastIndex)
@@ -658,6 +664,91 @@ class MapRenderer(
             }
             routeFillPaint.color = if (iv.speed == TrafficSpeed.TRAFFIC_JAM) 0xFFE53935.toInt() else 0xFFFFB300.toInt()
             canvas.drawPath(routePath, routeFillPaint)
+        }
+    }
+
+    private fun alertBitmap(kind: RoadAlertKind, flashOn: Boolean): Bitmap {
+        val key = "alert_${kind.name}_$flashOn"
+        return iconBitmaps.getOrPut(key) {
+            val rows = when (kind) {
+                RoadAlertKind.SPEED_CAMERA -> listOf(
+                    "................",
+                    "....kkkkkkkk....",
+                    "...kcccccccck...",
+                    ".kkkkkkkkkkkkkk.",
+                    ".kccrrrrrrrrcck.",
+                    ".kccrkkkkkkrcck.",
+                    ".kccrkllllkrcck.",
+                    ".kccrklwwlkrcck.",
+                    ".kccrklwwlkrcck.",
+                    ".kccrkllllkrcck.",
+                    ".kccrkkkkkkrcck.",
+                    ".kcccccccccccck.",
+                    ".kkkkkkkkkkkkkk.",
+                    "......kkkk......",
+                    ".....kcccck.....",
+                    "................",
+                )
+                RoadAlertKind.HAZARD -> listOf(
+                    ".......kk.......",
+                    "......kwwk......",
+                    ".....kwyywk.....",
+                    ".....kwyywk.....",
+                    "....kwyyyywk....",
+                    "....kwykkYWk....",
+                    "...kwyykkYYwk...",
+                    "...kwyykkYYwk...",
+                    "..kwyyykkYYYwk..",
+                    "..kwyyyyYYYYwk..",
+                    ".kwyyyykkYYYYwk.",
+                    ".kwyyyykkYYYYwk.",
+                    "kwyyyyyyyyYYYYwk",
+                    "kwwwwwwwwwwwwwwk",
+                    ".kkkkkkkkkkkkkk.",
+                    "................",
+                )
+            }
+            val px = IntArray(16 * 16)
+            for (y in 0 until 16) {
+                val row = rows[y]
+                for (x in 0 until 16) {
+                    px[y * 16 + x] = when (row[x]) {
+                        'k' -> 0xFF141517.toInt()
+                        'c' -> 0xFFD8DCDF.toInt()
+                        'r' -> if (flashOn) 0xFFFF2A1A.toInt() else 0xFF8A1C1C.toInt()
+                        'l' -> if (flashOn) 0xFF5CE1FF.toInt() else 0xFF286985.toInt()
+                        'w' -> if (kind == RoadAlertKind.HAZARD) 0xFFE53935.toInt() else (if (flashOn) 0xFFFFFFFF.toInt() else 0xFFAEEBFF.toInt())
+                        'y' -> 0xFFFFEB3B.toInt()
+                        'Y' -> 0xFFFBC02D.toInt()
+                        else -> 0
+                    }
+                }
+            }
+            Bitmap.createBitmap(px, 16, 16, Bitmap.Config.ARGB_8888)
+        }
+    }
+
+    private fun drawRoadAlerts(canvas: Canvas, viewport: Viewport, alerts: List<RoadAlert>) {
+        val size = 16f * iconFactor
+        val half = size / 2f
+        val flashOn = ((System.currentTimeMillis() / 450L) % 2L) == 0L
+        var anyCameraVisible = false
+        for (a in alerts) {
+            val pt = viewport.worldToScreen(Mercator.lonToX(a.lon), Mercator.latToY(a.lat))
+            val x = pt.x.toFloat()
+            val y = pt.y.toFloat()
+            if (x < -size || y < -size || x > viewport.widthPx + size || y > viewport.heightPx + size) continue
+            if (a.kind == RoadAlertKind.SPEED_CAMERA) anyCameraVisible = true
+            val bmp = alertBitmap(a.kind, if (a.kind == RoadAlertKind.SPEED_CAMERA) flashOn else true)
+            dst.set((x - half).roundToInt(), (y - half).roundToInt(), (x + half).roundToInt(), (y + half).roundToInt())
+            canvas.drawBitmap(bmp, null, dst, iconPaint)
+        }
+        // Trigger a gentle periodic redraw while a speed camera is on screen so its radar lens flashes.
+        if (anyCameraVisible) {
+            scope.launch {
+                kotlinx.coroutines.delay(460)
+                onInvalidate()
+            }
         }
     }
 

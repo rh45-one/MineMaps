@@ -129,7 +129,7 @@ class PlaceIndex(private val maxEntries: Int = 50_000) {
                 val m = maxOf(match(q, tokens, e.enNorm, e.enTokens), if (e.localNorm != null) match(q, tokens, e.localNorm, e.localTokens) else 0.0)
                 if (m <= 0.0) continue
                 val km = meters(e.wx, e.wy, centerWx, centerWy) / 1000.0
-                val proximity = 0.4 + 0.6 / (1.0 + km / 10.0)
+                val proximity = 0.15 + 0.85 / (1.0 + km / 6.0)
                 val rankBonus = if (e.rank in 0..1000) 0.3 + 0.7 / (1.0 + e.rank / 20.0) else 0.3
                 val classBonus = if (e.kind == PlaceKind.POI && e.kindLabel.lowercase() in LANDMARK_CLASSES) 1.8 else 1.0
                 val firstToken = if (e.enTokens.first().startsWith(tokens[0]) || e.localTokens.firstOrNull()?.startsWith(tokens[0]) == true) 1.3 else 1.0
@@ -142,8 +142,32 @@ class PlaceIndex(private val maxEntries: Int = 50_000) {
     private fun match(q: String, tokens: List<String>, norm: String, nameTokens: List<String>): Double {
         if (norm == q) return 4.0
         if (norm.startsWith(q)) return 3.0
-        for (t in tokens) if (nameTokens.none { it.startsWith(t) }) return 0.0
-        return 2.0
+        if (tokens.all { t -> nameTokens.any { it.startsWith(t) } }) return 2.0
+        if (tokens.all { t -> t.length >= 3 && t.all { it.isLetter() } && nameTokens.any { it.all { c -> c.isLetter() } && (t in it || editDistanceAtMostOne(t, it)) } }) return 1.3
+        return 0.0
+    }
+
+    private fun editDistanceAtMostOne(qToken: String, nameToken: String): Boolean {
+        val target = if (nameToken.length > qToken.length + 1) nameToken.substring(0, qToken.length) else nameToken
+        val la = qToken.length
+        val lb = target.length
+        if (kotlin.math.abs(la - lb) > 1) return false
+        var i = 0
+        var j = 0
+        var diffs = 0
+        while (i < la && j < lb) {
+            if (qToken[i] == target[j]) {
+                i++
+                j++
+            } else {
+                if (++diffs > 1) return false
+                if (la > lb) i++ else if (lb > la) j++ else {
+                    i++
+                    j++
+                }
+            }
+        }
+        return true
     }
 
     companion object {

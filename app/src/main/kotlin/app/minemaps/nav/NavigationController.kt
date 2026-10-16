@@ -118,6 +118,7 @@ class NavigationController(
 
     fun startNavigation(toLat: Double, toLon: Double, title: String, silentReroute: Boolean = false) {
         if (!toLat.isFinite() || !toLon.isFinite() || toLat !in -90.0..90.0 || toLon !in -180.0..180.0) return
+        if (!silentReroute) GoogleMapsMirror.resetDismissed()
         routeJob?.cancel()
         routeJob = scope.launch {
             val s = settings.settings.first()
@@ -160,6 +161,7 @@ class NavigationController(
         progress.value = null
         destination.value = null
         destinationName.value = ""
+        GoogleMapsMirror.dismissAndExitGoogleMaps()
     }
 
     /** Launches Google Maps turn-by-turn navigation on the phone (and simultaneously calculates the in-app block route). */

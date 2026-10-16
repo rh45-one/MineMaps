@@ -272,4 +272,18 @@ class SearchFlowTest {
         assertEquals(listOf("Eiffel Shop", "eiffel tower"), out.map { it.name })
         assertEquals(listOf(true, false), out.map { it.local })
     }
+
+    @Test
+    fun nearbyBusinessOutranksFarAwayMatchAndSettingsFuzzySearchMatchesSynonyms() {
+        // User at (48.8584, 2.2945): a match 5.8 km away (~48.91, 2.2945) must precede a match 1500 km away (35.0, 15.0)
+        val far = result("Boulangerie Centrale", 35.0, 15.0)
+        val near = result("Boulangerie du Parc", 48.9100, 2.2945)
+        val merged = mergeResults(emptyList(), listOf(far, near), "boulangerie", 48.8584, 2.2945)
+        assertEquals(listOf("Boulangerie du Parc", "Boulangerie Centrale"), merged.map { it.name })
+
+        assertTrue(app.minemaps.ui.SettingsSearch.matches("theme", "night mode"))
+        assertTrue(app.minemaps.ui.SettingsSearch.matches("navigation", "radars"))
+        assertTrue(app.minemaps.ui.SettingsSearch.matches("navigation", "trafic")) // fuzzy typo for traffic
+        assertTrue(app.minemaps.ui.SettingsSearch.matches("storage", "clear disk"))
+    }
 }

@@ -60,9 +60,12 @@ fun NavigationGroup(
     onMirrorChange: (Boolean) -> Unit,
     onOpenListenerSettings: () -> Unit,
     onApiKeyChange: (String) -> Unit,
+    onTrafficChange: (Boolean) -> Unit = {},
+    onRoadAlertsChange: (Boolean) -> Unit = {},
+    onDynamicZoomChange: (Boolean) -> Unit = {},
 ) {
     val c = Mc.colors
-    Group("Navigation") {
+    Group("Navigation & Driving") {
         val modes = listOf(
             NavigationMode.OFF to "Off",
             NavigationMode.STANDALONE to "Standalone",
@@ -126,11 +129,49 @@ fun NavigationGroup(
                 )
             }
         }
+        Spacer(Modifier.height(12.dp))
+        app.minemaps.ui.theme.McDivider()
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().clickable { onTrafficChange(!settings.showTraffic) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Show traffic congestion colours", style = MaterialTheme.typography.bodyLarge)
+                Text("Colours slow route segments amber and traffic jams red", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            }
+            McSwitch(settings.showTraffic, onTrafficChange)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.fillMaxWidth().clickable { onRoadAlertsChange(!settings.showRoadAlerts) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Show road alerts & speed cameras", style = MaterialTheme.typography.bodyLarge)
+                Text("Displays flashing speed-camera radars, roadworks, and hazards", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            }
+            McSwitch(settings.showRoadAlerts, onRoadAlertsChange)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.fillMaxWidth().clickable { onDynamicZoomChange(!settings.dynamicDrivingZoom) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Dynamic driving zoom", style = MaterialTheme.typography.bodyLarge)
+                Text("Automatically adjusts zoom level based on speed and road type (motorway vs street)", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            }
+            McSwitch(settings.dynamicDrivingZoom, onDynamicZoomChange)
+        }
     }
 }
 
 @Composable
-fun ActiveNavBanner(banner: ActiveBannerState, onStop: () -> Unit, modifier: Modifier = Modifier) {
+fun ActiveNavBanner(banner: ActiveBannerState, onStop: () -> Unit, onClick: () -> Unit = {}, modifier: Modifier = Modifier) {
     val c = Mc.colors
     val glyph = when (banner.direction) {
         TurnDirection.LEFT, TurnDirection.SLIGHT_LEFT, TurnDirection.SHARP_LEFT, TurnDirection.U_TURN -> Glyph.NAV_LEFT
@@ -138,7 +179,7 @@ fun ActiveNavBanner(banner: ActiveBannerState, onStop: () -> Unit, modifier: Mod
         else -> Glyph.NAV_UP
     }
     Row(
-        modifier.fillMaxWidth().mcPanel(c).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        modifier.fillMaxWidth().mcPanel(c).clickable(onClick = onClick).padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -148,10 +189,67 @@ fun ActiveNavBanner(banner: ActiveBannerState, onStop: () -> Unit, modifier: Mod
         Column(Modifier.weight(1f)) {
             val head = if (banner.distanceText.isNotBlank()) "${banner.distanceText} \u00b7 ${banner.instruction}" else banner.instruction
             Text(head, style = MaterialTheme.typography.bodyLarge, color = c.text, maxLines = 2)
-            val sub = listOf(banner.etaText, banner.providerLabel).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
+            val sub = listOf(banner.etaText, banner.providerLabel, "Tap for steps").filter { it.isNotBlank() }.joinToString(" \u00b7 ")
             if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = c.greenHighlight, maxLines = 1)
         }
         McGlyphButton(Glyph.CLOSE, onStop, size = 44.dp)
+    }
+}
+
+@Composable
+fun DirectionsDialog(
+    banner: ActiveBannerState,
+    plan: app.minemaps.engine.routing.RoutePlan?,
+    onSelectStep: (app.minemaps.engine.routing.RouteStep) -> Unit,
+    onStopNavigation: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val c = Mc.colors
+    val steps = plan?.steps.orEmpty()
+    McDialog(
+        title = banner.destinationName.ifBlank { "Directions" },
+        onDismiss = onDismiss,
+        buttons = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                McButton(onStopNavigation, Modifier.weight(1f), variant = McVariant.DANGER, fullWidth = true) { Text("End route", maxLines = 1) }
+                McButton(onDismiss, Modifier.weight(1f), variant = McVariant.PRIMARY, fullWidth = true) { Text("Close", maxLines = 1) }
+            }
+        },
+    ) {
+        if (banner.etaText.isNotBlank()) {
+            Text("${banner.etaText} \u00b7 ${banner.providerLabel}", style = MaterialTheme.typography.bodyMedium, color = c.greenHighlight)
+            Spacer(Modifier.height(8.dp))
+        }
+        if (steps.isEmpty()) {
+            Text(banner.instruction, style = MaterialTheme.typography.bodyLarge, color = c.text)
+            if (banner.distanceText.isNotBlank()) {
+                Text(banner.distanceText, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            }
+        } else {
+            steps.forEachIndexed { idx, s ->
+                val stepGlyph = when (s.direction) {
+                    TurnDirection.LEFT, TurnDirection.SLIGHT_LEFT, TurnDirection.SHARP_LEFT, TurnDirection.U_TURN -> Glyph.NAV_LEFT
+                    TurnDirection.RIGHT, TurnDirection.SLIGHT_RIGHT, TurnDirection.SHARP_RIGHT -> Glyph.NAV_RIGHT
+                    else -> Glyph.NAV_UP
+                }
+                Row(
+                    Modifier.fillMaxWidth().clickable { onSelectStep(s) }.padding(vertical = 8.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(Modifier.background(c.raised).padding(6.dp), contentAlignment = Alignment.Center) {
+                        PixelGlyph(stepGlyph, c.text, size = 18.dp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("${idx + 1}. ${s.instruction}", style = MaterialTheme.typography.bodyMedium, color = c.text)
+                        if (s.distanceMeters > 0) {
+                            Text(app.minemaps.engine.routing.RouteTracker.formatDistance(s.distanceMeters), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                        }
+                    }
+                }
+                if (idx < steps.lastIndex) app.minemaps.ui.theme.McDivider()
+            }
+        }
     }
 }
 

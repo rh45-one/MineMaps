@@ -258,7 +258,7 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                     onLabelNames = { vm.setLabelNames(it) },
                     onClearCache = { vm.clearCache() },
                     onLicences = { vm.screen.value = Screen.LICENCES },
-                    extra = {
+                    navigationGroup = {
                         NavigationGroup(
                             settings = settings,
                             listenerGranted = listenerGranted,
@@ -266,14 +266,21 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                             onMirrorChange = vm::setMirrorGoogleMaps,
                             onOpenListenerSettings = { runCatching { ctx.startActivity(app.minemaps.nav.GoogleMapsMirror.listenerSettingsIntent()) } },
                             onApiKeyChange = vm::setGoogleApiKey,
+                            onTrafficChange = vm::setShowTraffic,
+                            onRoadAlertsChange = vm::setShowRoadAlerts,
+                            onDynamicZoomChange = vm::setDynamicDrivingZoom,
                         )
+                    },
+                    savedPlacesGroup = {
                         SavedPlacesGroup(
                             onExport = { exportLauncher.launch("minemaps-places.json") },
                             onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         )
-                        UpdatesGroup(settings, container.updates.enabled, updateUi, offer, vm::setUpdateFrequency, container.updates::checkNow, container.updates::install)
-                        if (BuildConfig.DEBUG) DeveloperGroup(settings.debugMode) { vm.setDebugMode(it) }
                     },
+                    updatesGroup = {
+                        UpdatesGroup(settings, container.updates.enabled, updateUi, offer, vm::setUpdateFrequency, container.updates::checkNow, container.updates::install)
+                    },
+                    developerGroup = if (BuildConfig.DEBUG) ({ DeveloperGroup(settings.debugMode) { vm.setDebugMode(it) } }) else null,
                     onIncludeTextures = { showInclude = true },
                     texturesExtra = {
                         TexturesExtra(
@@ -361,6 +368,8 @@ private fun MapScreen(
     val activePlan by container.navigation.activePlan.collectAsStateWithLifecycle()
     val navBanner by container.navigation.bannerState.collectAsStateWithLifecycle()
     val navLoading by container.navigation.loading.collectAsStateWithLifecycle()
+    val roadAlerts by container.roadAlerts.collectAsStateWithLifecycle()
+    var showDirectionsDialog by rememberSaveable { mutableStateOf(false) }
 
     val activity = context.findActivity()
     val askedBefore by rememberUpdatedState(settings.permissionAsked)
@@ -404,7 +413,10 @@ private fun MapScreen(
     LaunchedEffect(settings.showStreetNames) { renderer.showStreetNames = settings.showStreetNames }
 
     val player = loc.location
-    LaunchedEffect(player, following, pending) {
+    var detectedRoadClass by remember { mutableStateOf<String?>(null) }
+    var lastRoadProbeMs by remember { mutableStateOf(0L) }
+    var lastManualRecenterMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(player, following, pending, settings.dynamicDrivingZoom) {
         val l = player ?: return@LaunchedEffect
         val view = controller.view ?: return@LaunchedEffect
         if (!following) return@LaunchedEffect
@@ -412,17 +424,35 @@ private fun MapScreen(
         if (z != null) {
             view.animateTo(l.latitude, l.longitude, z)
             vm.pendingFlyZoom.value = null
-        } else {
-            view.follow(l.latitude, l.longitude)
+            return@LaunchedEffect
         }
+        val now = System.currentTimeMillis()
+        if (settings.dynamicDrivingZoom && l.hasSpeed() && l.speed >= 1.5f && now - lastManualRecenterMs > 12_000L) {
+            if (now - lastRoadProbeMs > 5_000L) {
+                lastRoadProbeMs = now
+                val wx = Mercator.lonToX(l.longitude)
+                val wy = Mercator.latToY(l.latitude)
+                val hit = runCatching { renderer.inspect(wx - Math.floor(wx), wy, 17.0) }.getOrNull()
+                detectedRoadClass = hit?.roadClass
+            }
+            val dynZ = app.minemaps.engine.routing.RouteTracker.targetDrivingZoom(l.speed, detectedRoadClass)
+            if (dynZ != null && kotlin.math.abs(view.zoom - dynZ) >= 0.45) {
+                view.animateTo(l.latitude, l.longitude, dynZ, 600L)
+                return@LaunchedEffect
+            }
+        }
+        view.follow(l.latitude, l.longitude)
     }
 
-    val overlays = remember(player, saved, searchPin, activePlan) {
+    val visibleAlerts = if (settings.showRoadAlerts) roadAlerts else emptyList()
+    val overlays = remember(player, saved, searchPin, activePlan, settings.showTraffic, visibleAlerts) {
         MapOverlays(
             player = player?.let { PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f) },
             bookmarks = saved.map { Bookmark(it.lat, it.lon, it.icon, it.name) },
             searchPin = searchPin,
             route = activePlan,
+            showTraffic = settings.showTraffic,
+            roadAlerts = visibleAlerts,
         )
     }
 
@@ -466,12 +496,22 @@ private fun MapScreen(
                     focus.clearFocus()
                     vm.resultsVisible.value = false
                     val hit = saved.firstOrNull { nearPin(vp, it.lat, it.lon, sx, sy, density) }
+                    val alertHit = if (hit == null && settings.showRoadAlerts) {
+                        visibleAlerts.firstOrNull { nearPin(vp, it.lat, it.lon, sx, sy, density) }
+                    } else null
                     if (hit != null) {
                         vm.showSaved(hit)
-                    } else if (searchPin != null && nearPin(vp, searchPin!!.lat, searchPin!!.lng, sx, sy, density) && card is InfoCard.Result) {
-                        // keep the search result card
+                    } else if (alertHit != null) {
+                        vm.card.value = InfoCard.Inspect(alertHit.label, alertHit.detail, alertHit.lat, alertHit.lon)
+                    } else if (searchPin != null && nearPin(vp, searchPin!!.lat, searchPin!!.lng, sx, sy, density)) {
+                        vm.restoreSelectedResultCard()
                     } else {
-                        inspectAt(vp, sx, sy) { r, lat, lon -> vm.showInspect(r, lat, lon) }
+                        val wasResultCard = card is InfoCard.Result
+                        inspectAt(vp, sx, sy) { r, lat, lon ->
+                            // If a search result card is already open, do not overwrite it with generic "Residential" landuse on an accidental tap.
+                            if (wasResultCard && r?.kind == app.minemaps.engine.inspect.InspectKind.LAND) return@inspectAt
+                            vm.showInspect(r, lat, lon)
+                        }
                     }
                 }
                 v.onLongPress = { vp, sx, sy ->
@@ -519,7 +559,16 @@ private fun MapScreen(
             }
         }
         val banners: @Composable () -> Unit = {
-            navBanner?.let { b -> ActiveNavBanner(b, onStop = { container.navigation.stop() }) }
+            navBanner?.let { b ->
+                ActiveNavBanner(
+                    b,
+                    onStop = {
+                        showDirectionsDialog = false
+                        container.navigation.stop()
+                    },
+                    onClick = { showDirectionsDialog = true },
+                )
+            }
             if (navLoading && navBanner == null) McBanner("Calculating route\u2026", "Cancel", { container.navigation.stop() }, warning = false)
             if (net == app.minemaps.engine.data.NetState.OFFLINE) McBanner("Offline \u2013 showing cached map", null, {})
             if (!granted && !rationaleVisible) {
@@ -622,9 +671,15 @@ private fun MapScreen(
                     when {
                         !granted -> if (permanentlyDenied) openAppSettings() else requestPermission()
                         loc.status == LocationStatus.DISABLED -> openLocationSettings()
+                        following -> {
+                            lastManualRecenterMs = System.currentTimeMillis()
+                            val curZ = controller.view?.zoom ?: 16.5
+                            val nextZ = app.minemaps.engine.routing.RouteTracker.nextRecenterZoom(curZ)
+                            vm.startFollowing(nextZ)
+                        }
                         else -> {
-                            val z = controller.view?.zoom ?: 16.0
-                            vm.startFollowing(if (z < 15.0) 16.0 else z)
+                            val z = controller.view?.zoom ?: 16.5
+                            vm.startFollowing(if (z < 15.0) 16.5 else z)
                         }
                     }
                 },
@@ -693,6 +748,23 @@ private fun MapScreen(
                 McButton({ confirmDelete = null; vm.delete(p) }, variant = McVariant.DANGER) { Text("Delete") }
             },
         ) { Text("\"${p.name}\" will be removed from your saved places.", style = MaterialTheme.typography.bodyMedium) }
+    }
+    val curBanner = navBanner
+    if (showDirectionsDialog && curBanner != null) {
+        DirectionsDialog(
+            banner = curBanner,
+            plan = activePlan,
+            onSelectStep = { step ->
+                showDirectionsDialog = false
+                vm.following.value = false
+                controller.view?.animateTo(step.maneuverPoint.lat, step.maneuverPoint.lng, 17.5)
+            },
+            onStopNavigation = {
+                showDirectionsDialog = false
+                container.navigation.stop()
+            },
+            onDismiss = { showDirectionsDialog = false },
+        )
     }
 }
 

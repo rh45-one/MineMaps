@@ -53,12 +53,30 @@ class UpdateManager(
             UpdateEvents.status.collect { (status, message) ->
                 when (status) {
                     PackageInstaller.STATUS_PENDING_USER_ACTION -> {}
-                    PackageInstaller.STATUS_SUCCESS -> cleanup().also { state.value = UpdateUi.Idle }
+                    PackageInstaller.STATUS_SUCCESS -> {
+                        UpdateEvents.confirmIntent.value = null
+                        cleanup()
+                        state.value = UpdateUi.Idle
+                    }
                     else -> {
+                        UpdateEvents.confirmIntent.value = null
                         cleanup()
                         state.value = UpdateUi.Failed(message?.takeIf { it.isNotBlank() } ?: "Installation failed")
                     }
                 }
+            }
+        }
+    }
+
+    /** Called when the Activity resumes: continues an update that was waiting on unknown-sources permission or a pending system confirmation. */
+    fun onResume() {
+        val cur = state.value
+        if (cur is UpdateUi.NeedsPermission && UpdateInstaller.canInstall(context)) {
+            install()
+        } else if (cur is UpdateUi.Installing) {
+            UpdateEvents.confirmIntent.value?.let { confirm ->
+                UpdateEvents.confirmIntent.value = null
+                runCatching { context.startActivity(confirm) }
             }
         }
     }
@@ -117,6 +135,7 @@ class UpdateManager(
     fun cancel() {
         job?.cancel()
         job = null
+        UpdateEvents.confirmIntent.value = null
         cleanup()
         state.value = UpdateUi.Idle
     }
@@ -124,29 +143,54 @@ class UpdateManager(
     fun install() {
         val info = offer.value ?: return
         if (job?.isActive == true) return
+        if (!UpdateInstaller.canInstall(context)) {
+            state.value = UpdateUi.NeedsPermission(info)
+            runCatching { context.startActivity(UpdateInstaller.unknownSourcesIntent(context)) }
+            job = scope.launch {
+                try {
+                    var waited = 0
+                    while (!UpdateInstaller.canInstall(context)) {
+                        delay(400)
+                        if (++waited > 450) throw UpdateException("Installing from this app was not allowed")
+                    }
+                    job = null
+                    install()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    state.value = UpdateUi.Failed(e.message?.takeIf { it.isNotBlank() } ?: "Update failed")
+                }
+            }
+            return
+        }
         job = scope.launch {
             try {
                 val http = client()
-                cleanup()
                 val apk = File(updatesDir, "update.apk")
-                state.value = UpdateUi.Downloading(info, 0)
-                UpdateInstaller.download(http, info.apkUrl, apk, info.apkSize, allowHttp, userAgent) { state.value = UpdateUi.Downloading(info, it) }
+                if (!apk.exists() || apk.length() != info.apkSize) {
+                    cleanup()
+                    state.value = UpdateUi.Downloading(info, 0)
+                    UpdateInstaller.download(http, info.apkUrl, apk, info.apkSize, allowHttp, userAgent) { state.value = UpdateUi.Downloading(info, it) }
+                }
                 state.value = UpdateUi.Verifying(info)
                 val expected = Sha256File.parse(UpdateInstaller.fetchText(http, info.sha256Url, userAgent)) ?: throw UpdateException("The checksum file is not valid")
                 val actual = UpdateInstaller.sha256Hex(apk)
-                if (!actual.equals(expected, ignoreCase = true)) throw UpdateException("Checksum mismatch: the download was corrupted or tampered with")
-                UpdateInstaller.verifyApk(context, apk, installedCode)?.let { throw UpdateException(it) }
-                if (!UpdateInstaller.canInstall(context)) {
-                    state.value = UpdateUi.NeedsPermission(info)
-                    context.startActivity(UpdateInstaller.unknownSourcesIntent(context))
-                    var waited = 0
-                    while (!UpdateInstaller.canInstall(context)) {
-                        delay(1000)
-                        if (++waited > 180) throw UpdateException("Installing from this app was not allowed")
-                    }
+                if (!actual.equals(expected, ignoreCase = true)) {
+                    cleanup()
+                    throw UpdateException("Checksum mismatch: the download was corrupted or tampered with")
+                }
+                UpdateInstaller.verifyApk(context, apk, installedCode)?.let {
+                    cleanup()
+                    throw UpdateException(it)
                 }
                 state.value = UpdateUi.Installing(info)
                 UpdateInstaller.install(context, apk)
+                // Give the foreground Activity a moment to resume if we just came back from Settings, then launch any pending confirmation dialog.
+                delay(350)
+                UpdateEvents.confirmIntent.value?.let { confirm ->
+                    UpdateEvents.confirmIntent.value = null
+                    runCatching { context.startActivity(confirm) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
