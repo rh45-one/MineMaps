@@ -18,11 +18,11 @@
 
 ## Resuming work
 
-- Read `README.md` (build, emulator, DHU), `docs/ADR-001-architecture.md`, `docs/ENGINE-SPEC.md`.
+- Read `docs/DEVELOPMENT.md` (build, emulator, DHU), `docs/ADR-001-architecture.md`, `docs/ENGINE-SPEC.md`.
 - Engine changes: `mapengine/` is pure JVM; run `./gradlew :mapengine:test` and look at `:tools:render:run` output. Keep `ENGINE-SPEC.md` in sync.
 - Art changes: edit `tools/art/make_atlas.py`, regenerate, copy `atlas.png`/`atlas.json` into `mapengine/src/main/resources/minemaps/`, then run `tools/art/make_android_icons.py` if the app icon changed.
 - Car work: `app/src/main/kotlin/app/minemaps/car/`. The surface is drawn with the software `lockCanvas` (hardware canvas crashed the process when the host destroyed the surface).
-- Emulator `mm_phone` and the DHU are test fixtures only; follow the README procedure after any cold boot (head unit server must be restarted).
+- Emulator `mm_phone` and the DHU are test fixtures only; follow the `docs/DEVELOPMENT.md` procedure after any cold boot (head unit server must be restarted).
 - Gate before finishing: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintRelease`.
 
 ## Test counts (last run)

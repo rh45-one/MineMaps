@@ -4,7 +4,7 @@
 - Commit after every completed, verified piece of work (small, focused commits). Never commit
   `mapengine/src/main/resources/minemaps/packs/vanilla/` (Mojang textures), `local.properties`, keystores or build output.
 - Do not push unless asked.
-- Start with `docs/STATUS.md` (state, limitations), then `docs/ADR-001-architecture.md` and `docs/ENGINE-SPEC.md`.
+- Start with `docs/STATUS.md` (state, limitations), then `docs/DEVELOPMENT.md`, `docs/ADR-001-architecture.md` and `docs/ENGINE-SPEC.md`.
   Keep ENGINE-SPEC.md and STATUS.md in sync with changes.
 
 - Releases and versioning: see `docs/RELEASING.md` (tags `vX.Y.Z` build and publish the signed APK; never print or commit the keystore).
