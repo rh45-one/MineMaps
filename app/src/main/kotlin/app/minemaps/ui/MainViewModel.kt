@@ -331,6 +331,11 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setDynamicDrivingZoom(v: Boolean) = viewModelScope.launch { container.settings.setDynamicDrivingZoom(v) }
 
+    fun setAutoUpdatePromptHandled(enableAuto: Boolean) = viewModelScope.launch {
+        container.settings.setUpdateFrequency(if (enableAuto) app.minemaps.data.UpdateFrequency.DAILY else app.minemaps.data.UpdateFrequency.MANUAL)
+        container.settings.setAutoUpdatePromptHandled(true)
+    }
+
     fun handleIncomingTarget(target: app.minemaps.car.GeoTarget, onFlyTo: (Double, Double, Double) -> Unit) {
         when (target) {
             is app.minemaps.car.GeoTarget.Place -> {

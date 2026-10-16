@@ -182,7 +182,31 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
     val updateUi by container.updates.state.collectAsStateWithLifecycle()
     val offer by container.updates.offer.collectAsStateWithLifecycle()
     val offerVisible by container.updates.dialogVisible.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { container.updates.checkIfDue() }
+    var canInstallPackages by remember { mutableStateOf(app.minemaps.update.UpdateInstaller.canInstall(ctx)) }
+    var explainingInstallPerm by rememberSaveable { mutableStateOf(false) }
+    val rootLifecycle = LocalLifecycleOwner.current
+    DisposableEffect(rootLifecycle) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) {
+                val allowed = app.minemaps.update.UpdateInstaller.canInstall(ctx)
+                canInstallPackages = allowed
+                if (allowed && !settings.autoUpdatePromptHandled) {
+                    vm.setAutoUpdatePromptHandled(enableAuto = true)
+                    explainingInstallPerm = false
+                }
+            }
+        }
+        rootLifecycle.lifecycle.addObserver(obs)
+        onDispose { rootLifecycle.lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(canInstallPackages, settings.autoUpdatePromptHandled) {
+        if (canInstallPackages && !settings.autoUpdatePromptHandled) {
+            vm.setAutoUpdatePromptHandled(enableAuto = true)
+        }
+        if (settings.autoUpdatePromptHandled || canInstallPackages) {
+            container.updates.checkIfDue()
+        }
+    }
     val packUi by container.textures.state.collectAsStateWithLifecycle()
     val packRevision by engine.packRevision.collectAsStateWithLifecycle()
     val vanillaAvail = remember(packRevision) { engine.isPackAvailable(TexturePack.VANILLA) }
@@ -311,6 +335,19 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
     val o = offer
     if (o != null && (offerVisible || updateUi !is UpdateUi.Idle && updateUi !is UpdateUi.Checking)) {
         UpdateDialog(updateUi, o, container.updates::install, container.updates::later, container.updates::skip, container.updates::cancel, container.updates::dismissFailure)
+    } else if (!settings.autoUpdatePromptHandled && !canInstallPackages) {
+        FirstBootAutoUpdateDialog(
+            explainingPermission = explainingInstallPerm,
+            onSelectYes = { explainingInstallPerm = true },
+            onSelectNo = {
+                explainingInstallPerm = false
+                vm.setAutoUpdatePromptHandled(enableAuto = false)
+            },
+            onBackToChoice = { explainingInstallPerm = false },
+            onOpenInstallPermission = {
+                runCatching { ctx.startActivity(app.minemaps.update.UpdateInstaller.unknownSourcesIntent(ctx)) }
+            },
+        )
     }
     scope.hashCode()
 }

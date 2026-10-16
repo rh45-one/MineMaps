@@ -301,6 +301,67 @@ fun DeveloperGroup(debugMode: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 @Composable
+fun FirstBootAutoUpdateDialog(
+    explainingPermission: Boolean,
+    onSelectYes: () -> Unit,
+    onSelectNo: () -> Unit,
+    onBackToChoice: () -> Unit,
+    onOpenInstallPermission: () -> Unit,
+) {
+    val c = Mc.colors
+    if (!explainingPermission) {
+        McDialog(
+            title = "Automatic updates?",
+            onDismiss = onSelectNo,
+            buttons = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    McButton(onSelectNo, Modifier.weight(1f), fullWidth = true) { Text("No", maxLines = 1) }
+                    McButton(onSelectYes, Modifier.weight(1f), variant = McVariant.PRIMARY, fullWidth = true) { Text("Yes", maxLines = 1) }
+                }
+            },
+        ) {
+            Text(
+                "Would you like MineMaps to check for and install new versions automatically?",
+                style = MaterialTheme.typography.bodyLarge,
+                color = c.text,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Updates are downloaded from GitHub Releases and verified against their SHA-256 checksum and signing key. You can change this anytime in Settings > Updates & About.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+            )
+        }
+    } else {
+        McDialog(
+            title = "Allow app installs",
+            onDismiss = onBackToChoice,
+            buttons = {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        McButton(onBackToChoice, Modifier.weight(1f), fullWidth = true) { Text("Back", maxLines = 1) }
+                        McButton(onSelectNo, Modifier.weight(1f), fullWidth = true) { Text("No, disable", maxLines = 1) }
+                    }
+                    McButton(onOpenInstallPermission, variant = McVariant.PRIMARY, fullWidth = true) { Text("Allow in Settings", maxLines = 1) }
+                }
+            },
+        ) {
+            Text(
+                "Because MineMaps is installed outside the Google Play Store, Android requires your permission (\"Install unknown apps\") so MineMaps can install downloaded updates for you.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.text,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Tap \"Allow in Settings\" to turn on the switch for MineMaps, or tap \"Back\" / \"No, disable\" if you prefer to update manually.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+            )
+        }
+    }
+}
+
+@Composable
 fun UpdateDialog(ui: UpdateUi, offer: ReleaseInfo, onUpdate: () -> Unit, onLater: () -> Unit, onSkip: () -> Unit, onCancel: () -> Unit, onDismissFailure: () -> Unit) {
     val busy = ui is UpdateUi.Downloading || ui is UpdateUi.Verifying || ui is UpdateUi.NeedsPermission || ui is UpdateUi.Installing
     McDialog(

@@ -41,6 +41,7 @@ data class Settings(
     val showTraffic: Boolean = true,
     val showRoadAlerts: Boolean = true,
     val dynamicDrivingZoom: Boolean = true,
+    val autoUpdatePromptHandled: Boolean = false,
 )
 
 object ArrowColors {
@@ -80,6 +81,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val trafficKey = booleanPreferencesKey("show_traffic")
     private val alertsKey = booleanPreferencesKey("show_road_alerts")
     private val dynZoomKey = booleanPreferencesKey("dynamic_driving_zoom")
+    private val autoUpdatePromptKey = booleanPreferencesKey("auto_update_prompt_handled")
 
     val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
@@ -104,6 +106,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             showTraffic = p[trafficKey] ?: true,
             showRoadAlerts = p[alertsKey] ?: true,
             dynamicDrivingZoom = p[dynZoomKey] ?: true,
+            autoUpdatePromptHandled = p[autoUpdatePromptKey] ?: false,
         )
     }
 
@@ -150,4 +153,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setShowRoadAlerts(v: Boolean) = store.edit { it[alertsKey] = v }
 
     suspend fun setDynamicDrivingZoom(v: Boolean) = store.edit { it[dynZoomKey] = v }
+
+    suspend fun setAutoUpdatePromptHandled(v: Boolean = true) = store.edit { it[autoUpdatePromptKey] = v }
 }
