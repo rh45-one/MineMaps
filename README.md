@@ -61,27 +61,46 @@ You can back up or move your bookmarks at any time in **Settings → Saved place
 
 ## Using MineMaps on Android Auto
 
-Because MineMaps is installed from GitHub rather than the Google Play Store, Android Auto hides it until you turn on two developer settings on your phone:
+Because MineMaps is installed from GitHub rather than the Google Play Store, follow these steps on your phone so Android Auto shows it in your car:
 
 1. On your phone, open **Settings** and search for **Android Auto** (or open the Android Auto app settings).
 2. Scroll all the way to the bottom and tap **Version** about 10 times until it asks to enable developer mode, then tap **OK**.
 3. Tap the **three-dot menu (⋮)** in the top-right corner and open **Developer settings**.
-4. Tap **Application Mode** and set it to **Developer**.
-5. Scroll down and check **Unknown sources**, then check **Customise launcher** in the main Android Auto settings to make sure **MineMaps** is ticked.
+4. Tap **Application Mode** and set it to **Developer**, and scroll down to check **Unknown sources**.
+5. **Android Auto 14+ installer check:** Modern Android Auto (`v14+`) also verifies that `CarAppService` apps were installed through Google's Package Installer with Play Store installer metadata.
+   - If MineMaps does not appear in **Android Auto → Customise launcher** right after a browser install, either install an update once through MineMaps' in-app updater (which invokes Google Package Installer with the required metadata) or install over USB with `tools/phone.sh --release`.
+6. Check **Customise launcher** in the main Android Auto settings to make sure **MineMaps** is ticked.
 
 Next time you connect your phone to your car, **MineMaps** will appear in your Android Auto app launcher and can take the main map view (full screen or split dashboard).
 
 ---
 
-## Optional: Use Official Minecraft Textures
+## Optional: Official Minecraft Textures & Custom Resource Packs (`.zip`)
 
-Out of the box, MineMaps uses its own original pixel art. If you own **Minecraft: Java Edition**, you can switch the map, item icons, player arrow, and bookmark banners to the game's textures directly on your phone:
+Out of the box, MineMaps uses its own original pixel art. You can switch the map, item icons, player arrow, and bookmark banners to **official Minecraft: Java Edition textures** or any **custom Minecraft resource pack (`.zip`)** directly on your phone.
 
-1. Open **Settings → Textures** and tap **Include Minecraft textures**.
-2. Choose **Download now** (downloads the official Minecraft client file — about 41 MB — directly from Mojang's servers, builds the texture pack on your phone, and deletes the download) or **At next update** (downloads automatically on Wi-Fi after your next app update).
-3. You can also tap **Import from file…** to load a Minecraft client `.jar` or any compatible `.zip` resource pack stored on your phone.
+### 1. Official Vanilla Minecraft Textures
+1. Open **Settings → Textures & Appearance**, tap **Minecraft textures**, and choose **Download now** (downloads the official Minecraft client jar — about 41 MB — directly from Mojang's servers, builds the texture atlas on your phone, and deletes the download) or **Next update** (downloads automatically on Wi-Fi after your next app update).
 
-Your imported textures are stored privately on your phone and **stay intact across app updates**. You can switch back to the original art or remove the imported textures at any time in Settings.
+### 2. Importing a Custom Resource Pack (`.zip`)
+You can theme the entire real-world map with your favourite Minecraft resource pack (such as *Faithful 32x/64x*, *Bare Bones*, *Jappa*, seasonal packs, or your own custom pack):
+
+1. Download any **Minecraft: Java Edition resource pack (`.zip`)** to your phone (up to 200 MB). Do **not** unzip it.
+2. Open **Settings → Textures & Appearance** and tap **Import resource pack (.zip) / JAR…**.
+3. Pick the `.zip` file. MineMaps builds the atlas on-device and switches to it immediately.
+
+#### Specifics & Tips for Custom Resource Packs
+- **Layering over Vanilla (Recommended):** If you install the **Vanilla Minecraft** textures *first* and then import a custom `.zip` resource pack on top, **MineMaps automatically layers the custom pack over your installed Vanilla textures**. Any block or item icon that the custom pack doesn't include will keep its Vanilla Minecraft texture (instead of reverting to the default pack). You can tap **Reset to Vanilla Minecraft** at any time to go back to pure Vanilla.
+- **Supported Resolutions (`16×16`, `32×32`, `64×64`, `128×128+`):** Higher-resolution HD resource packs are automatically box-downsampled with premultiplied alpha to crisp `16×16` tiles, and animated texture strips (like `water_still.png`) automatically extract their frames.
+- **Supported Minecraft Versions (`1.8` through `1.21+`):** Both modern (`assets/minecraft/textures/block/` & `item/`) and legacy pre-1.13 (`assets/minecraft/textures/blocks/` & `items/`) folder structures and texture names (e.g. `dirt_path_top` / `grass_path_top`, `oak_leaves` / `leaves_oak`, `golden_apple` / `apple_golden`) are supported. Zip files may have `assets/` at the root or nested inside a single top-level folder.
+- **Colormaps:** If your resource pack includes custom `textures/colormap/grass.png` and `foliage.png`, MineMaps samples them to tint grass, parks, and forest canopies; if a pack omits colormaps, MineMaps automatically applies standard plains and forest biome tints.
+- **Which Minecraft textures map to real-world geography:**
+  - **Terrain & Water:** `block/grass_block_top` (land & parks), `block/oak_leaves` (forests/woods), `block/water_still` (oceans, rivers, lakes), `block/sand` (beaches/deserts), `block/snow` (glaciers/peaks), `block/mud` or `block/dirt` (wetlands), `block/farmland_moist` + `block/wheat_stage3`/`7` (farmland), `block/poppy` & `block/dandelion` (park flowers).
+  - **Roads & Paths:** `block/gray_concrete` (motorways/primary roads), `block/cobblestone` & `block/stone_bricks` (streets & residential roads), `block/dirt_path_top` (footpaths/trails), `block/gravel` + `block/rail` (railways), `block/smooth_stone` (plazas/aprons).
+  - **Buildings:** `block/bricks`, `block/oak_planks`, `block/spruce_planks`, `block/polished_andesite`, `block/white_concrete`, and `block/terracotta`.
+  - **Map Markers & Icons:** `map/decorations/player` (your GPS arrow), `map/decorations/red_banner` (search pin), `entity/chest/normal` (chest icon), plus standard `item/*` textures (`compass_00`, `book`, `diamond`, `emerald`, `apple`, `bread`, `cooked_beef`, `potion`, `minecart`, `iron_pickaxe`, `iron_sword`, `lantern`, etc.).
+
+Your imported textures are stored privately on your phone and **stay intact across app updates**.
 
 ---
 

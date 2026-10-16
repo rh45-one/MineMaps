@@ -409,17 +409,24 @@ fun UpdateDialog(ui: UpdateUi, offer: ReleaseInfo, onUpdate: () -> Unit, onLater
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun TexturesExtra(available: Boolean, bundled: Boolean, source: String?, pending: Boolean, onNow: () -> Unit, onRemove: () -> Unit, onImportFile: () -> Unit) {
     val c = Mc.colors
     val s = S
+    val isCustomPack = available && !bundled && source != null && ("Resource pack" in source || "custom" in source || "file (" in source)
     Spacer(Modifier.height(8.dp))
     when {
         available && bundled -> Text(s.texturesBundledNote, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
         available -> {
             if (!source.isNullOrBlank()) Text(source, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
             Spacer(Modifier.height(8.dp))
-            McButton(onRemove, variant = McVariant.DANGER) { Text(s.remove) }
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isCustomPack) {
+                    McButton(onNow) { Text(s.resetToVanilla) }
+                }
+                McButton(onRemove, variant = McVariant.DANGER) { Text(s.remove) }
+            }
         }
         pending -> {
             Text(s.pendingWifiDownloadNote, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
@@ -429,6 +436,8 @@ fun TexturesExtra(available: Boolean, bundled: Boolean, source: String?, pending
     }
     if (!(available && bundled)) {
         Spacer(Modifier.height(8.dp))
+        Text(s.resourcePackHint, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+        Spacer(Modifier.height(6.dp))
         McButton(onImportFile) { Text(s.importFromFile) }
     }
 }

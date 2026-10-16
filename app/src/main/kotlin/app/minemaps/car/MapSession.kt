@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-class MapSession : Session() {
+class MapSession(
+    private val onActiveChanged: (Boolean) -> Unit = {},
+) : Session() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var controller: CarMapController? = null
 
@@ -29,11 +31,18 @@ class MapSession : Session() {
         controller = c
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(c)
         lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = c.onSessionStarted()
+            override fun onStart(owner: LifecycleOwner) {
+                onActiveChanged(true)
+                c.onSessionStarted()
+            }
 
-            override fun onStop(owner: LifecycleOwner) = c.onSessionStopped()
+            override fun onStop(owner: LifecycleOwner) {
+                c.onSessionStopped()
+                onActiveChanged(false)
+            }
 
             override fun onDestroy(owner: LifecycleOwner) {
+                onActiveChanged(false)
                 c.release()
                 scope.cancel()
                 controller = null

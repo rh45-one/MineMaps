@@ -81,6 +81,16 @@ class Source:
             self.base = names[0][:names[0].index(PREFIX)]
 
     def read(self, rel):
+        data = self._read_one(rel)
+        if data is not None:
+            return data
+        if rel.startswith('block/'):
+            return self._read_one('blocks/' + rel[len('block/'):])
+        if rel.startswith('item/'):
+            return self._read_one('items/' + rel[len('item/'):])
+        return None
+
+    def _read_one(self, rel):
         name = self.base.rstrip('/') + '/' + PREFIX + rel + '.png' if self.base else PREFIX + rel + '.png'
         try:
             if self.zip:
@@ -101,6 +111,12 @@ class Textures:
 
     def has(self, rel):
         return any(s.read(rel) is not None for s in self.sources)
+
+    def first(self, *rels):
+        for r in rels:
+            if self.has(r):
+                return self.img(r)
+        return self.img(rels[0])
 
     def img(self, rel):
         for s in self.sources:
@@ -177,6 +193,8 @@ def center_xy(im):
 
 def chest_from_entity(im):
     """Composes the front face of Minecraft's 64x64 entity/chest/normal.png (lid + base + lock) into a centered 16x16 icon."""
+    if im.width != 64:
+        im = im.resize((64, max(64, im.height * 64 // im.width)), Image.BOX)
     lid = im.crop((42, 14, 56, 19)).transpose(Image.FLIP_TOP_BOTTOM)
     base = im.crop((42, 33, 56, 43)).transpose(Image.FLIP_TOP_BOTTOM)
     lock = im.crop((1, 1, 3, 5)).transpose(Image.FLIP_TOP_BOTTOM)
@@ -190,62 +208,67 @@ def chest_from_entity(im):
 def recipes(tx):
     """atlas name -> function returning a list of 16x16 variants (textures) or one image (icons)."""
     item = lambda n: tx.img('item/' + n)
-    grass_c = lambda: biome(tx.img('colormap/grass'), 0.8, 0.4)    # plains
-    park_c = lambda: biome(tx.img('colormap/grass'), 0.7, 0.8)     # lusher
-    leaf_c = lambda: biome(tx.img('colormap/foliage'), 0.7, 0.8)
-    grass = lambda: tint(frame(tx.img('block/grass_block_top')), grass_c())
-    park = lambda: tint(frame(tx.img('block/grass_block_top')), park_c())
+    grass_c = lambda: biome(tx.img('colormap/grass'), 0.8, 0.4) if tx.has('colormap/grass') else (0x91, 0xBD, 0x59)
+    park_c = lambda: biome(tx.img('colormap/grass'), 0.7, 0.8) if tx.has('colormap/grass') else (0x79, 0xC0, 0x5A)
+    leaf_c = lambda: biome(tx.img('colormap/foliage'), 0.7, 0.8) if tx.has('colormap/foliage') else (0x59, 0xAE, 0x30)
+    grass_top = lambda: tx.first('block/grass_block_top', 'block/grass_top')
+    grass = lambda: tint(frame(grass_top()), grass_c())
+    park = lambda: tint(frame(grass_top()), park_c())
 
     def leaves():
+        base = frame(tx.first('block/oak_leaves', 'block/leaves_oak'))
         c = leaf_c()
-        return flatten(tint(frame(tx.img('block/oak_leaves')), c), tuple(int(v * 0.35) for v in c))
+        return flatten(tint(base, c), tuple(int(v * 0.35) for v in c))
 
     def grave():
-        g = grass().copy(); g.paste(frame(tx.img('block/stone_bricks')).crop((0, 0, 4, 6)), (6, 5)); return g
+        g = grass().copy(); g.paste(frame(tx.first('block/stone_bricks', 'block/stonebrick')).crop((0, 0, 4, 6)), (6, 5)); return g
 
-    roof_stone = lambda: tx.img('block/polished_andesite' if tx.has('block/polished_andesite') else 'block/stone')
+    roof_stone = lambda: tx.first('block/polished_andesite', 'block/stone_andesite_smooth', 'block/stone')
     textures = {
         'grass': lambda: rotations(grass()),
-        'park': lambda: rotations(park(), 2) + [over(park(), tx.img('block/poppy')),
-                                               over(park(), tx.img('block/dandelion'))],
+        'park': lambda: rotations(park(), 2) + [over(park(), tx.first('block/poppy', 'block/flower_rose')),
+                                               over(park(), tx.first('block/dandelion', 'block/flower_dandelion'))],
         'leaves': lambda: rotations(leaves(), 3),
         'water': lambda: [tint(frame(tx.img('block/water_still'), i), WATER) for i in (0, 5, 11)],
         'sand': lambda: rotations(tx.img('block/sand'), 2),
         'gravel': lambda: rotations(tx.img('block/gravel'), 2),
-        'stone': lambda: rotations(tx.img('block/smooth_stone'), 2),
+        'stone': lambda: rotations(tx.first('block/smooth_stone', 'block/stone_slab_top', 'block/stone'), 2),
         'cobble': lambda: rotations(tx.img('block/cobblestone'), 2),
-        'asphalt': lambda: rotations(tx.img('block/gray_concrete'), 2),
-        'stone_bricks': lambda: [frame(tx.img('block/stone_bricks')), frame(tx.img('block/cracked_stone_bricks'))],
-        'dirt_path': lambda: rotations(tx.img('block/dirt_path_top'), 2),
-        'farmland': lambda: [over(tx.img('block/farmland_moist'), tx.img('block/wheat_stage3')),
-                             over(tx.img('block/farmland_moist'), tx.img('block/wheat_stage7'))],
+        'asphalt': lambda: rotations(tx.first('block/gray_concrete', 'block/concrete_gray', 'block/cyan_terracotta'), 2),
+        'stone_bricks': lambda: ([frame(tx.first('block/stone_bricks', 'block/stonebrick')), frame(tx.first('block/cracked_stone_bricks', 'block/stonebrick_cracked'))]
+                                 if (tx.has('block/cracked_stone_bricks') or tx.has('block/stonebrick_cracked'))
+                                 else rotations(tx.first('block/stone_bricks', 'block/stonebrick'), 2)),
+        'dirt_path': lambda: rotations(tx.first('block/dirt_path_top', 'block/grass_path_top'), 2),
+        'farmland': lambda: [over(tx.first('block/farmland_moist', 'block/farmland_wet'), tx.first('block/wheat_stage3', 'block/wheat_stage_3')),
+                             over(tx.first('block/farmland_moist', 'block/farmland_wet'), tx.first('block/wheat_stage7', 'block/wheat_stage_7'))],
         'snow': lambda: rotations(tx.img('block/snow'), 2),
-        'wetland': lambda: [frame(tx.img('block/mud')), tint(frame(tx.img('block/grass_block_top')), SWAMP_GRASS)],
-        'roof_brick': lambda: [frame(tx.img('block/bricks'))],
-        'roof_oak': lambda: [frame(tx.img('block/oak_planks'))],
-        'roof_spruce': lambda: [frame(tx.img('block/spruce_planks'))],
+        'wetland': lambda: [frame(tx.img('block/mud') if tx.has('block/mud') else tx.img('block/dirt')), tint(frame(grass_top()), SWAMP_GRASS)],
+        'roof_brick': lambda: [frame(tx.first('block/bricks', 'block/brick'))],
+        'roof_oak': lambda: [frame(tx.first('block/oak_planks', 'block/planks_oak'))],
+        'roof_spruce': lambda: [frame(tx.first('block/spruce_planks', 'block/planks_spruce'))],
         'roof_stone': lambda: [frame(roof_stone())],
-        'roof_concrete': lambda: [frame(tx.img('block/white_concrete'))],
-        'roof_terracotta': lambda: [frame(tx.img('block/terracotta'))],
-        'rail': lambda: [over(tx.img('block/gravel'), tx.img('block/rail'))],
+        'roof_concrete': lambda: [frame(tx.first('block/white_concrete', 'block/concrete_white', 'block/quartz_block_side'))],
+        'roof_terracotta': lambda: [frame(tx.first('block/terracotta', 'block/hardened_clay'))],
+        'rail': lambda: [over(tx.img('block/gravel'), tx.first('block/rail', 'block/rail_normal'))],
         'grave': lambda: [grave()],
     }
     icons = {
-        'apple': lambda: item('apple'), 'bread': lambda: item('bread'), 'meat': lambda: item('cooked_beef'),
+        'apple': lambda: item('apple'), 'bread': lambda: item('bread'), 'meat': lambda: tx.first('item/cooked_beef', 'item/beef_cooked'),
         'emerald': lambda: item('emerald'), 'gold_ingot': lambda: item('gold_ingot'), 'coal': lambda: item('coal'),
-        'potion': lambda: over(tint(item('potion_overlay'), (0xF8, 0x24, 0x23)), item('potion')),
-        'book': lambda: item('book'), 'sapling': lambda: tx.img('block/oak_sapling'),
-        'minecart': lambda: item('minecart'), 'mug': lambda: item('honey_bottle'),
-        'pickaxe': lambda: item('iron_pickaxe'), 'compass': lambda: item('compass_00'), 'bell': lambda: item('bell'),
-        'fish': lambda: item('cod'), 'pin': lambda: tx.img('map/decorations/red_banner'),
+        'potion': lambda: (over(tint(item('potion_overlay'), (0xF8, 0x24, 0x23)), tx.first('item/potion', 'item/potion_bottle_drinkable'))
+                           if tx.has('item/potion_overlay') else tx.first('item/potion', 'item/potion_bottle_drinkable')),
+        'book': lambda: tx.first('item/book', 'item/book_normal'), 'sapling': lambda: tx.first('block/oak_sapling', 'block/sapling_oak'),
+        'minecart': lambda: tx.first('item/minecart', 'item/minecart_normal'), 'mug': lambda: tx.first('item/honey_bottle', 'item/potion_bottle_drinkable', 'item/glass_bottle'),
+        'pickaxe': lambda: item('iron_pickaxe'), 'compass': lambda: tx.first('item/compass_00', 'item/compass', 'item/compass_16'), 'bell': lambda: item('bell'),
+        'fish': lambda: tx.first('item/cod', 'item/fish_cod_raw'), 'pin': lambda: tx.img('map/decorations/red_banner'),
         'player': lambda: center_xy(scale_icon(tx.img('map/decorations/player'))), 'diamond': lambda: item('diamond'),
-        'iron_ingot': lambda: item('iron_ingot'), 'redstone': lambda: item('redstone'),
-        'golden_apple': lambda: item('golden_apple'), 'cake': lambda: item('cake'), 'cookie': lambda: item('cookie'),
-        'map': lambda: item('filled_map') if tx.has('item/filled_map') else item('map'),
-        'clock': lambda: item('clock_00'), 'sword': lambda: item('iron_sword'), 'axe': lambda: item('iron_axe'),
-        'shovel': lambda: item('iron_shovel'), 'bow': lambda: item('bow'), 'torch': lambda: tx.img('block/torch'),
-        'lantern': lambda: item('lantern'), 'poppy': lambda: tx.img('block/poppy'), 'boat': lambda: item('oak_boat'),
-        'bucket': lambda: item('bucket'), 'star': lambda: item('nether_star'),
+        'iron_ingot': lambda: item('iron_ingot'), 'redstone': lambda: tx.first('item/redstone', 'item/redstone_dust'),
+        'golden_apple': lambda: tx.first('item/golden_apple', 'item/apple_golden'), 'cake': lambda: item('cake'), 'cookie': lambda: item('cookie'),
+        'map': lambda: tx.first('item/filled_map', 'item/map_filled', 'item/map', 'item/map_empty'),
+        'clock': lambda: tx.first('item/clock_00', 'item/clock', 'item/clock_01'), 'sword': lambda: item('iron_sword'), 'axe': lambda: item('iron_axe'),
+        'shovel': lambda: item('iron_shovel'), 'bow': lambda: tx.first('item/bow', 'item/bow_standby'), 'torch': lambda: tx.first('block/torch', 'block/torch_on'),
+        'lantern': lambda: item('lantern'), 'poppy': lambda: tx.first('block/poppy', 'block/flower_rose'), 'boat': lambda: tx.first('item/oak_boat', 'item/boat'),
+        'bucket': lambda: tx.first('item/bucket', 'item/bucket_empty'), 'star': lambda: item('nether_star'),
         'chest': lambda: chest_from_entity(tx.img('entity/chest/normal')),
         # 'bed' has no 2D item texture in the game (3D model), so it keeps the MineMaps drawing.
     }

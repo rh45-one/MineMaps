@@ -4,7 +4,6 @@ import android.graphics.Rect
 import android.os.Handler
 import android.util.Log
 import android.os.Looper
-import android.view.Choreographer
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
@@ -123,10 +122,11 @@ class CarMapController(
     private var lastManualRecenterMs = 0L
     private var lastRoadProbeMs = 0L
     private var detectedRoadClass: String? = null
+    private var lastDrawNs = 0L
 
-    private val frameCallback = Choreographer.FrameCallback { frameNs ->
+    private val frameRunnable = Runnable {
         frameQueued = false
-        if (!released) renderFrame(frameNs)
+        if (!released) renderFrame(System.nanoTime())
     }
 
     init {
@@ -173,9 +173,15 @@ class CarMapController(
                 container.location.state.collect { onLocation(it) }
             }
             launch {
-                container.location.headingDeg.collect {
-                    deviceHeading = it
-                    requestRender()
+                container.location.headingDeg.collect { next ->
+                    val prev = deviceHeading
+                    val speed = location.location?.let { if (it.hasSpeed()) it.speed else 0f } ?: 0f
+                    if (next != null && speed <= 2.5f && (prev == null || kotlin.math.abs(app.minemaps.location.LocationRepository.shortestAngleDelta(prev, next)) >= 1.5f)) {
+                        deviceHeading = next
+                        requestRender()
+                    } else if (prev == null && next != null) {
+                        deviceHeading = next
+                    }
                 }
             }
             launch {
@@ -230,6 +236,7 @@ class CarMapController(
     fun release() {
         Log.d(TAG, "release")
         released = true
+        main.removeCallbacks(frameRunnable)
         collectJob?.cancel()
         persistJob?.cancel()
         surface = null
@@ -420,10 +427,13 @@ class CarMapController(
     private fun postFrame() {
         if (frameQueued || released) return
         frameQueued = true
-        Choreographer.getInstance().postFrameCallback(frameCallback)
+        val elapsedMs = (System.nanoTime() - lastDrawNs) / 1_000_000L
+        val delayMs = (16L - elapsedMs).coerceIn(0L, 16L)
+        if (delayMs <= 0L) main.post(frameRunnable) else main.postDelayed(frameRunnable, delayMs)
     }
 
     private fun renderFrame(frameNs: Long) {
+        lastDrawNs = frameNs
         val dt = if (lastFrameNs == 0L) 0.016 else ((frameNs - lastFrameNs) / 1e9).coerceIn(0.0, 0.1)
         lastFrameNs = frameNs
         var more = false

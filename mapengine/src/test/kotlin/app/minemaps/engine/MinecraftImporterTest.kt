@@ -156,4 +156,26 @@ class MinecraftImporterTest {
         val back = imageIo.decode(PngWriter.encode(img))
         assertTrue(img.px.contentEquals(back.px))
     }
+
+    @Test
+    fun customResourcePackSupportsMissingColormapsLegacyFoldersHdChestAndPackMcmeta() {
+        val file = zip(
+            mapOf(
+                "pack.mcmeta" to """{"pack":{"pack_format":15,"description":"\u00a76Faithful \u00a7a32x\nCustom Pack"}}""".toByteArray(),
+                "assets/minecraft/textures/blocks/grass_top.png" to png(solid(32, 32, 0xFFCCCCCC.toInt())),
+                "assets/minecraft/textures/blocks/grass_path_top.png" to png(solid(32, 32, 0xFFAA8855.toInt())),
+                "assets/minecraft/textures/items/apple_golden.png" to png(solid(32, 32, 0xFFFFD700.toInt())),
+                "assets/minecraft/textures/entity/chest/normal.png" to png(solid(128, 128, 0xFF8B5A2B.toInt())),
+            ),
+        )
+        val orig = original()
+        ZipTextureSource(file).use { src ->
+            assertEquals("Faithful 32x Custom Pack", src.packMetaDescription())
+            val out = MinecraftImporter.import(listOf(src), orig, imageIo)
+            assertTrue(out.kept.none { it.startsWith("grass (") }, "grass should import using default colormap even when colormap/grass.png is absent")
+            assertTrue(out.kept.none { it.startsWith("dirt_path (") }, "legacy blocks/grass_path_top.png should map to dirt_path")
+            assertTrue(out.kept.none { it.startsWith("golden_apple (") }, "legacy items/apple_golden.png should map to golden_apple")
+            assertTrue(out.kept.none { it.startsWith("chest (") }, "128x128 HD entity/chest/normal.png should downscale and compose chest icon")
+        }
+    }
 }

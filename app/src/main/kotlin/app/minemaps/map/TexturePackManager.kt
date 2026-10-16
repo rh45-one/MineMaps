@@ -120,6 +120,7 @@ class TexturePackManager(
             try {
                 withContext(Dispatchers.IO) {
                     workDir.mkdirs()
+                    val fileName = resolveFileName(uri)
                     var total = 0L
                     val md = MessageDigest.getInstance("SHA-1")
                     (context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open the file")).use { input ->
@@ -137,7 +138,8 @@ class TexturePackManager(
                         }
                     }
                     val sha = md.digest().joinToString("") { "%02x".format(it) }
-                    runImport(copy, listOf("file (sha1 $sha)"), "custom", sha, select = true)
+                    val label = fileName?.let { "Resource pack: $it" } ?: "Custom resource pack (sha1 ${sha.take(10)})"
+                    runImport(copy, listOf(label), "custom", sha, select = true, layerOverStored = true)
                 }
             } catch (e: CancellationException) {
                 state.value = PackUi.Idle
@@ -149,6 +151,12 @@ class TexturePackManager(
             }
         }
     }
+
+    private fun resolveFileName(uri: Uri): String? = runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0)?.take(80)?.trim()?.takeIf { it.isNotEmpty() } else null
+        }
+    }.getOrNull()
 
     fun cancel() {
         job?.cancel()
@@ -219,16 +227,26 @@ class TexturePackManager(
         }
     }
 
-    private suspend fun runImport(file: File, desc: List<String>, version: String, sha1: String, select: Boolean) {
+    private suspend fun runImport(file: File, desc: List<String>, version: String, sha1: String, select: Boolean, layerOverStored: Boolean = false) {
         val eng = engine()
         withContext(Dispatchers.Default) {
             state.value = PackUi.Importing(0)
-            val original = OriginalAtlas(EngineResources.atlasJson(TexturePack.ORIGINAL), AndroidPngDecoder.decode(EngineResources.atlasPng(TexturePack.ORIGINAL)))
+            val existing = if (layerOverStored) eng.storedPack else null
+            val baseAtlas = if (existing != null) {
+                runCatching { OriginalAtlas(existing.atlasJson, AndroidPngDecoder.decode(existing.atlasPng)) }.getOrNull()
+            } else null
+            val original = baseAtlas ?: OriginalAtlas(EngineResources.atlasJson(TexturePack.ORIGINAL), AndroidPngDecoder.decode(EngineResources.atlasPng(TexturePack.ORIGINAL)))
+            var fullDesc = desc
             val out = ZipTextureSource(file).use { src ->
+                if (layerOverStored) {
+                    src.packMetaDescription()?.let { metaDesc ->
+                        fullDesc = listOf("${desc.first()} ($metaDesc)")
+                    }
+                }
                 MinecraftImporter.import(listOf(src), original, AndroidPngDecoder) { state.value = PackUi.Importing(it) }
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            eng.packStore.install(out, MinecraftImporter.sourceText(desc, out.kept), PackMeta(version, sha1, MinecraftImporter.IMPORTER_VERSION, System.currentTimeMillis()))
+            eng.packStore.install(out, MinecraftImporter.sourceText(fullDesc, out.kept), PackMeta(version, sha1, MinecraftImporter.IMPORTER_VERSION, System.currentTimeMillis()))
         }
         eng.reloadStoredPack()
         if (select) settings.setTexturePack(TexturePack.VANILLA)
