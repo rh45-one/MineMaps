@@ -94,6 +94,7 @@ class CarMapController(
     private var lastFrameNs = 0L
 
     private var location = LocationState(null, LocationStatus.SEARCHING)
+    private var deviceHeading: Float? = null
     private var savedPlaces: List<SavedPlace> = emptyList()
     private var night = carContext.isDarkMode
     private var released = false
@@ -170,6 +171,12 @@ class CarMapController(
         collectJob = scope.launch {
             launch {
                 container.location.state.collect { onLocation(it) }
+            }
+            launch {
+                container.location.headingDeg.collect {
+                    deviceHeading = it
+                    requestRender()
+                }
             }
             launch {
                 container.settings.settings.collect {
@@ -453,7 +460,13 @@ class CarMapController(
     private fun overlays(): MapOverlays {
         val l = location.location
         val player = l?.let {
-            PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f)
+            val heading = when {
+                it.hasSpeed() && it.speed > 2.5f && it.hasBearing() -> it.bearing
+                deviceHeading != null -> deviceHeading!!
+                it.hasBearing() -> it.bearing
+                else -> 0f
+            }
+            PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, heading, if (it.hasSpeed()) it.speed else 0f)
         }
         return MapOverlays(
             player = player,

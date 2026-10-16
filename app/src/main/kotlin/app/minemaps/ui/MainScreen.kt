@@ -392,6 +392,7 @@ private fun MapScreen(
 
     val saved by vm.savedPlaces.collectAsStateWithLifecycle()
     val loc by vm.locationState.collectAsStateWithLifecycle()
+    val deviceHeading by container.location.headingDeg.collectAsStateWithLifecycle()
     val following by vm.following.collectAsStateWithLifecycle()
     val pending by vm.pendingFlyZoom.collectAsStateWithLifecycle()
     val card by vm.card.collectAsStateWithLifecycle()
@@ -482,9 +483,17 @@ private fun MapScreen(
     }
 
     val visibleAlerts = if (settings.showRoadAlerts) roadAlerts else emptyList()
-    val overlays = remember(player, saved, searchPin, activePlan, settings.showTraffic, visibleAlerts) {
+    val effectiveHeading = remember(player, deviceHeading) {
+        when {
+            player != null && player.hasSpeed() && player.speed > 2.5f && player.hasBearing() -> player.bearing
+            deviceHeading != null -> deviceHeading!!
+            player != null && player.hasBearing() -> player.bearing
+            else -> 0f
+        }
+    }
+    val overlays = remember(player, effectiveHeading, saved, searchPin, activePlan, settings.showTraffic, visibleAlerts) {
         MapOverlays(
-            player = player?.let { PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f) },
+            player = player?.let { PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, effectiveHeading, if (it.hasSpeed()) it.speed else 0f) },
             bookmarks = saved.map { Bookmark(it.lat, it.lon, it.icon, it.name) },
             searchPin = searchPin,
             route = activePlan,
