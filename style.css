@@ -80,7 +80,7 @@ code {
   width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 0 clamp(16px, 4vw, 32px);
+  padding: 0 clamp(14px, 4vw, 32px);
 }
 
 /* Chunky Bevel Panel + Subtle Interactive Mouse Spotlight & Tilt */
@@ -92,7 +92,7 @@ code {
     inset 3px 3px 0 0 var(--highlight),
     inset -3px -3px 0 0 var(--shadow),
     0 12px 32px rgba(0, 0, 0, 0.45);
-  padding: clamp(20px, 2.8vw, 30px);
+  padding: clamp(16px, 2.8vw, 30px);
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
 }
 
@@ -135,7 +135,7 @@ code {
 .mc-tag {
   display: inline-block;
   font-family: var(--font-title);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 4px 10px;
@@ -222,7 +222,7 @@ code {
 }
 
 .mc-btn-lg {
-  font-size: 0.96rem;
+  font-size: 0.95rem;
   padding: 13px 22px;
 }
 
@@ -247,16 +247,17 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 74px;
-  gap: 16px;
+  min-height: 70px;
+  gap: 12px;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-decoration: none !important;
   transition: transform 150ms ease;
+  min-width: 0;
 }
 
 .brand:hover {
@@ -264,13 +265,13 @@ code {
 }
 
 .brand-icon {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
 }
 
 .brand-text {
-  height: 36px;
+  height: 34px;
   width: auto;
   display: block;
 }
@@ -298,7 +299,7 @@ code {
 /* Centered, Breathable Hero */
 .hero {
   position: relative;
-  padding: clamp(52px, 7vw, 88px) 0 clamp(56px, 7vw, 88px);
+  padding: clamp(44px, 7vw, 88px) 0 clamp(48px, 7vw, 88px);
   border-bottom: 4px solid var(--outline);
   overflow: hidden;
   text-align: center;
@@ -336,22 +337,22 @@ code {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-  margin-bottom: 26px;
+  gap: 8px;
+  margin-bottom: 24px;
 }
 
 .hero-logo {
   width: 100%;
-  max-width: 520px;
+  max-width: 500px;
   height: auto;
   display: block;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
   filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.6));
 }
 
 .hero-title {
   font-family: var(--font-title);
-  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-size: clamp(1.45rem, 3vw, 2.4rem);
   line-height: 1.3;
   margin: 0 0 16px;
   color: var(--text);
@@ -359,9 +360,9 @@ code {
 
 .hero-lead {
   font-family: var(--font-body);
-  font-size: clamp(1.05rem, 1.35vw, 1.2rem);
+  font-size: clamp(1rem, 1.35vw, 1.18rem);
   color: var(--text-sec);
-  margin: 0 0 30px;
+  margin: 0 0 28px;
   max-width: 58ch;
 }
 
@@ -369,32 +370,65 @@ code {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
   align-items: center;
+  width: 100%;
 }
 
-/* Segmented Controls */
-.mc-segmented {
-  display: inline-grid;
+/* Segmented Controls — Stacked Label Above Equal-Width Grid (Zero Horizontal Overflow!) */
+.demo-wrapper {
+  padding: clamp(14px, 2.5vw, 26px);
+}
+
+.demo-toolbar {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 0.85fr;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 3px solid var(--outline);
+}
+
+.demo-control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
+  min-width: 0;
+}
+
+.demo-label {
+  font-family: var(--font-title);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+}
+
+.mc-segmented {
+  display: grid;
+  gap: 6px;
+  width: 100%;
 }
 
 .demo-seg-3 {
-  grid-template-columns: repeat(3, auto);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .demo-seg-2 {
-  grid-template-columns: repeat(2, auto);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .seg-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
   font-family: var(--font-title);
-  font-size: 0.78rem;
-  padding: 9px 14px;
+  font-size: clamp(0.68rem, 1.5vw, 0.78rem);
+  padding: 9px 6px;
   color: var(--text);
   background: var(--raised);
   border: 3px solid var(--outline);
@@ -404,6 +438,8 @@ code {
     0 3px 0 0 var(--stone-ledge);
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: background-color 80ms ease, transform 60ms ease;
 }
 
@@ -424,38 +460,9 @@ code {
 }
 
 .mini-tex {
-  width: 18px;
-  height: 18px;
-}
-
-/* Unified Interactive Showcase */
-.demo-wrapper {
-  padding: clamp(16px, 2.5vw, 26px);
-}
-
-.demo-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(14px, 2.5vw, 28px);
-  margin-bottom: 22px;
-  padding-bottom: 18px;
-  border-bottom: 3px solid var(--outline);
-}
-
-.demo-control-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.demo-label {
-  font-family: var(--font-title);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  color: var(--gold);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 /* Device Stage & Responsive Device Frames (Phone / Tablet / Android Auto) */
@@ -463,17 +470,16 @@ code {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 540px;
-  padding: 8px 0;
+  padding: 4px 0;
 }
 
 .device-frame {
   position: relative;
   background: #14171c;
-  border: 6px solid var(--outline);
+  border: 5px solid var(--outline);
   box-shadow:
     0 0 0 3px var(--highlight),
-    0 20px 50px rgba(0, 0, 0, 0.65);
+    0 18px 44px rgba(0, 0, 0, 0.65);
   overflow: hidden;
   cursor: grab;
   user-select: none;
@@ -485,24 +491,24 @@ code {
   cursor: grabbing;
 }
 
-/* 1. Phone Frame (Portrait 9:18.5) */
+/* 1. Phone Frame (Portrait) */
 .device-frame.device-phone {
   width: min(390px, 100%);
-  height: 620px;
+  height: clamp(440px, 68vh, 620px);
   border-radius: 18px;
 }
 
-/* 2. Tablet Frame (Landscape 16:10) */
+/* 2. Tablet Frame (Landscape) */
 .device-frame.device-tablet {
   width: min(940px, 100%);
-  height: 560px;
+  height: clamp(380px, 62vh, 560px);
   border-radius: 14px;
 }
 
-/* 3. Android Auto Head Unit Frame (Widescreen 16:9.5) */
+/* 3. Android Auto Head Unit Frame (Widescreen) */
 .device-frame.device-car {
   width: min(980px, 100%);
-  height: 540px;
+  height: clamp(360px, 60vh, 540px);
   border-radius: 8px;
 }
 
@@ -526,16 +532,16 @@ code {
 /* Interactive Top Search & Places Chrome */
 .hud-phone-top {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 10px;
+  left: 10px;
+  right: 10px;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   z-index: 6;
 }
 
 .device-tablet .hud-phone-top {
-  width: 340px;
+  width: min(320px, calc(100% - 20px));
   right: auto;
 }
 
@@ -545,19 +551,26 @@ code {
 
 .hud-search-box {
   flex: 1;
+  min-width: 0;
   background: rgba(30, 30, 31, 0.94);
   border: 3px solid var(--outline);
   box-shadow: inset 2px 2px 0 0 var(--shadow);
-  padding: 8px 12px;
+  padding: 7px 10px;
   font-family: var(--font-title);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   color: var(--text);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.hud-search-placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-search-box:hover {
@@ -569,13 +582,15 @@ code {
   background: var(--green-ledge);
   color: #b8ff70;
   padding: 2px 6px;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   border: 1px solid var(--outline);
+  flex-shrink: 0;
 }
 
 .hud-top-btn {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   background: var(--raised);
   border: 3px solid var(--outline);
   box-shadow:
@@ -598,16 +613,18 @@ code {
 }
 
 .hud-top-btn img {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 /* Saved Places Interactive Drawer inside Demo */
 .demo-places-drawer {
   position: absolute;
-  top: 64px;
-  left: 12px;
-  width: min(340px, calc(100% - 24px));
+  top: 58px;
+  left: 10px;
+  width: min(320px, calc(100% - 20px));
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
   padding: 12px;
   z-index: 8;
 }
@@ -624,7 +641,7 @@ code {
   padding-bottom: 6px;
   border-bottom: 2px solid var(--outline);
   font-family: var(--font-title);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--gold);
 }
 
@@ -655,27 +672,28 @@ code {
 }
 
 .demo-place-item img {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 
 .demo-place-item div {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .demo-place-item strong {
   font-family: var(--font-title);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .demo-place-item span {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   color: var(--text-sec);
 }
 
-/* Android Auto Top Banner & Bottom Dock (Interactive!) */
+/* Android Auto Top Banner & Bottom Dock (Interactive & Mobile-Safe!) */
 .hud-car-top,
 .hud-car-dock {
   display: none;
@@ -684,25 +702,28 @@ code {
 
 .device-car .hud-car-top {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 10px;
+  left: 10px;
+  right: 10px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
 }
 
 .hud-car-banner {
+  flex: 1 1 200px;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: rgba(20, 22, 26, 0.94);
   border: 3px solid var(--outline);
   box-shadow: inset 2px 2px 0 0 var(--highlight);
-  padding: 10px 14px;
+  padding: 8px 12px;
   font-family: var(--font-body);
-  font-size: 0.86rem;
+  font-size: clamp(0.74rem, 1.6vw, 0.86rem);
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -713,24 +734,26 @@ code {
 }
 
 .hud-car-banner img {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .hud-car-strip {
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .hud-car-chip {
   font-family: var(--font-title);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   background: var(--raised);
   border: 3px solid var(--outline);
   box-shadow:
     inset 2px 2px 0 0 var(--highlight),
     0 3px 0 0 var(--stone-ledge);
-  padding: 8px 12px;
+  padding: 7px 10px;
   color: var(--text);
   cursor: pointer;
 }
@@ -744,15 +767,15 @@ code {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 48px;
+  height: 44px;
   background: #0e1013;
   border-top: 3px solid var(--outline);
-  padding: 0 18px;
+  padding: 0 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-family: var(--font-title);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   color: var(--text-sec);
   pointer-events: none;
 }
@@ -760,15 +783,23 @@ code {
 .car-dock-left {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.car-dock-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .car-dock-app {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
-/* Hotspots & Dropped Pins (Constant screen size across all zoom levels!) */
+/* Hotspots & Dropped Pins */
 .demo-hotspot {
   position: absolute;
   width: 32px;
@@ -822,23 +853,23 @@ code {
 
 .demo-hud-right {
   position: absolute;
-  right: 12px;
-  bottom: 16px;
+  right: 10px;
+  bottom: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   z-index: 6;
 }
 
 .device-car .demo-hud-right {
-  bottom: 62px;
+  bottom: 56px;
 }
 
 .mc-icon-btn {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   font-family: var(--font-title);
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   color: var(--text);
   background: var(--raised);
   border: 3px solid var(--outline);
@@ -850,13 +881,14 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   transition: transform 60ms ease, background-color 80ms ease;
 }
 
 .mc-icon-btn-sm {
-  width: 36px;
-  height: 36px;
-  font-size: 1rem;
+  width: 32px;
+  height: 32px;
+  font-size: 0.95rem;
 }
 
 .mc-icon-btn:hover {
@@ -877,22 +909,24 @@ code {
 
 .demo-info-card {
   position: absolute;
-  left: 12px;
-  bottom: 12px;
-  width: min(360px, calc(100% - 76px));
-  padding: 12px 14px;
+  left: 10px;
+  bottom: 10px;
+  width: min(340px, calc(100% - 68px));
+  padding: 10px 12px;
   z-index: 6;
 }
 
-/* On Tablet, the app places the info card in the left side-panel below search */
-.device-tablet .demo-info-card {
-  top: 62px;
-  bottom: auto;
-  width: 340px;
+/* On wide desktop Tablet view, place the info card in the left side-panel below search */
+@media (min-width: 720px) {
+  .device-tablet .demo-info-card {
+    top: 58px;
+    bottom: auto;
+    width: 320px;
+  }
 }
 
 .device-car .demo-info-card {
-  bottom: 60px;
+  bottom: 54px;
 }
 
 .demo-info-card.hidden {
@@ -903,18 +937,23 @@ code {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+}
+
+.demo-info-row > div {
+  min-width: 0;
 }
 
 .demo-info-row h4 {
   font-family: var(--font-title);
-  font-size: 0.88rem;
+  font-size: clamp(0.76rem, 1.8vw, 0.88rem);
   margin: 0 0 4px;
+  word-wrap: break-word;
 }
 
 .demo-info-row p {
   font-family: var(--font-body);
-  font-size: 0.84rem;
+  font-size: clamp(0.75rem, 1.6vw, 0.84rem);
   color: var(--text-sec);
   margin: 0 0 6px;
 }
@@ -922,14 +961,14 @@ code {
 .demo-caption {
   font-family: var(--font-body);
   margin: 16px 0 0;
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   color: var(--text-sec);
   text-align: center;
 }
 
 /* Sections */
 .section {
-  padding: clamp(56px, 7vw, 88px) 0;
+  padding: clamp(48px, 7vw, 88px) 0;
   border-bottom: 4px solid var(--outline);
 }
 
@@ -940,12 +979,12 @@ code {
 .section-heading {
   text-align: center;
   max-width: 740px;
-  margin: 0 auto clamp(32px, 4.5vw, 48px);
+  margin: 0 auto clamp(28px, 4.5vw, 48px);
 }
 
 .section-heading h2 {
   font-family: var(--font-title);
-  font-size: clamp(1.35rem, 2.4vw, 1.95rem);
+  font-size: clamp(1.25rem, 2.4vw, 1.95rem);
   line-height: 1.35;
   margin: 14px 0 10px;
 }
@@ -953,7 +992,7 @@ code {
 .section-heading p {
   font-family: var(--font-body);
   color: var(--text-sec);
-  font-size: clamp(0.98rem, 1.15vw, 1.06rem);
+  font-size: clamp(0.96rem, 1.15vw, 1.06rem);
   margin: 0;
 }
 
@@ -961,15 +1000,15 @@ code {
   font-family: var(--font-body);
   margin: 22px auto 0;
   max-width: 900px;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--text-sec);
   text-align: center;
   background: rgba(0, 0, 0, 0.28);
   border: 2px solid var(--outline);
-  padding: 12px 18px;
+  padding: 12px 16px;
 }
 
-/* Features Grid (with real pixel icons inside inventory slots!) */
+/* Features Grid */
 .features-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -978,7 +1017,7 @@ code {
 
 .feature-card h3 {
   font-family: var(--font-title);
-  font-size: 1.04rem;
+  font-size: 1.02rem;
   margin: 16px 0 8px;
 }
 
@@ -986,7 +1025,7 @@ code {
   font-family: var(--font-body);
   margin: 0;
   color: var(--text-sec);
-  font-size: 0.96rem;
+  font-size: 0.95rem;
 }
 
 .slot-icon {
@@ -1018,19 +1057,19 @@ code {
 .licence-banner {
   max-width: 900px;
   margin: 0 auto;
-  padding: clamp(24px, 4vw, 40px);
+  padding: clamp(20px, 4vw, 40px);
 }
 
 .licence-copy h2 {
   font-family: var(--font-title);
-  font-size: clamp(1.3rem, 2.3vw, 1.9rem);
+  font-size: clamp(1.25rem, 2.3vw, 1.9rem);
   margin: 14px 0 12px;
 }
 
 .licence-copy p {
   font-family: var(--font-body);
   color: var(--text-sec);
-  font-size: 1.02rem;
+  font-size: 1rem;
   margin: 0 0 16px;
 }
 
@@ -1040,9 +1079,9 @@ code {
   padding: 10px 14px;
 }
 
-/* Footer (consistent Monocraft section labels + Plus Jakarta Sans body text) */
+/* Footer */
 .footer {
-  padding: 48px 0;
+  padding: 44px 0;
   background: #121213;
   font-family: var(--font-body);
 }
@@ -1056,7 +1095,7 @@ code {
 }
 
 .footer-logo {
-  height: 50px;
+  height: 48px;
   width: auto;
   max-width: 100%;
   display: block;
@@ -1089,8 +1128,13 @@ code {
   opacity: 0.84;
 }
 
-/* Comprehensive Responsiveness */
+/* Tablet & Mobile Responsiveness */
 @media (max-width: 980px) {
+  .demo-toolbar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   .features-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1106,53 +1150,53 @@ code {
   }
 
   .topbar-inner {
-    min-height: 62px;
+    min-height: 60px;
   }
 
   .brand-icon {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
   }
 
   .brand-text {
-    height: 26px;
+    height: 23px;
   }
 
   .topbar-cta .mc-btn {
-    padding: 8px 12px;
-    font-size: 0.78rem;
+    padding: 8px 11px;
+    font-size: 0.74rem;
+    gap: 6px;
+  }
+
+  .topbar-cta .btn-pixel-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .hero-actions .mc-btn {
     width: 100%;
   }
 
-  .demo-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .demo-control-group {
-    justify-content: space-between;
-  }
-
   .device-frame.device-phone,
   .device-frame.device-tablet,
   .device-frame.device-car {
-    height: 460px;
-  }
-
-  .device-stage {
-    min-height: 470px;
-  }
-
-  .hud-car-banner span {
-    font-size: 0.75rem;
+    height: 430px;
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 400px) {
   .brand-text {
-    height: 21px;
+    height: 19px;
+  }
+
+  .seg-btn {
+    font-size: 0.65rem;
+    padding: 8px 4px;
+    gap: 4px;
+  }
+
+  .mini-tex {
+    width: 14px;
+    height: 14px;
   }
 }
