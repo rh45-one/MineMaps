@@ -23,7 +23,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -605,8 +608,16 @@ private fun MapScreen(
             }
         }
 
-        Box(Modifier.align(Alignment.BottomStart).windowInsetsPadding(McInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Start)).padding(start = 4.dp, bottom = bottomPad - 14.dp)) {
-            AnimatedVisibility(creditShown, enter = fadeIn(), exit = fadeOut()) {
+        val creditOrigin = TransformOrigin(0f, 1f)
+        Box(
+            Modifier.align(Alignment.BottomStart).windowInsetsPadding(McInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Start)).padding(start = 4.dp, bottom = bottomPad - 14.dp),
+            contentAlignment = Alignment.BottomStart,
+        ) {
+            AnimatedVisibility(
+                creditShown,
+                enter = fadeIn() + scaleIn(initialScale = 0.85f, transformOrigin = creditOrigin),
+                exit = fadeOut() + scaleOut(targetScale = 0.85f, transformOrigin = creditOrigin),
+            ) {
                 Column(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp).widthIn(max = 280.dp).mcPanel(c).padding(horizontal = 10.dp, vertical = 6.dp)) {
                     Text(
                         buildAnnotatedString {
