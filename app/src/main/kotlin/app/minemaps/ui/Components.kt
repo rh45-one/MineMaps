@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -111,6 +113,7 @@ fun QuickMapMenuBar(
     modifier: Modifier = Modifier,
 ) {
     val s = S
+    val pad = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
     Row(
         modifier.fillMaxWidth().mcPanel(Mc.colors).padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -121,35 +124,50 @@ fun QuickMapMenuBar(
             modifier = Modifier.weight(1f),
             variant = McVariant.SECONDARY,
             fullWidth = true,
+            contentPadding = pad,
         ) {
-            PixelIcon(pinIcon, 18.dp)
-            Text(s.placesShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                    PixelIcon(pinIcon, 20.dp)
+                }
+                Text(s.placesShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+            }
         }
         McButton(
             onClick = onToggleStreetNames,
             modifier = Modifier.weight(1f),
             variant = if (streetNamesOn) McVariant.PRIMARY else McVariant.SECONDARY,
             fullWidth = true,
+            contentPadding = pad,
         ) {
             val color = androidx.compose.material3.LocalContentColor.current
-            Text(
-                "Aa",
-                Modifier.drawBehind {
-                    if (!streetNamesOn) drawLine(color, Offset(0f, size.height), Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
-                },
-                style = MaterialTheme.typography.labelLarge,
-                color = color,
-            )
-            Text(s.streetsShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Aa",
+                        Modifier.drawBehind {
+                            if (!streetNamesOn) drawLine(color, Offset(0f, size.height), Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = color,
+                    )
+                }
+                Text(s.streetsShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+            }
         }
         McButton(
             onClick = onToggleTraffic,
             modifier = Modifier.weight(1f),
             variant = if (trafficOn) McVariant.PRIMARY else McVariant.SECONDARY,
             fullWidth = true,
+            contentPadding = pad,
         ) {
-            TrafficLightGlyph(active = trafficOn, size = 18.dp)
-            Text(s.trafficShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                    TrafficLightGlyph(active = trafficOn, size = 20.dp)
+                }
+                Text(s.trafficShort, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }
