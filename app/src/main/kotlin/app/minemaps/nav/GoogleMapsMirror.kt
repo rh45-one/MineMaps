@@ -63,12 +63,33 @@ object GoogleMapsMirror {
     fun listenerSettingsIntent(): Intent =
         Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    private val NON_NAV_PATTERNS = listOf(
+        "driving with google maps",
+        "connected to android auto",
+        "running in android auto",
+        "android auto",
+        "maps is running",
+        "sharing location",
+        "location sharing",
+        "downloading offline",
+        "updating offline",
+        "conduciendo con google maps",
+    )
+
+    /** Returns true when a notification's text is a generic Android Auto / background status rather than active turn-by-turn directions. */
+    fun isNonNavigationNotice(title: String?, text: String?, subText: String?, bigText: String? = null): Boolean {
+        val combined = listOfNotNull(title, text, subText, bigText).joinToString(" ").lowercase().trim()
+        if (combined.isEmpty()) return true
+        return NON_NAV_PATTERNS.any { it in combined }
+    }
+
     /** Extracts navigation text from a Google Maps notification (title, text, subText) into a structured [MirroredNavInfo]. */
     fun parseFields(title: String?, text: String?, subText: String?, bigText: String? = null): MirroredNavInfo? {
         val rawTitle = title?.trim().orEmpty()
         val rawText = (bigText?.takeIf { it.isNotBlank() } ?: text)?.trim().orEmpty()
         val rawSub = subText?.trim().orEmpty()
         if (rawTitle.isBlank() && rawText.isBlank()) return null
+        if (isNonNavigationNotice(rawTitle, rawText, rawSub, bigText)) return null
 
         // Google Maps typically puts either the distance ("250 m") or the maneuver in title, and the street/instruction in text.
         val distRegex = Regex("""^\d+(?:[.,]\d+)?\s*(?:m|km|ft|mi|yd)\b""", RegexOption.IGNORE_CASE)

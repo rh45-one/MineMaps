@@ -40,9 +40,11 @@ class SearchResultsScreen(
             list.addItem(row.build())
         }
         list.setNoItemsMessage("No results")
+        val content = ListTemplate.Builder().setSingleList(list.build()).setTitle("Results").setHeaderAction(Action.BACK).build()
+        if (runCatching { carContext.carAppApiLevel }.getOrDefault(7) < 7) return content
         return MapWithContentTemplate.Builder()
             .setMapController(MapController.Builder().setMapActionStrip(CarStrips.mapActionStrip(carContext, actions, actions.following.value)).build())
-            .setContentTemplate(ListTemplate.Builder().setSingleList(list.build()).setTitle("Results").setHeaderAction(Action.BACK).build())
+            .setContentTemplate(content)
             .build()
     }
 

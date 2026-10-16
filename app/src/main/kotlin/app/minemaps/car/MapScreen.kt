@@ -186,6 +186,7 @@ class MapScreen(
     override fun onGetTemplate(): Template {
         state = compute()
         val content: Template = if (!state.permission) permissionTemplate() else listTemplate()
+        if (runCatching { carContext.carAppApiLevel }.getOrDefault(7) < 7) return content
         return MapWithContentTemplate.Builder()
             .setMapController(mapController())
             .setContentTemplate(content)

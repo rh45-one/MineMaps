@@ -85,6 +85,8 @@ class GeoIntentTest {
         assertEquals("1.2 km", m2.distanceText)
         assertEquals(app.minemaps.engine.routing.TurnDirection.SLIGHT_LEFT, m2.direction)
         assertNull(app.minemaps.nav.GoogleMapsMirror.parseFields("", "", ""))
+        assertNull(app.minemaps.nav.GoogleMapsMirror.parseFields("Driving with Google Maps", "", ""))
+        assertNull(app.minemaps.nav.GoogleMapsMirror.parseFields("Google Maps", "Driving with Google Maps", "Android Auto"))
 
         val placesJson = """
             {

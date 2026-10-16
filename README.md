@@ -61,12 +61,13 @@ You can back up or move your bookmarks at any time in **Settings → Saved place
 
 ## Using MineMaps on Android Auto
 
-Because MineMaps is installed from GitHub rather than the Google Play Store, Android Auto hides it until you turn on a one-time setting on your phone:
+Because MineMaps is installed from GitHub rather than the Google Play Store, Android Auto hides it until you turn on two developer settings on your phone:
 
 1. On your phone, open **Settings** and search for **Android Auto** (or open the Android Auto app settings).
 2. Scroll all the way to the bottom and tap **Version** about 10 times until it asks to enable developer mode, then tap **OK**.
 3. Tap the **three-dot menu (⋮)** in the top-right corner and open **Developer settings**.
-4. Scroll down and check **Unknown sources**.
+4. Tap **Application Mode** and set it to **Developer**.
+5. Scroll down and check **Unknown sources**, then check **Customise launcher** in the main Android Auto settings to make sure **MineMaps** is ticked.
 
 Next time you connect your phone to your car, **MineMaps** will appear in your Android Auto app launcher and can take the main map view (full screen or split dashboard).
 
