@@ -225,29 +225,97 @@ document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el))
     });
   });
 
-  // Drag to pan
+  // Drag to pan + two-finger pinch-to-zoom on touchscreens
+  const activePointers = new Map();
+  let initialPinchDist = null;
+  let initialPinchZoom = 17;
+  let initialPinchVisualScale = 1.0;
+  let pinchScale = 1.0;
+
+  function pointerDistance() {
+    const pts = Array.from(activePointers.values());
+    if (pts.length < 2) return 0;
+    return Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+  }
+
+  function applyCanvasTransform() {
+    clampPan();
+    if (Math.abs(pinchScale - 1.0) > 0.005) {
+      canvas.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${pinchScale.toFixed(3)})`;
+    } else {
+      canvas.style.transform = `translate3d(${panX}px, ${panY}px, 0)`;
+    }
+  }
+
   viewport.addEventListener('pointerdown', (e) => {
     if (e.target.closest('button') || e.target.closest('#demo-info-card') || e.target.closest('#demo-places-drawer')) return;
-    dragging = true;
-    startX = e.clientX - panX;
-    startY = e.clientY - panY;
-    viewport.classList.add('dragging');
-    viewport.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try {
+      viewport.setPointerCapture(e.pointerId);
+    } catch (_) {}
+    if (activePointers.size === 1) {
+      dragging = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+      viewport.classList.add('dragging');
+    } else if (activePointers.size === 2) {
+      dragging = false;
+      initialPinchDist = pointerDistance();
+      initialPinchZoom = currentZoom;
+      initialPinchVisualScale = pinchScale;
+    }
   });
 
   viewport.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    panX = e.clientX - startX;
-    panY = e.clientY - startY;
-    renderTransform();
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 2 && initialPinchDist && initialPinchDist > 15) {
+      const dist = pointerDistance();
+      const ratio = dist / initialPinchDist;
+      if (ratio > 1.32 && currentZoom < 18) {
+        setZoom(currentZoom + 1);
+        initialPinchDist = dist;
+        initialPinchZoom = currentZoom;
+        pinchScale = 1.0;
+      } else if (ratio < 0.74 && currentZoom > 16) {
+        setZoom(currentZoom - 1);
+        initialPinchDist = dist;
+        initialPinchZoom = currentZoom;
+        pinchScale = 1.0;
+      } else {
+        pinchScale = Math.max(0.82, Math.min(1.25, ratio));
+        applyCanvasTransform();
+      }
+      return;
+    }
+    if (dragging && activePointers.size === 1) {
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      renderTransform();
+    }
   });
 
-  const endDrag = () => {
-    dragging = false;
-    viewport.classList.remove('dragging');
+  const endPointer = (e) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size < 2) {
+      initialPinchDist = null;
+      if (pinchScale !== 1.0) {
+        pinchScale = 1.0;
+        renderTransform();
+      }
+    }
+    if (activePointers.size === 1) {
+      const remaining = Array.from(activePointers.values())[0];
+      dragging = true;
+      startX = remaining.x - panX;
+      startY = remaining.y - panY;
+    } else if (activePointers.size === 0) {
+      dragging = false;
+      viewport.classList.remove('dragging');
+    }
   };
-  viewport.addEventListener('pointerup', endDrag);
-  viewport.addEventListener('pointercancel', endDrag);
+  viewport.addEventListener('pointerup', endPointer);
+  viewport.addEventListener('pointercancel', endPointer);
 
   // Wheel zoom switches between real Z16, Z17, Z18 engine renders
   viewport.addEventListener('wheel', (e) => {

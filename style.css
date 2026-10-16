@@ -393,11 +393,16 @@ code {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  justify-content: flex-start;
   gap: 6px;
+  width: 100%;
   min-width: 0;
 }
 
 .demo-label {
+  display: block;
+  width: 100%;
+  text-align: left;
   font-family: var(--font-title);
   font-size: 0.74rem;
   text-transform: uppercase;
