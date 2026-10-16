@@ -26,6 +26,7 @@
       </nav>
       <div class="topbar-cta">
         <a href="https://github.com/rh45-one/MineMaps/releases/latest" class="mc-btn mc-btn-primary" data-apk-link>
+          <img src="assets/icons/icon-download.png" alt="" class="btn-pixel-icon pixel" />
           <span>Download APK</span>
         </a>
       </div>
@@ -51,8 +52,8 @@
         </p>
         <div class="hero-actions">
           <a href="https://github.com/rh45-one/MineMaps/releases/latest" class="mc-btn mc-btn-primary mc-btn-lg" id="download-btn" data-apk-link>
-            <img src="assets/icons/icon-emerald.png" alt="" class="btn-pixel-icon pixel" />
-            <span id="download-label" data-apk-label="Download Latest APK">Download Latest APK</span>
+            <img src="assets/icons/icon-download.png" alt="" class="btn-pixel-icon pixel" />
+            <span id="download-label" data-apk-label>Download APK</span>
           </a>
           <a href="#demo" class="mc-btn mc-btn-secondary mc-btn-lg">
             <img src="assets/icons/icon-compass.png" alt="" class="btn-pixel-icon pixel" />
@@ -72,7 +73,7 @@
           <span class="mc-tag mc-tag-green">INTERACTIVE SHOWCASE</span>
           <h2>Westminster &amp; The River Thames, London</h2>
           <p>
-            Pick a device and texture pack below, then <strong>drag to pan</strong>, <strong>scroll to zoom</strong>, click a landmark to inspect it, or <strong>double-click anywhere</strong> to drop a bookmark.
+            Pick a device and texture pack below, then <strong>drag to pan</strong>, <strong>scroll or click <code>+</code> / <code>&minus;</code> to switch real block zoom levels</strong>, click a landmark, or <strong>double-click anywhere</strong> to drop a bookmark.
           </p>
         </div>
 
@@ -126,21 +127,21 @@
           <!-- Device Stage -->
           <div class="device-stage">
             <div class="device-frame device-phone" id="demo-viewport" tabindex="0" aria-label="Interactive MineMaps map">
-              <!-- Interactive Map Canvas -->
+              <!-- Interactive Multi-Zoom Map Canvas (pure 1:1 pixel ratio per zoom level!) -->
               <div class="demo-canvas" id="demo-canvas">
-                <img src="assets/demo-london-day-original.png" alt="Interactive block map of Westminster, London" class="demo-map-img pixel" id="demo-map-img" draggable="false" />
+                <img src="assets/demo-london-z17-day-original.png" alt="Interactive block map of Westminster, London" class="demo-map-img pixel" id="demo-map-img" draggable="false" />
 
-                <!-- Landmark Hotspots on Westminster 1600x1200 map -->
-                <button type="button" class="demo-hotspot" style="left: 50%; top: 50%;" data-title="Big Ben &amp; Palace of Westminster" data-sub="Landmark · 20 m away · Bridge Street, London" data-coords="51.50070, -0.12460">
+                <!-- Landmark Hotspots (geographic lat/lon, positioned at constant screen size) -->
+                <button type="button" class="demo-hotspot" data-lat="51.50070" data-lon="-0.12460" data-title="Big Ben &amp; Palace of Westminster" data-sub="Landmark · 20 m away · Bridge Street, London" data-coords="51.50070, -0.12460">
                   <span class="hotspot-pulse"></span>
                 </button>
-                <button type="button" class="demo-hotspot" style="left: 66.5%; top: 48%;" data-title="Westminster Bridge" data-sub="Road Bridge over River Thames · 180 m away" data-coords="51.50090, -0.12190">
+                <button type="button" class="demo-hotspot" data-lat="51.50090" data-lon="-0.12190" data-title="Westminster Bridge" data-sub="Road Bridge over River Thames · 180 m away" data-coords="51.50090, -0.12190">
                   <span class="hotspot-pulse"></span>
                 </button>
-                <button type="button" class="demo-hotspot" style="left: 35%; top: 69%;" data-title="Westminster Abbey" data-sub="Gothic Abbey Church · 260 m away · Broad Sanctuary" data-coords="51.49940, -0.12730">
+                <button type="button" class="demo-hotspot" data-lat="51.49940" data-lon="-0.12730" data-title="Westminster Abbey" data-sub="Gothic Abbey Church · 260 m away · Broad Sanctuary" data-coords="51.49940, -0.12730">
                   <span class="hotspot-pulse"></span>
                 </button>
-                <button type="button" class="demo-hotspot" style="left: 11%; top: 20%;" data-title="St James's Park Lake" data-sub="Royal Park &amp; Water · 410 m away · Horse Guards Road" data-coords="51.50290, -0.13120">
+                <button type="button" class="demo-hotspot" data-lat="51.50290" data-lon="-0.13120" data-title="St James's Park Lake" data-sub="Royal Park &amp; Water · 410 m away · Horse Guards Road" data-coords="51.50290, -0.13120">
                   <span class="hotspot-pulse"></span>
                 </button>
 
@@ -148,33 +149,72 @@
                 <div id="demo-pins-layer"></div>
               </div>
 
-              <!-- Phone / Tablet Top Search Chrome -->
+              <!-- Phone / Tablet Top Search Chrome (Interactive!) -->
               <div class="hud-phone-top">
-                <div class="hud-search-box">
-                  <span class="hud-search-placeholder">Westminster, London</span>
+                <button type="button" class="hud-search-box" id="hud-search-btn" title="Jump to a landmark">
+                  <span class="hud-search-placeholder" id="hud-search-text">Westminster, London</span>
+                  <span class="hud-zoom-badge" id="hud-zoom-badge">Z17</span>
+                </button>
+                <button type="button" class="hud-top-btn" id="hud-places-btn" title="Saved places">
+                  <img src="assets/icons/icon-bookmark.png" alt="Saved places" class="pixel" />
+                </button>
+              </div>
+
+              <!-- Saved Places Drawer Popup (when clicking the bookmark button or Places chip) -->
+              <div class="mc-panel demo-places-drawer hidden" id="demo-places-drawer">
+                <div class="demo-drawer-head">
+                  <strong>SAVED PLACES</strong>
+                  <button type="button" class="mc-icon-btn mc-icon-btn-sm" id="demo-places-close" aria-label="Close places">&times;</button>
                 </div>
-                <div class="hud-top-btn" title="Saved places">
-                  <img src="assets/icons/icon-pin.png" alt="" class="pixel" />
+                <div class="demo-places-list">
+                  <button type="button" class="demo-place-item" data-jump-lat="51.50070" data-jump-lon="-0.12460" data-jump-title="Big Ben &amp; Palace of Westminster" data-jump-sub="Saved place · 20 m away · Bridge Street, London">
+                    <img src="assets/icons/icon-clock.png" alt="" class="pixel" />
+                    <div>
+                      <strong>Big Ben &amp; Parliament</strong>
+                      <span>20 m away &middot; Bridge Street</span>
+                    </div>
+                  </button>
+                  <button type="button" class="demo-place-item" data-jump-lat="51.49940" data-jump-lon="-0.12730" data-jump-title="Westminster Abbey" data-jump-sub="Saved place · 260 m away · Broad Sanctuary">
+                    <img src="assets/icons/icon-bell.png" alt="" class="pixel" />
+                    <div>
+                      <strong>Westminster Abbey</strong>
+                      <span>260 m away &middot; Broad Sanctuary</span>
+                    </div>
+                  </button>
+                  <button type="button" class="demo-place-item" data-jump-lat="51.50090" data-jump-lon="-0.12190" data-jump-title="Westminster Bridge" data-jump-sub="Saved place · 180 m away · River Thames">
+                    <img src="assets/icons/icon-compass.png" alt="" class="pixel" />
+                    <div>
+                      <strong>Westminster Bridge</strong>
+                      <span>180 m away &middot; River Thames</span>
+                    </div>
+                  </button>
+                  <button type="button" class="demo-place-item" data-jump-lat="51.50290" data-jump-lon="-0.13120" data-jump-title="St James's Park Lake" data-jump-sub="Saved place · 410 m away · Royal Park">
+                    <img src="assets/icons/tex-park.png" alt="" class="pixel" />
+                    <div>
+                      <strong>St James's Park Lake</strong>
+                      <span>410 m away &middot; Royal Park</span>
+                    </div>
+                  </button>
                 </div>
               </div>
 
-              <!-- Android Auto Top Action Strip (visible in Android Auto mode) -->
+              <!-- Android Auto Top Action Strip (Interactive!) -->
               <div class="hud-car-top">
-                <div class="hud-car-banner">
+                <button type="button" class="hud-car-banner" id="hud-car-banner-btn" title="Click to cycle route steps">
                   <img src="assets/icons/icon-compass.png" alt="" class="pixel" />
-                  <span><strong>250 m &middot; Turn right onto Westminster Bridge</strong> &middot; 6 min &middot; OSRM</span>
-                </div>
+                  <span id="hud-car-banner-text"><strong>250 m &middot; Turn right onto Westminster Bridge</strong> &middot; 6 min &middot; OSRM</span>
+                </button>
                 <div class="hud-car-strip">
-                  <span class="hud-car-chip">Places</span>
-                  <span class="hud-car-chip">Aa</span>
+                  <button type="button" class="hud-car-chip" id="hud-car-places-btn">Places</button>
+                  <button type="button" class="hud-car-chip" id="hud-car-zoom-btn">Z17</button>
                 </div>
               </div>
 
               <!-- Right Map Controls (+ / - / Recenter) -->
               <div class="demo-hud-right">
-                <button type="button" class="mc-icon-btn" id="demo-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
-                <button type="button" class="mc-icon-btn" id="demo-zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
-                <button type="button" class="mc-icon-btn mc-icon-btn-green" id="demo-reset" title="Recenter" aria-label="Recenter">&#8982;</button>
+                <button type="button" class="mc-icon-btn" id="demo-zoom-in" title="Zoom in (next block detail level)" aria-label="Zoom in">+</button>
+                <button type="button" class="mc-icon-btn" id="demo-zoom-out" title="Zoom out (wider city view)" aria-label="Zoom out">&minus;</button>
+                <button type="button" class="mc-icon-btn mc-icon-btn-green" id="demo-reset" title="Recenter &amp; cycle zoom" aria-label="Recenter">&#8982;</button>
               </div>
 
               <!-- Inspect Card (Bottom Sheet on Phone, Side Panel on Tablet) -->
@@ -189,7 +229,7 @@
                 </div>
               </div>
 
-              <!-- Android Auto Bottom Dock (visible in Android Auto mode) -->
+              <!-- Android Auto Bottom Dock -->
               <div class="hud-car-dock">
                 <div class="car-dock-left">
                   <img src="assets/logo-icon.png" alt="" class="car-dock-app pixel" />
@@ -203,7 +243,7 @@
           </div>
 
           <p class="demo-caption" id="demo-caption">
-            <strong>Tip:</strong> Drag the map to explore St James's Park, Whitehall, Westminster Abbey, and the River Thames, or double-click anywhere to drop a diamond bookmark.
+            <strong>Tip:</strong> Click <code>+</code> / <code>&minus;</code> (or scroll) to switch between real <strong>Z16</strong> (overview), <strong>Z17</strong> (4 px/block), and <strong>Z18</strong> (8 px/block) engine renders &mdash; or double-click anywhere on the map to drop a bookmark!
           </p>
         </div>
 
@@ -232,7 +272,7 @@
 
           <div class="mc-panel feature-card tilt-card reveal">
             <div class="slot-icon">
-              <img src="assets/icons/icon-minecart.png" alt="" class="pixel" />
+              <img src="assets/icons/icon-android-auto.png" alt="" class="pixel" />
             </div>
             <h3>Full-Screen Android Auto</h3>
             <p>Takes Android Auto's main map slot &mdash; run it full screen or side-by-side with Spotify and music apps in day or night mode.</p>
@@ -248,10 +288,10 @@
 
           <div class="mc-panel feature-card tilt-card reveal">
             <div class="slot-icon">
-              <img src="assets/icons/icon-diamond.png" alt="" class="pixel" />
+              <img src="assets/icons/icon-bookmark.png" alt="" class="pixel" />
             </div>
             <h3>34 Item Bookmark Icons</h3>
-            <p>Long-press anywhere to save home, work, or favourite spots with diamonds, beds, chests, potions, swords, cakes, and banners.</p>
+            <p>Long-press anywhere to save home, work, or favourite spots with banners, diamonds, beds, chests, potions, swords, and cakes.</p>
           </div>
 
           <div class="mc-panel feature-card tilt-card reveal">
@@ -288,12 +328,12 @@
               <strong>you are free to download, use, modify, and share MineMaps however you like</strong> &mdash; the only rules are that you <strong>cannot make money off of it</strong> and you <strong>must credit the author (<a href="https://github.com/rh45-one" target="_blank" rel="noopener">rh45-one</a>)</strong>.
             </p>
             <p class="install-hint">
-              <strong>Quick install:</strong> Download <code id="apk-filename">MineMaps-vX.Y.Z.apk</code> on your phone. To show MineMaps in your car, enable <em>Unknown sources</em> in Android Auto's Developer settings.
+              <strong>Quick install:</strong> Download <code id="apk-filename">MineMaps.apk</code> on your phone. To show MineMaps in your car, enable <em>Unknown sources</em> in Android Auto's Developer settings.
             </p>
             <div class="hero-actions">
               <a href="https://github.com/rh45-one/MineMaps/releases/latest" class="mc-btn mc-btn-primary" data-apk-link>
-                <img src="assets/icons/icon-emerald.png" alt="" class="btn-pixel-icon pixel" />
-                <span data-apk-label="Download MineMaps Free">Download MineMaps Free</span>
+                <img src="assets/icons/icon-download.png" alt="" class="btn-pixel-icon pixel" />
+                <span data-apk-label>Download APK</span>
               </a>
               <a href="https://github.com/rh45-one/MineMaps/blob/main/LICENCE" class="mc-btn mc-btn-secondary" target="_blank" rel="noopener">
                 <span>Read Licence</span>
@@ -313,12 +353,14 @@
     <div class="container footer-inner">
       <div class="footer-brand">
         <img src="assets/logo-combined-transparent.png" alt="MineMaps" class="footer-logo pixel" />
+        <p class="footer-tagline">THE REAL WORLD IN BLOCKS</p>
         <p>
           Created by <a href="https://github.com/rh45-one" target="_blank" rel="noopener"><strong>rh45-one</strong></a> &middot;
           Licensed under <a href="https://github.com/rh45-one/MineMaps/blob/main/LICENCE" target="_blank" rel="noopener">CC BY-NC 4.0</a>.
         </p>
       </div>
       <div class="footer-legal">
+        <p class="footer-heading">CREDITS &amp; ATTRIBUTION</p>
         <p>
           Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> &middot;
           Tiles &copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> via <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> &middot;
