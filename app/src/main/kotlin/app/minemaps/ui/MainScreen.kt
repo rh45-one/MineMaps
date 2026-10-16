@@ -424,7 +424,6 @@ private fun MapScreen(
         vm.messages.collect { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }
 
-    val bottomPad = if (card != null) 150.dp else 16.dp
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -466,7 +465,11 @@ private fun MapScreen(
         val density2 = androidx.compose.ui.platform.LocalDensity.current
         var bottomPanelPx by remember { mutableIntStateOf(0) }
         val rationaleVisible = !granted && !settings.rationaleDismissed && !settings.permissionAsked
-        val bottomPad = if (!sidePanel && bottomPanelPx > 0) with(density2) { bottomPanelPx.toDp() } + 24.dp else 16.dp
+        val hasBottomPanel = rationaleVisible || card != null
+        LaunchedEffect(hasBottomPanel) {
+            if (!hasBottomPanel) bottomPanelPx = 0
+        }
+        val bottomPad = if (!sidePanel && hasBottomPanel && bottomPanelPx > 0) with(density2) { bottomPanelPx.toDp() } + 24.dp else 16.dp
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
         val searchRow: @Composable () -> Unit = {
@@ -530,7 +533,6 @@ private fun MapScreen(
                 }
             }
         }
-        val hasBottomPanel = rationaleVisible || card != null
 
         if (sidePanel) {
             Column(
