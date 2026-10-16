@@ -7,6 +7,8 @@
 - Start with `docs/STATUS.md` (state, limitations), then `docs/ADR-001-architecture.md` and `docs/ENGINE-SPEC.md`.
   Keep ENGINE-SPEC.md and STATUS.md in sync with changes.
 
+- Releases and versioning: see `docs/RELEASING.md` (tags `vX.Y.Z` build and publish the signed APK; never print or commit the keystore).
+
 ## Commands
 - Environment: `source ~/Android/env.sh` (ANDROID_HOME, PATH, DHU libraries).
 - Gate: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintRelease`

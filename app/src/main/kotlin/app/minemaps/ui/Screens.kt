@@ -85,7 +85,7 @@ private fun ScreenFrame(title: String, onBack: () -> Unit, maxWidth: Dp = 640.dp
 }
 
 @Composable
-private fun Group(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun Group(title: String, content: @Composable ColumnScope.() -> Unit) {
     McPanel(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         McSectionHeader(title)
         content()
@@ -176,6 +176,7 @@ fun SettingsScreen(
     onLabelNames: (LabelNames) -> Unit,
     onClearCache: () -> Unit,
     onLicences: () -> Unit,
+    extra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val c = Mc.colors
     val win = rememberMcWindow()
@@ -229,6 +230,7 @@ fun SettingsScreen(
                 McButton({ confirmClear = true }, variant = McVariant.DANGER) { Text("Clear") }
             }
         }
+        extra()
         Group("About") {
             val book = remember(activeAtlas) { atlasImage(activeAtlas, "book") }
             McListRow(onClick = onLicences, leading = { McSlot(size = 44.dp) { PixelIcon(book, 28.dp) } }, title = "Licences & attribution")
@@ -272,6 +274,7 @@ private val licences = listOf(
     LicenceEntry("OpenMapTiles", "Vector tile schema \u00a9 OpenMapTiles, licensed under CC-BY 4.0. https://openmaptiles.org"),
     LicenceEntry("OpenFreeMap", "Tiles served by OpenFreeMap. https://openfreemap.org"),
     LicenceEntry("Photon (komoot)", "Place search by Photon, https://photon.komoot.io. Subject to the komoot fair-use terms; geocoding data \u00a9 OpenStreetMap contributors."),
+    LicenceEntry("Privacy", "Search sends your query and the map centre to photon.komoot.io; map tiles come from tiles.openfreemap.org. Release builds also check GitHub (api.github.com) for new versions according to Settings > Updates; choose \"Manual only\" to stop all automatic checks. Saved places and your location never leave the device."),
     LicenceEntry("OkHttp, AndroidX, Jetpack Compose, Kotlin", "Licensed under the Apache License 2.0. https://www.apache.org/licenses/LICENSE-2.0"),
     LicenceEntry("MineMaps artwork", "All block textures and item icons are original MineMaps artwork. No Minecraft assets are used. MineMaps is not affiliated with Mojang or Microsoft."),
 )

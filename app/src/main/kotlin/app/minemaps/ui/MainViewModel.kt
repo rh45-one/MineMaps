@@ -264,6 +264,10 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setShowIcons(v: Boolean) = viewModelScope.launch { container.settings.setShowIcons(v) }
 
+    fun setDebugMode(v: Boolean) = viewModelScope.launch { container.settings.setDebugMode(v) }
+
+    fun setUpdateFrequency(v: app.minemaps.data.UpdateFrequency) = viewModelScope.launch { container.settings.setUpdateFrequency(v) }
+
     fun setShowStreetNames(v: Boolean) = viewModelScope.launch { container.settings.setShowStreetNames(v) }
 
     fun setLabelNames(v: app.minemaps.data.LabelNames) = viewModelScope.launch { container.settings.setLabelNames(v) }

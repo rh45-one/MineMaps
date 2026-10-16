@@ -16,12 +16,15 @@ import app.minemaps.engine.search.PlaceIndex
 import app.minemaps.engine.search.PlacePrefetcher
 import app.minemaps.map.MapEngine
 import app.minemaps.search.PhotonClient
+import app.minemaps.update.UpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -46,6 +49,7 @@ class AppContainer(app: Application) {
     val savedPlaces = SavedPlacesRepository(app.savedPlacesStore)
     val settings = SettingsRepository(app.settingsStore)
     val mapState = MapStateRepository(app.cameraStore)
+    val updates = UpdateManager(app, appScope, settings, client = { httpClient.await() })
     val photon = PhotonClient({ httpClient.await() }, BuildConfig.PHOTON_URL, BuildConfig.USER_AGENT)
 
     init {
@@ -93,6 +97,10 @@ class MineMapsApp : Application() {
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().build())
         }
+        DebugTools.apply(false)
         container = AppContainer(this)
+        container.appScope.launch {
+            container.settings.settings.map { it.debugMode }.distinctUntilChanged().collect { DebugTools.apply(it) }
+        }
     }
 }

@@ -26,6 +26,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+[[ "$VARIANT" == "release" ]] && warn_release_key
 select_phone
 SDK="$(A shell getprop ro.build.version.sdk | tr -d '\r')"
 [[ "$SDK" -ge 26 ]] || die "phone runs API $SDK; MineMaps needs Android 8.0 (API 26) or newer"

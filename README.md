@@ -7,6 +7,12 @@ textured with original pixel art. There is no MapLibre and no routing: the Andro
 Design decisions are in `docs/ADR-001-architecture.md`, the renderer rules in `docs/ENGINE-SPEC.md`,
 the art pipeline in `docs/ASSETS.md`, licences in `docs/THIRD_PARTY.md`, and what is verified in `docs/STATUS.md`.
 
+## Install and updates
+- Download `MineMaps-vX.Y.Z.apk` from [GitHub Releases](https://github.com/rh45-one/MineMaps/releases) (a `.sha256` file is attached) and open it on your phone; allow installs from your browser or file manager when asked. Android may show a Play Protect warning for apps from an unknown developer.
+- Release builds check GitHub for new versions (Settings > Updates: every launch / daily / weekly / manual only). An update is downloaded, checked against its SHA-256 and the app's signing certificate, and installed with the system installer. "Manual only" stops all automatic checks.
+- Moving from a debug or self-built install: the signing keys differ, so Android will not update in place. In the old app use Settings > Saved places > Export, uninstall it, install the release APK, then Settings > Saved places > Import.
+- Local self-builds are update-compatible only when signed with the release keystore in `~/.config/minemaps` (see `docs/RELEASING.md`).
+
 ## Features
 
 Phone (`:app`)

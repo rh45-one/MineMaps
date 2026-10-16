@@ -142,8 +142,12 @@ Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 - On-device place index (visited and cached tiles, z12 places within 20 km) merged with Photon results; Photon query uses zoom and `location_bias_scale=0.2`.
 - Minecraft-style UI (Monocraft titles, bevelled panels and buttons, pixel glyphs) with phone/tablet, portrait/landscape layouts.
 
+## Distribution
+- Versioned from git tags, signed with the release keystore in CI (`docs/RELEASING.md`); in-app updater (release builds only), saved-places export/import, debug-mode switch for LeakCanary (debug builds only).
+
 ## Known limitations
 
+- The updater was verified end to end on the emulator only (local fake GitHub API); the first real update will be the first run against api.github.com. Play Protect can block self-updates from an unknown developer (INSTALL_FAILED_VERIFICATION_FAILURE is shown in the dialog).
 - Map overlays use system bars + display cutout insets (safeDrawing minus the keyboard). Swipe-to-delete in the saved list was dropped in favour of a confirm dialog.
 
 - Map rotation is phone only (car north-up); there is no heading-up mode. Two-finger rotation was not exercised with real touch input on the emulator (bearing was driven by a temporary debug hook).

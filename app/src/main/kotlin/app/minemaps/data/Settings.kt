@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.minemaps.engine.art.TexturePack
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +14,8 @@ import kotlinx.coroutines.flow.map
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 enum class LabelNames { ENGLISH, LOCAL }
+
+enum class UpdateFrequency { LAUNCH, DAILY, WEEKLY, MANUAL }
 
 data class Settings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
@@ -23,6 +26,11 @@ data class Settings(
     val texturePack: TexturePack = TexturePack.ORIGINAL,
     val permissionAsked: Boolean = false,
     val rationaleDismissed: Boolean = false,
+    val debugMode: Boolean = false,
+    val updateFrequency: UpdateFrequency = UpdateFrequency.DAILY,
+    val lastUpdateCheck: Long = 0L,
+    val lastUpdateResult: String = "",
+    val skippedVersionCode: Int = 0,
 )
 
 object ArrowColors {
@@ -49,6 +57,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private val arrowKey = intPreferencesKey("arrow_color")
     private val askedKey = booleanPreferencesKey("permission_asked")
     private val rationaleKey = booleanPreferencesKey("rationale_dismissed")
+    private val debugKey = booleanPreferencesKey("debug_mode")
+    private val freqKey = stringPreferencesKey("update_frequency")
+    private val lastCheckKey = longPreferencesKey("last_update_check")
+    private val lastResultKey = stringPreferencesKey("last_update_result")
+    private val skippedKey = intPreferencesKey("skipped_version_code")
 
     val settings: Flow<Settings> = store.safeData().map { p ->
         Settings(
@@ -60,6 +73,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             texturePack = p[packKey]?.let { runCatching { TexturePack.valueOf(it) }.getOrNull() } ?: TexturePack.ORIGINAL,
             permissionAsked = p[askedKey] ?: false,
             rationaleDismissed = p[rationaleKey] ?: false,
+            debugMode = p[debugKey] ?: false,
+            updateFrequency = p[freqKey]?.let { runCatching { UpdateFrequency.valueOf(it) }.getOrNull() } ?: UpdateFrequency.DAILY,
+            lastUpdateCheck = p[lastCheckKey] ?: 0L,
+            lastUpdateResult = p[lastResultKey]?.take(200) ?: "",
+            skippedVersionCode = p[skippedKey] ?: 0,
         )
     }
 
@@ -78,4 +96,15 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setPermissionAsked() = store.edit { it[askedKey] = true }
 
     suspend fun setRationaleDismissed() = store.edit { it[rationaleKey] = true }
+
+    suspend fun setDebugMode(v: Boolean) = store.edit { it[debugKey] = v }
+
+    suspend fun setUpdateFrequency(v: UpdateFrequency) = store.edit { it[freqKey] = v.name }
+
+    suspend fun setUpdateCheck(at: Long?, result: String) = store.edit {
+        if (at != null) it[lastCheckKey] = at
+        it[lastResultKey] = result.take(200)
+    }
+
+    suspend fun setSkippedVersion(code: Int) = store.edit { it[skippedKey] = code }
 }

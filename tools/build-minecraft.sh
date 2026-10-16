@@ -46,6 +46,7 @@ echo "== Importing Minecraft textures"
 python3 "$ROOT/tools/art/import_minecraft.py" "${IMPORT_ARGS[@]}"
 
 echo "== Building the $VARIANT APK"
+[[ "$VARIANT" == "release" ]] && { source "$ROOT/tools/lib/android.sh"; warn_release_key; }
 (cd "$ROOT" && ./gradlew --quiet ":app:assemble${VARIANT^}")
 APK="$(ls -t "$ROOT/app/build/outputs/apk/$VARIANT"/*.apk | head -1)"
 echo "APK: $APK"

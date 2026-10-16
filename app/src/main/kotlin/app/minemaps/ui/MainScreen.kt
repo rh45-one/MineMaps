@@ -72,6 +72,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.minemaps.AppContainer
 import app.minemaps.data.Camera
 import app.minemaps.data.LabelNames
+import app.minemaps.update.UpdateUi
+import app.minemaps.data.BackupFormatException
+import app.minemaps.data.SavedPlacesBackup
+import app.minemaps.BuildConfig
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.SpanStyle
@@ -169,6 +173,40 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
     }
     val scope = rememberCoroutineScope()
     val mapController = remember { MapController() }
+    val ctx = LocalContext.current
+    val updateUi by container.updates.state.collectAsStateWithLifecycle()
+    val offer by container.updates.offer.collectAsStateWithLifecycle()
+    val offerVisible by container.updates.dialogVisible.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { container.updates.checkIfDue() }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val msg = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = container.savedPlaces.exportJson()
+                    ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(text.toByteArray()) }
+                    "Saved places exported"
+                }.getOrElse { "Export failed" }
+            }
+            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val msg = withContext(Dispatchers.IO) {
+                try {
+                    val bytes = ctx.contentResolver.openInputStream(uri)!!.use { input -> input.readBoundedBytes(SavedPlacesBackup.MAX_BYTES + 1) }
+                    if (bytes.size > SavedPlacesBackup.MAX_BYTES) throw BackupFormatException("The file is too large to be a MineMaps backup")
+                    val r = container.savedPlaces.importJson(String(bytes, Charsets.UTF_8))
+                    "Imported ${r.imported}, skipped ${r.skipped}"
+                } catch (e: BackupFormatException) {
+                    e.message ?: "Import failed"
+                } catch (e: Exception) {
+                    "Could not read that file"
+                }
+            }
+            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         MapScreen(vm, container, engine, initial, settings, dark, mapController)
         when (screen) {
@@ -199,10 +237,22 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                     onLabelNames = { vm.setLabelNames(it) },
                     onClearCache = { vm.clearCache() },
                     onLicences = { vm.screen.value = Screen.LICENCES },
+                    extra = {
+                        SavedPlacesGroup(
+                            onExport = { exportLauncher.launch("minemaps-places.json") },
+                            onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                        )
+                        UpdatesGroup(settings, container.updates.enabled, updateUi, offer, vm::setUpdateFrequency, container.updates::checkNow, container.updates::install)
+                        if (BuildConfig.DEBUG) DeveloperGroup(settings.debugMode) { vm.setDebugMode(it) }
+                    },
                 )
             }
             Screen.LICENCES -> LicencesScreen(oflText, engine.resolve(settings.texturePack) == TexturePack.VANILLA, onBack = { vm.screen.value = Screen.SETTINGS })
         }
+    }
+    val o = offer
+    if (o != null && (offerVisible || updateUi !is UpdateUi.Idle && updateUi !is UpdateUi.Checking)) {
+        UpdateDialog(updateUi, o, container.updates::install, container.updates::later, container.updates::skip, container.updates::cancel, container.updates::dismissFailure)
     }
     scope.hashCode()
 }
@@ -665,3 +715,14 @@ private fun CoordsRow(text: String, onCopy: (String) -> Unit) {
 }
 
 private fun coords(lat: Double, lon: Double): String = String.format(Locale.US, "%.5f, %.5f", lat, lon)
+
+private fun java.io.InputStream.readBoundedBytes(limit: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(8192)
+    while (out.size() < limit) {
+        val n = read(buf, 0, minOf(buf.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}

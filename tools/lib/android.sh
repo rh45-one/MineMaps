@@ -36,3 +36,9 @@ select_phone() {
   esac
   echo "Phone: $(A shell getprop ro.product.model | tr -d '\r') ($SERIAL), Android API $(A shell getprop ro.build.version.sdk | tr -d '\r')"
 }
+
+# Warn when a release build would be signed with the debug key (it then cannot be updated by or from official releases).
+warn_release_key() {
+  if [[ -n "${MINEMAPS_KEYSTORE_PATH:-}" || -f "$HOME/.config/minemaps/keystore.properties" ]]; then return 0; fi
+  echo "warning: no release keystore (MINEMAPS_KEYSTORE_PATH or ~/.config/minemaps/keystore.properties): this APK is debug-signed and cannot be updated by or from official GitHub releases." >&2
+}

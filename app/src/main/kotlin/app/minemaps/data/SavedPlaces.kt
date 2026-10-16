@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -93,5 +94,18 @@ class SavedPlacesRepository(private val store: DataStore<Preferences>) {
 
     private suspend fun update(transform: (List<SavedPlace>) -> List<SavedPlace>) {
         store.edit { prefs -> prefs[key] = SavedPlaceCodec.encode(transform(SavedPlaceCodec.decode(prefs[key]))) }
+    }
+
+    suspend fun exportJson(): String = SavedPlacesBackup.export(places.first())
+
+    /** Merges a backup file into the saved places; returns "imported / skipped" counts. */
+    suspend fun importJson(text: String): ImportResult {
+        var result: ImportResult? = null
+        store.edit { prefs ->
+            val r = SavedPlacesBackup.merge(SavedPlaceCodec.decode(prefs[key]), text)
+            prefs[key] = SavedPlaceCodec.encode(r.places)
+            result = r
+        }
+        return result!!
     }
 }
