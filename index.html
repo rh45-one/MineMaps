@@ -6,6 +6,9 @@
   <title>MineMaps — The Real World as a Block-World Map for Android &amp; Android Auto</title>
   <meta name="description" content="Explore your city, landmarks, and road trips as a live voxel block map on your Android phone and full-screen in your car with Android Auto. Free forever, open source, zero ads." />
   <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -14,9 +17,10 @@
     <div class="container topbar-inner">
       <a href="#top" class="brand" aria-label="MineMaps Home">
         <img src="assets/logo-icon.png" alt="" class="brand-icon pixel" />
-        <img src="assets/logo-text.png" alt="MineMaps" class="brand-text pixel" />
+        <img src="assets/logo-text-transparent.png" alt="MineMaps" class="brand-text pixel" />
       </a>
       <nav class="nav-links" aria-label="Primary">
+        <a href="#demo">Live Demo</a>
         <a href="#textures">Textures</a>
         <a href="#features">Features</a>
         <a href="#android-auto">Android Auto</a>
@@ -25,7 +29,7 @@
       </nav>
       <div class="topbar-cta">
         <a href="https://github.com/rh45-one/MineMaps/releases/latest" class="mc-btn mc-btn-primary" data-apk-link>
-          <span data-apk-label="Download APK">Download APK</span>
+          <span>Download APK</span>
         </a>
       </div>
     </div>
@@ -33,8 +37,9 @@
 
   <main id="top">
     <!-- Hero Section -->
-    <section class="hero">
+    <section class="hero" id="hero-section">
       <div class="hero-grid-bg" aria-hidden="true"></div>
+      <div class="hero-glow" aria-hidden="true"></div>
       <div class="container hero-inner">
         <div class="hero-copy">
           <div class="badge-row">
@@ -42,7 +47,7 @@
             <span class="mc-tag">ANDROID PHONE + ANDROID AUTO</span>
             <span class="mc-tag">NO ADS &middot; NO TRACKING</span>
           </div>
-          <img src="assets/logo-combined.png" alt="MineMaps Logo" class="hero-logo pixel" />
+          <img src="assets/logo-combined-transparent.png" alt="MineMaps Logo" class="hero-logo pixel" />
           <h1 class="hero-title">Your real-world streets, landmarks &amp; drives &mdash; built out of blocks.</h1>
           <p class="hero-lead">
             <strong>MineMaps</strong> turns live maps of the entire planet into a crisp block-world adventure.
@@ -51,11 +56,15 @@
           </p>
           <div class="hero-actions">
             <a href="https://github.com/rh45-one/MineMaps/releases/latest" class="mc-btn mc-btn-primary mc-btn-lg" id="download-btn" data-apk-link>
-              <span class="btn-glyph" aria-hidden="true">&#11015;</span>
+              <img src="assets/icons/icon-emerald.png" alt="" class="btn-pixel-icon pixel" />
               <span id="download-label" data-apk-label="Download Latest APK">Download Latest APK</span>
             </a>
+            <a href="#demo" class="mc-btn mc-btn-secondary mc-btn-lg">
+              <img src="assets/icons/icon-compass.png" alt="" class="btn-pixel-icon pixel" />
+              <span>Try Interactive Demo</span>
+            </a>
             <a href="https://github.com/rh45-one/MineMaps" class="mc-btn mc-btn-secondary mc-btn-lg" target="_blank" rel="noopener">
-              <span>View on GitHub</span>
+              <span>GitHub</span>
             </a>
           </div>
           <p class="hero-meta" id="release-meta">
@@ -64,7 +73,7 @@
         </div>
 
         <div class="hero-showcase">
-          <div class="mc-panel showcase-frame">
+          <div class="mc-panel showcase-frame tilt-card">
             <div class="showcase-header">
               <span class="showcase-title">LIVE APP PREVIEW &mdash; ROME, ITALY</span>
               <div class="mc-segmented" role="tablist" aria-label="Hero preview texture switcher">
@@ -98,22 +107,136 @@
       </div>
     </section>
 
+    <!-- Interactive Live Map Demo Section -->
+    <section class="section section-alt" id="demo">
+      <div class="container">
+        <div class="section-heading reveal">
+          <span class="mc-tag mc-tag-green">TRY IT RIGHT HERE</span>
+          <h2>Interactive Block Map Demo &mdash; Colosseum, Rome</h2>
+          <p>
+            Drag to pan, scroll or click <code>+</code> / <code>&minus;</code> to zoom, switch between <strong>Original Art</strong> and <strong>Minecraft Textures*</strong>, toggle <strong>Day / Night</strong>, or drop a bookmark pin on the map!
+          </p>
+        </div>
+
+        <div class="mc-panel demo-wrapper reveal">
+          <!-- Demo Toolbar -->
+          <div class="demo-toolbar">
+            <div class="demo-control-group">
+              <span class="demo-label">Textures:</span>
+              <div class="mc-segmented demo-seg">
+                <button type="button" class="seg-btn active" data-demo-pack="original">
+                  <img src="assets/icons/tex-grass.png" alt="" class="mini-tex pixel" />
+                  <span>Original Art</span>
+                </button>
+                <button type="button" class="seg-btn" data-demo-pack="minecraft">
+                  <img src="assets/icons/icon-diamond.png" alt="" class="mini-tex pixel" />
+                  <span>Minecraft*</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="demo-control-group">
+              <span class="demo-label">Lighting:</span>
+              <div class="mc-segmented demo-seg">
+                <button type="button" class="seg-btn active" data-demo-time="day">
+                  <img src="assets/icons/icon-clock.png" alt="" class="mini-tex pixel" />
+                  <span>Day</span>
+                </button>
+                <button type="button" class="seg-btn" data-demo-time="night">
+                  <img src="assets/icons/icon-lantern.png" alt="" class="mini-tex pixel" />
+                  <span>Night</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="demo-control-group">
+              <span class="demo-label">Drop Bookmark:</span>
+              <div class="demo-icon-picker" role="radiogroup" aria-label="Bookmark icon">
+                <button type="button" class="slot-pick active" data-demo-icon="pin" title="Red Pin">
+                  <img src="assets/icons/icon-pin.png" alt="Pin" class="pixel" />
+                </button>
+                <button type="button" class="slot-pick" data-demo-icon="diamond" title="Diamond">
+                  <img src="assets/icons/icon-diamond.png" alt="Diamond" class="pixel" />
+                </button>
+                <button type="button" class="slot-pick" data-demo-icon="chest" title="Chest">
+                  <img src="assets/icons/icon-chest.png" alt="Chest" class="pixel" />
+                </button>
+                <button type="button" class="slot-pick" data-demo-icon="sword" title="Sword">
+                  <img src="assets/icons/icon-sword.png" alt="Sword" class="pixel" />
+                </button>
+                <button type="button" class="slot-pick" data-demo-icon="golden_apple" title="Golden Apple">
+                  <img src="assets/icons/icon-golden_apple.png" alt="Golden Apple" class="pixel" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Viewport -->
+          <div class="demo-viewport" id="demo-viewport" tabindex="0" aria-label="Interactive MineMaps block map demo">
+            <div class="demo-canvas" id="demo-canvas">
+              <img src="assets/demo-rome-day-original.png" alt="Interactive block map of Rome" class="demo-map-img pixel" id="demo-map-img" draggable="false" />
+              <!-- Clickable Landmark Hotspots -->
+              <button type="button" class="demo-hotspot" style="left: 50%; top: 50%;" data-title="Colosseum (Amphitheatrum Flavium)" data-sub="Historic Landmark · 10 m away · Piazza del Colosseo" data-coords="41.89020, 12.49220">
+                <span class="hotspot-pulse"></span>
+              </button>
+              <button type="button" class="demo-hotspot" style="left: 29%; top: 43%;" data-title="Temple of Venus and Rome" data-sub="Ancient Ruin · 190 m away · Via Sacra" data-coords="41.89088, 12.48962">
+                <span class="hotspot-pulse"></span>
+              </button>
+              <button type="button" class="demo-hotspot" style="left: 39%; top: 38%;" data-title="Colosseo Metro Station" data-sub="Subway Entrance · 130 m away · Piazza del Colosseo" data-coords="41.89135, 12.49150">
+                <span class="hotspot-pulse"></span>
+              </button>
+              <button type="button" class="demo-hotspot" style="left: 65%; top: 69%;" data-title="Parco del Colle Oppio / Celio" data-sub="Park &amp; Gardens · 240 m away · Via Celio Vibenna" data-coords="41.88840, 12.49450">
+                <span class="hotspot-pulse"></span>
+              </button>
+              <!-- User-dropped pins container -->
+              <div id="demo-pins-layer"></div>
+            </div>
+
+            <!-- Floating HUD Controls (just like the Android app) -->
+            <div class="demo-hud-top">
+              <div class="demo-pill">
+                <img src="assets/icons/icon-compass.png" alt="" class="pixel" />
+                <span>Drag to pan &middot; Scroll to zoom &middot; Double-click anywhere to drop a bookmark!</span>
+              </div>
+            </div>
+
+            <div class="demo-hud-right">
+              <button type="button" class="mc-icon-btn" id="demo-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+              <button type="button" class="mc-icon-btn" id="demo-zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" class="mc-icon-btn mc-icon-btn-green" id="demo-reset" title="Recenter on Colosseum" aria-label="Recenter">&#8982;</button>
+            </div>
+
+            <!-- Inspect Card Popup (matches the app's bottom InfoCard) -->
+            <div class="mc-panel demo-info-card" id="demo-info-card">
+              <div class="demo-info-row">
+                <div>
+                  <h4 id="demo-card-title">Colosseum (Amphitheatrum Flavium)</h4>
+                  <p id="demo-card-sub">Historic Landmark &middot; 10 m away &middot; Piazza del Colosseo</p>
+                  <code id="demo-card-coords">41.89020, 12.49220</code>
+                </div>
+                <button type="button" class="mc-icon-btn" id="demo-card-close" aria-label="Close card">&times;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Texture Pack Comparison Section (Both With & Without Official Minecraft Textures) -->
     <section class="section" id="textures">
       <div class="container">
-        <div class="section-heading">
+        <div class="section-heading reveal">
           <span class="mc-tag mc-tag-green">TWO LOOKS &middot; YOUR CHOICE</span>
           <h2>Original Pixel Art Out of the Box &mdash; or Official Game Textures in One Tap</h2>
           <p>
             Every MineMaps download ships with <strong>100% original hand-crafted pixel art</strong> so it's completely legal and ready to use immediately.
-            Own <em>Minecraft: Java Edition</em>? Enable <strong>Include Minecraft textures</strong> in Settings and your phone builds the pack directly from Mojang's official game file &mdash; and keeps it across every app update.
+            Own <em>Minecraft: Java Edition</em>? Enable <strong>Minecraft textures</strong> in Settings and your phone builds the pack directly from Mojang's official game file &mdash; and keeps it across every app update.
           </p>
         </div>
 
-        <!-- Side-by-side & interactive comparison -->
         <div class="texture-compare-grid">
           <!-- Card 1: Original Art -->
-          <article class="mc-panel compare-card">
+          <article class="mc-panel compare-card tilt-card reveal">
             <div class="compare-badge-row">
               <span class="mc-tag mc-tag-green">INCLUDED BY DEFAULT</span>
               <span class="compare-loc">Colosseum, Rome &amp; Westminster, London</span>
@@ -135,7 +258,7 @@
           </article>
 
           <!-- Card 2: With Minecraft Textures -->
-          <article class="mc-panel compare-card">
+          <article class="mc-panel compare-card tilt-card reveal">
             <div class="compare-badge-row">
               <span class="mc-tag mc-tag-gold">OPTIONAL IN-APP IMPORT</span>
               <span class="compare-loc">Built on Your Phone &middot; Kept Across Updates</span>
@@ -157,54 +280,66 @@
           </article>
         </div>
 
-        <p class="legal-note">
+        <p class="legal-note reveal">
           * <strong>Disclaimer:</strong> Screenshots labelled "Minecraft Textures" show the optional in-app texture importer enabled. Minecraft textures and assets are &copy; Mojang Studios. MineMaps is an independent fan-inspired project and is not affiliated with, endorsed by, or associated with Mojang Studios or Microsoft. MineMaps releases never bundle or redistribute Mojang files.
         </p>
       </div>
     </section>
 
-    <!-- Features Grid -->
+    <!-- Features Grid (with real pixel-art icons from the MineMaps atlas!) -->
     <section class="section section-alt" id="features">
       <div class="container">
-        <div class="section-heading">
+        <div class="section-heading reveal">
           <span class="mc-tag mc-tag-green">PACKED WITH DETAILS</span>
           <h2>Built Like a Game. Useful Like a Real Map.</h2>
           <p>Every street, river, forest, building, and shop on Earth is drawn live onto a global block grid.</p>
         </div>
 
         <div class="features-grid">
-          <div class="mc-panel feature-card">
-            <div class="slot-icon" aria-hidden="true">&#127757;</div>
+          <div class="mc-panel feature-card tilt-card reveal">
+            <div class="slot-icon">
+              <img src="assets/icons/icon-map.png" alt="" class="pixel" />
+            </div>
             <h3>Live Global Block World</h3>
             <p>Zoom smoothly from a world overview down to individual 2.4-metre blocks with building shadows, water depth, and forest canopies.</p>
           </div>
 
-          <div class="mc-panel feature-card">
-            <div class="slot-icon" aria-hidden="true">&#129517;</div>
+          <div class="mc-panel feature-card tilt-card reveal">
+            <div class="slot-icon">
+              <img src="assets/icons/icon-compass.png" alt="" class="pixel" />
+            </div>
             <h3>Two-Finger Twist &amp; Compass</h3>
             <p>Rotate the map in any direction with natural breakaway resistance so accidental pinches never spin your view. Tap the compass to snap north.</p>
           </div>
 
-          <div class="mc-panel feature-card">
-            <div class="slot-icon" aria-hidden="true">&#9876;</div>
+          <div class="mc-panel feature-card tilt-card reveal">
+            <div class="slot-icon">
+              <img src="assets/icons/icon-diamond.png" alt="" class="pixel" />
+            </div>
             <h3>34 Item Bookmark Icons</h3>
             <p>Long-press anywhere to save home, work, or secret spots with diamonds, beds, chests, potions, swords, cakes, and banners.</p>
           </div>
 
-          <div class="mc-panel feature-card">
-            <div class="slot-icon" aria-hidden="true">&#128269;</div>
-            <h3>Instant Search &amp; Tap-to-Inspect</h3>
-            <p>On-device place indexing finds nearby towns, streets, and landmarks in milliseconds. Tap any building, road, or park on the map to inspect it.</p>
+          <div class="mc-panel feature-card tilt-card reveal">
+            <div class="slot-icon">
+              <img src="assets/icons/icon-book.png" alt="" class="pixel" />
+            </div>
+            <h3>Instant Search &amp; Live Distance</h3>
+            <p>On-device place indexing finds nearby towns, streets, and landmarks in milliseconds with live distance badges. Tap any building or park to inspect it.</p>
           </div>
 
-          <div class="mc-panel feature-card">
-            <div class="slot-icon" aria-hidden="true">&#127769;</div>
+          <div class="mc-panel feature-card tilt-card reveal">
+            <div class="slot-icon">
+              <img src="assets/icons/icon-clock.png" alt="" class="pixel" />
+            </div>
             <h3>Day &amp; Night + English Labels</h3>
             <p>Automatic day and night palettes, 9 player arrow colours, quick street-name toggle (<code>Aa</code>), and English (Latin script) names worldwide.</p>
           </div>
 
-          <div class="mc-panel feature-card">
-            <div class="slot-icon" aria-hidden="true">&#128230;</div>
+          <div class="mc-panel feature-card tilt-card reveal">
+            <div class="slot-icon">
+              <img src="assets/icons/icon-chest.png" alt="" class="pixel" />
+            </div>
             <h3>Offline Cache &amp; Easy Backups</h3>
             <p>Visited areas stay cached on your phone for 30 days (up to 200 MB) so the map still works when signal drops. Export or import your saved places anytime.</p>
           </div>
@@ -215,7 +350,7 @@
     <!-- Android Auto Section -->
     <section class="section" id="android-auto">
       <div class="container">
-        <div class="section-heading">
+        <div class="section-heading reveal">
           <span class="mc-tag mc-tag-green">BUILT FOR YOUR CAR</span>
           <h2>Full-Screen or Split-Dashboard on Android Auto</h2>
           <p>
@@ -224,7 +359,7 @@
         </div>
 
         <div class="car-grid">
-          <figure class="mc-panel car-card">
+          <figure class="mc-panel car-card tilt-card reveal">
             <img src="assets/android-auto-full.png" alt="MineMaps running full screen on Android Auto showing the Colosseum in Rome" loading="lazy" />
             <figcaption>
               <strong>Full-Screen Car Map (Day Mode)</strong>
@@ -232,7 +367,7 @@
             </figcaption>
           </figure>
 
-          <figure class="mc-panel car-card">
+          <figure class="mc-panel car-card tilt-card reveal">
             <img src="assets/android-auto-split-night.png" alt="MineMaps running in Android Auto split dashboard mode in night palette alongside media player" loading="lazy" />
             <figcaption>
               <strong>Split Dashboard with Media (Night Mode)</strong>
@@ -246,14 +381,14 @@
     <!-- Navigation Modes Section -->
     <section class="section section-alt" id="navigation">
       <div class="container">
-        <div class="section-heading">
+        <div class="section-heading reveal">
           <span class="mc-tag mc-tag-green">THREE NAVIGATION MODES</span>
           <h2>Explore Freely, Route Standalone, or Link with Google Maps</h2>
           <p>Pick how you want MineMaps to guide you in <strong>Settings &rarr; Navigation</strong>:</p>
         </div>
 
         <div class="modes-grid">
-          <div class="mc-panel mode-card">
+          <div class="mc-panel mode-card tilt-card reveal">
             <span class="mc-tag mc-tag-green">DEFAULT &middot; ZERO SETUP</span>
             <h3>1. Standalone (OpenStreetMap)</h3>
             <p>
@@ -261,7 +396,7 @@
             </p>
           </div>
 
-          <div class="mc-panel mode-card">
+          <div class="mc-panel mode-card tilt-card reveal">
             <span class="mc-tag mc-tag-gold">POWER USER</span>
             <h3>2. Google Maps Assisted</h3>
             <p>
@@ -270,7 +405,7 @@
             </p>
           </div>
 
-          <div class="mc-panel mode-card">
+          <div class="mc-panel mode-card tilt-card reveal">
             <span class="mc-tag">PURE EXPLORATION</span>
             <h3>3. Map Only (Off)</h3>
             <p>
@@ -284,13 +419,13 @@
     <!-- Quick Install Steps -->
     <section class="section" id="install">
       <div class="container">
-        <div class="section-heading">
+        <div class="section-heading reveal">
           <span class="mc-tag mc-tag-green">GET STARTED IN 3 STEPS</span>
           <h2>Install on Your Phone &amp; Car</h2>
         </div>
 
         <div class="steps-grid">
-          <div class="mc-panel step-card">
+          <div class="mc-panel step-card tilt-card reveal">
             <div class="step-num">1</div>
             <h3>Download the APK</h3>
             <p>
@@ -298,7 +433,7 @@
             </p>
           </div>
 
-          <div class="mc-panel step-card">
+          <div class="mc-panel step-card tilt-card reveal">
             <div class="step-num">2</div>
             <h3>Automatic In-App Updates</h3>
             <p>
@@ -306,7 +441,7 @@
             </p>
           </div>
 
-          <div class="mc-panel step-card">
+          <div class="mc-panel step-card tilt-card reveal">
             <div class="step-num">3</div>
             <h3>Enable in Android Auto</h3>
             <p>
@@ -320,12 +455,12 @@
     <!-- Free Forever & Licence Section -->
     <section class="section section-alt" id="free-forever">
       <div class="container">
-        <div class="mc-panel licence-banner">
+        <div class="mc-panel licence-banner tilt-card reveal">
           <div class="licence-copy">
             <span class="mc-tag mc-tag-green">OUR PROMISE &amp; OPEN LICENCE</span>
             <h2>Free Forever. No Ads. No Subscriptions.</h2>
             <p>
-              <strong>MineMaps will stay 100% free forever.</strong> There are no accounts to create, no ads, no analytics trackers, and no paywalls &mdash; just a passioneering project built for people who love block worlds and maps.
+              <strong>MineMaps will stay 100% free forever.</strong> There are no accounts to create, no ads, no analytics trackers, and no paywalls &mdash; just a passion project built for people who love block worlds and maps.
             </p>
             <p>
               The code and original artwork are open under the <strong>Creative Commons Attribution-NonCommercial 4.0 International (<a href="https://github.com/rh45-one/MineMaps/blob/main/LICENCE" target="_blank" rel="noopener">CC BY-NC 4.0</a>)</strong> licence.
@@ -333,6 +468,7 @@
             </p>
             <div class="hero-actions">
               <a href="https://github.com/rh45-one/MineMaps/releases/latest" class="mc-btn mc-btn-primary" data-apk-link>
+                <img src="assets/icons/icon-emerald.png" alt="" class="btn-pixel-icon pixel" />
                 <span data-apk-label="Download MineMaps Free">Download MineMaps Free</span>
               </a>
               <a href="https://github.com/rh45-one/MineMaps/blob/main/LICENCE" class="mc-btn mc-btn-secondary" target="_blank" rel="noopener">
@@ -352,7 +488,7 @@
   <footer class="footer">
     <div class="container footer-inner">
       <div class="footer-brand">
-        <img src="assets/logo-combined.png" alt="MineMaps" class="footer-logo pixel" />
+        <img src="assets/logo-combined-transparent.png" alt="MineMaps" class="footer-logo pixel" />
         <p>
           Created by <a href="https://github.com/rh45-one" target="_blank" rel="noopener"><strong>rh45-one</strong></a> &middot;
           Licensed under <a href="https://github.com/rh45-one/MineMaps/blob/main/LICENCE" target="_blank" rel="noopener">CC BY-NC 4.0</a>.
