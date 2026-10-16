@@ -22,17 +22,22 @@ document.querySelectorAll('[data-hero-pack]').forEach((btn) => {
   });
 });
 
-// Fetch latest release tag from GitHub API so the download button shows the live version number
+// Fetch latest release tag from GitHub API so every download button and APK filename updates automatically
 fetch('https://api.github.com/repos/rh45-one/MineMaps/releases/latest')
   .then((r) => (r.ok ? r.json() : null))
   .then((data) => {
     if (!data || !data.tag_name) return;
-    const label = document.getElementById('download-label');
-    const btn = document.getElementById('download-btn');
-    if (label) label.textContent = `Download ${data.tag_name} APK`;
+    const tag = data.tag_name;
     const apkAsset = (data.assets || []).find((a) => a.name && a.name.endsWith('.apk'));
-    if (apkAsset && apkAsset.browser_download_url && btn) {
-      btn.href = apkAsset.browser_download_url;
+    document.querySelectorAll('[data-apk-label]').forEach((el) => {
+      el.textContent = `Download ${tag} APK`;
+    });
+    const fn = document.getElementById('apk-filename');
+    if (fn) fn.textContent = apkAsset && apkAsset.name ? apkAsset.name : `MineMaps-${tag}.apk`;
+    if (apkAsset && apkAsset.browser_download_url) {
+      document.querySelectorAll('[data-apk-link]').forEach((a) => {
+        a.href = apkAsset.browser_download_url;
+      });
     }
   })
   .catch(() => {});
