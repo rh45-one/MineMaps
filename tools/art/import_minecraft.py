@@ -21,7 +21,7 @@ import argparse, hashlib, io, json, os, sys, urllib.request, zipfile
 try:
     from PIL import Image
 except ImportError:
-    sys.exit('Pillow is required: python3 -m pip install --user pillow   (or: sudo apt install python3-pil)')
+    sys.exit('Pillow is required: python3 -m pip install --user -r requirements.txt   (or: sudo apt install python3-pil)')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))

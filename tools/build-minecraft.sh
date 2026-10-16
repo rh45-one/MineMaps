@@ -30,7 +30,7 @@ done
 
 echo "== Checking prerequisites"
 command -v python3 >/dev/null || die "python3 not found (install Python 3)"
-python3 -c 'import PIL' 2>/dev/null || die "Pillow missing: python3 -m pip install --user pillow   (Debian/Ubuntu: sudo apt install python3-pil)"
+python3 -c 'import PIL' 2>/dev/null || die "Pillow missing: python3 -m pip install --user -r requirements.txt   (Debian/Ubuntu: sudo apt install python3-pil)"
 JAVA="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 command -v "$JAVA" >/dev/null || die "Java not found: install JDK 21 (e.g. sudo apt install openjdk-21-jdk, or Temurin 21) or set JAVA_HOME"
 JV="$("$JAVA" -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)"

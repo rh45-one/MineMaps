@@ -37,7 +37,7 @@ docs/             Architecture, engine spec, assets, releasing, status, licences
 ## Prerequisites
 
 - **JDK 21** (`/usr/bin/java`), e.g. `sudo apt install openjdk-21-jdk` or [Eclipse Temurin 21](https://adoptium.net/).
-- **Python 3 with Pillow** (`python3 -m pip install --user pillow` or `sudo apt install python3-pil`) — only needed to regenerate the original art atlas or run the desktop Python texture importer.
+- **Python 3 with Pillow** (`python3 -m pip install -r requirements.txt` or `sudo apt install python3-pil`) — only needed to regenerate the original art atlas or run the desktop Python texture importer.
 - **Android SDK** in `~/Android/Sdk` (easiest via [Android Studio](https://developer.android.com/studio), or via `sdkmanager`):
   - `cmdline-tools;latest`, `platform-tools` 37.0.1, `emulator` 37.2.12
   - `platforms;android-37.0`, `build-tools;37.0.0`

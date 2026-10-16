@@ -1,0 +1,2 @@
+# Python dependencies for tools/art/*.py (make_atlas.py, make_android_icons.py, import_minecraft.py)
+Pillow>=10.0.0,<12.0.0
