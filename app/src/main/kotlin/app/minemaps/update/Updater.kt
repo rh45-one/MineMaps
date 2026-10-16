@@ -150,7 +150,16 @@ object UpdateInstaller {
     fun unknownSourcesIntent(context: Context): Intent =
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    fun install(context: Context, apk: File) {
+    @Suppress("DEPRECATION")
+    fun install(context: Context, apk: File): Boolean {
+        val uri = "content://${context.packageName}.apkprovider/update.apk".toUri()
+        val piaIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        }
+        if (runCatching { context.startActivity(piaIntent) }.isSuccess) return true
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
@@ -163,7 +172,32 @@ object UpdateInstaller {
             val pending = PendingIntent.getBroadcast(context, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
             session.commit(pending.intentSender)
         }
+        return false
     }
+}
+
+class UpdateApkProvider : android.content.ContentProvider() {
+    override fun onCreate(): Boolean = true
+
+    override fun openFile(uri: android.net.Uri, mode: String): android.os.ParcelFileDescriptor {
+        val f = File(File(context!!.cacheDir, "updates"), "update.apk")
+        return android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+    }
+
+    override fun openAssetFile(uri: android.net.Uri, mode: String): android.content.res.AssetFileDescriptor {
+        val pfd = openFile(uri, mode)
+        return android.content.res.AssetFileDescriptor(pfd, 0, android.content.res.AssetFileDescriptor.UNKNOWN_LENGTH)
+    }
+
+    override fun getType(uri: android.net.Uri): String = "application/vnd.android.package-archive"
+
+    override fun query(u: android.net.Uri, p: Array<out String>?, s: String?, sa: Array<out String>?, so: String?): android.database.Cursor? = null
+
+    override fun insert(u: android.net.Uri, v: android.content.ContentValues?): android.net.Uri? = null
+
+    override fun delete(u: android.net.Uri, s: String?, sa: Array<out String>?): Int = 0
+
+    override fun update(u: android.net.Uri, v: android.content.ContentValues?, s: String?, sa: Array<out String>?): Int = 0
 }
 
 object UpdateEvents {

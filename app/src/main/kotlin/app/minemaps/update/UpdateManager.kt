@@ -184,12 +184,17 @@ class UpdateManager(
                     throw UpdateException(it)
                 }
                 state.value = UpdateUi.Installing(info)
-                UpdateInstaller.install(context, apk)
-                // Give the foreground Activity a moment to resume if we just came back from Settings, then launch any pending confirmation dialog.
-                delay(350)
-                UpdateEvents.confirmIntent.value?.let { confirm ->
-                    UpdateEvents.confirmIntent.value = null
-                    runCatching { context.startActivity(confirm) }
+                val launchedPia = UpdateInstaller.install(context, apk)
+                if (launchedPia) {
+                    delay(1200)
+                    state.value = UpdateUi.Idle
+                } else {
+                    // Give the foreground Activity a moment to resume if we just came back from Settings, then launch any pending confirmation dialog.
+                    delay(350)
+                    UpdateEvents.confirmIntent.value?.let { confirm ->
+                        UpdateEvents.confirmIntent.value = null
+                        runCatching { context.startActivity(confirm) }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
