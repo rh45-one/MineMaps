@@ -600,7 +600,8 @@ class MapRenderer(
             val py = pt.y.toFloat()
             iconBitmap("player")?.let { bmp ->
                 canvas.save()
-                canvas.rotate(p.bearingDeg - viewport.bearingDeg.toFloat(), px, py)
+                val deg = (if (p.bearingDeg.isFinite()) p.bearingDeg else 0f) - viewport.bearingDeg.toFloat()
+                if (deg.isFinite() && deg != 0f) canvas.rotate(deg, px, py)
                 val half = size / 2
                 dst.set((px - half).roundToInt(), (py - half).roundToInt(), (px + half).roundToInt(), (py + half).roundToInt())
                 canvas.drawBitmap(bmp, null, dst, iconPaint)

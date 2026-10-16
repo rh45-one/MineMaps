@@ -429,9 +429,8 @@ private fun MapScreen(
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_RESUME) {
-                val was = granted
                 recomputePermission()
-                if (granted != was) container.location.refresh()
+                if (granted) container.location.refresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)

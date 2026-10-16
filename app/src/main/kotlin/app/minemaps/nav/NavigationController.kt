@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -37,6 +38,7 @@ data class ActiveBannerState(
     val mirroredFromGoogle: Boolean,
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class NavigationController(
     private val scope: CoroutineScope,
     private val settings: SettingsRepository,
@@ -95,7 +97,9 @@ class NavigationController(
 
     init {
         scope.launch {
-            location.state.collect { locState ->
+            activePlan.flatMapLatest { plan ->
+                if (plan == null) kotlinx.coroutines.flow.emptyFlow() else location.state
+            }.collect { locState ->
                 val loc = locState.location ?: return@collect
                 latestLocation = loc
                 val plan = activePlan.value ?: return@collect

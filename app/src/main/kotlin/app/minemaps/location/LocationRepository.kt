@@ -10,16 +10,17 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
-import android.os.Bundle
 import android.os.Looper
+import android.view.Display
 import android.view.Surface
-import android.view.WindowManager
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationListenerCompat
 import androidx.core.location.LocationManagerCompat
+import androidx.core.location.LocationRequestCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
@@ -41,6 +42,7 @@ data class LocationState(val location: Location?, val status: LocationStatus)
 class LocationRepository(private val context: Context, appScope: CoroutineScope) {
     private val manager = context.getSystemService(LocationManager::class.java)
     private val sensorManager = context.getSystemService(SensorManager::class.java)
+    private val displayManager = context.getSystemService(DisplayManager::class.java)
     private val trigger = MutableStateFlow(0)
 
     val state: SharedFlow<LocationState> = trigger.flatMapLatest { locationFlow() }
@@ -74,8 +76,7 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
                 } catch (_: IllegalArgumentException) {
                     return
                 }
-                val wm = context.getSystemService(WindowManager::class.java)
-                val rotation = runCatching { wm?.defaultDisplay?.rotation ?: Surface.ROTATION_0 }.getOrDefault(Surface.ROTATION_0)
+                val rotation = runCatching { displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: Surface.ROTATION_0 }.getOrDefault(Surface.ROTATION_0)
                 val (axisX, axisY) = when (rotation) {
                     Surface.ROTATION_90 -> SensorManager.AXIS_Y to SensorManager.AXIS_MINUS_X
                     Surface.ROTATION_180 -> SensorManager.AXIS_MINUS_X to SensorManager.AXIS_MINUS_Y
@@ -84,7 +85,9 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
                 }
                 SensorManager.remapCoordinateSystem(rotMat, axisX, axisY, remapped)
                 SensorManager.getOrientation(remapped, orientation)
+                if (!orientation[0].isFinite()) return
                 val rawDeg = ((Math.toDegrees(orientation[0].toDouble()).toFloat() % 360f) + 360f) % 360f
+                if (!rawDeg.isFinite()) return
                 val prev = smoothed
                 val next = if (prev == null) {
                     rawDeg
@@ -127,7 +130,7 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
     private fun providers(): List<String> {
         val all = manager.allProviders
         if (Build.VERSION.SDK_INT >= 31 && LocationManager.FUSED_PROVIDER in all) {
-            return listOf(LocationManager.FUSED_PROVIDER, LocationManager.GPS_PROVIDER).filter { it in all }
+            return listOf(LocationManager.FUSED_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).filter { it in all }
         }
         return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).filter { it in all }
     }
@@ -136,7 +139,9 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
     fun lastKnown(): Location? {
         if (!hasPermission()) return null
         return try {
-            providers().mapNotNull { manager.getLastKnownLocation(it) }.maxByOrNull { it.time }
+            val all = manager.allProviders
+            val candidates = (providers() + listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)).distinct().filter { it in all }
+            candidates.mapNotNull { runCatching { manager.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
         } catch (e: SecurityException) {
             null
         }
@@ -152,6 +157,7 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
         var last: Location? = lastKnown()
 
         fun current(): LocationState {
+            if (last == null) last = lastKnown()
             val status = when {
                 !LocationManagerCompat.isLocationEnabled(manager) -> LocationStatus.DISABLED
                 last == null -> LocationStatus.SEARCHING
@@ -160,7 +166,7 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
             return LocationState(last, status)
         }
 
-        val listener = object : LocationListener {
+        val listener = object : LocationListenerCompat {
             override fun onLocationChanged(location: Location) {
                 val prev = last
                 if (prev != null && location.elapsedRealtimeNanos < prev.elapsedRealtimeNanos) return
@@ -175,8 +181,6 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
             override fun onProviderDisabled(provider: String) {
                 trySend(current())
             }
-
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
@@ -189,13 +193,20 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
         }
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         try {
-            providers().forEach { manager.requestLocationUpdates(it, 1000L, 0f, listener, Looper.getMainLooper()) }
+            val req = LocationRequestCompat.Builder(1000L)
+                .setMinUpdateIntervalMillis(500L)
+                .setMinUpdateDistanceMeters(0f)
+                .setQuality(LocationRequestCompat.QUALITY_HIGH_ACCURACY)
+                .build()
+            providers().forEach { provider ->
+                LocationManagerCompat.requestLocationUpdates(manager, provider, req, listener, Looper.getMainLooper())
+            }
         } catch (e: SecurityException) {
             trySend(LocationState(null, LocationStatus.NO_PERMISSION))
         }
         trySend(current())
         awaitClose {
-            manager.removeUpdates(listener)
+            LocationManagerCompat.removeUpdates(manager, listener)
             context.unregisterReceiver(receiver)
         }
     }
