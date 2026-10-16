@@ -1,12 +1,14 @@
 package app.minemaps.map
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.util.Log
+import okhttp3.Request
 import app.minemaps.engine.data.MapTileProvider
 import app.minemaps.engine.geo.Mercator
 import app.minemaps.engine.geo.TileKey
@@ -51,7 +53,7 @@ class MapRenderer(
     initialPack: TexturePack = TexturePack.ORIGINAL,
     private val onInvalidate: () -> Unit,
 ) {
-    private data class TileId(val key: TileKey, val night: Boolean, val pack: TexturePack)
+    private data class TileKeyAndStyle(val key: TileKey, val night: Boolean, val pack: TexturePack)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val labelVersion = AtomicInteger()
@@ -140,7 +142,14 @@ class MapRenderer(
 
     private val maxCacheBytes = engine.memoryClassMb / 8L * 1024 * 1024
     private var cacheBytes = 0L
-    private val bitmaps = object : LinkedHashMap<TileId, Bitmap>(128, 0.75f, true) {}
+    private val bitmaps = object : LinkedHashMap<TileKeyAndStyle, Bitmap>(128, 0.75f, true) {}
+
+    private class TrafficTile(val bitmap: Bitmap?, val grid: ByteArray?, val fetchedAtMs: Long)
+    private val trafficCache = object : LinkedHashMap<TileKey, TrafficTile>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<TileKey, TrafficTile>?): Boolean = size > 64
+    }
+    private val trafficInFlight = HashSet<TileKey>()
+    private val trafficSemaphore = kotlinx.coroutines.sync.Semaphore(4)
 
     private val tilePaint = Paint().apply {
         isFilterBitmap = false
@@ -219,7 +228,7 @@ class MapRenderer(
             return
         }
         synchronized(bitmaps) {
-            bitmaps.put(TileId(key, night, activePack), bmp)?.let { cacheBytes -= it.byteCount }
+            bitmaps.put(TileKeyAndStyle(key, night, activePack), bmp)?.let { cacheBytes -= it.byteCount }
             cacheBytes += bmp.byteCount
             val it = bitmaps.entries.iterator()
             while (cacheBytes > maxCacheBytes && it.hasNext()) {
@@ -250,6 +259,9 @@ class MapRenderer(
             bitmaps.clear()
             cacheBytes = 0
         }
+        synchronized(trafficCache) {
+            trafficCache.clear()
+        }
         labelBitmaps.clear()
         labelCacheBytes = 0
         measureCache.clear()
@@ -259,7 +271,7 @@ class MapRenderer(
         onInvalidate()
     }
 
-    private fun cached(key: TileKey, night: Boolean): Bitmap? = synchronized(bitmaps) { bitmaps[TileId(key, night, activePack)] }
+    private fun cached(key: TileKey, night: Boolean): Bitmap? = synchronized(bitmaps) { bitmaps[TileKeyAndStyle(key, night, activePack)] }
 
     suspend fun inspect(wx: Double, wy: Double, zoom: Double): InspectResult? = provider.inspect(wx, wy, zoom, pixelRatio)
 
@@ -290,6 +302,9 @@ class MapRenderer(
             } else {
                 provider.request(s.key, night)
                 drawFallback(canvas, s.key, night)
+            }
+            if (overlays.showTraffic && z >= MIN_TRAFFIC_ZOOM) {
+                drawTrafficTile(canvas, s.key)
             }
         }
         canvas.restore()
@@ -649,9 +664,14 @@ class MapRenderer(
         routeFillPaint.color = 0xFF52A535.toInt()
         canvas.drawPath(routePath, routeFillPaint)
 
-        // Draw slow/jammed traffic segments on top when enabled (from Google Routes TRAFFIC_ON_POLYLINE).
+        // Draw slow/jammed traffic segments on top when enabled (from Google Routes TRAFFIC_ON_POLYLINE or sampled live traffic tiles).
         if (!showTraffic) return
-        for (iv in route.trafficIntervals) {
+        val intervals = if (route.trafficIntervals.isNotEmpty()) {
+            route.trafficIntervals
+        } else {
+            sampleRouteTrafficIntervals(pts, viewport.tileZoom().coerceIn(MIN_TRAFFIC_ZOOM, MAX_TRAFFIC_TILE_ZOOM))
+        }
+        for (iv in intervals) {
             if (iv.speed == TrafficSpeed.NORMAL) continue
             val sIdx = iv.startPointIndex.coerceIn(0, pts.lastIndex)
             val eIdx = iv.endPointIndex.coerceIn(0, pts.lastIndex)
@@ -666,6 +686,180 @@ class MapRenderer(
             routeFillPaint.color = if (iv.speed == TrafficSpeed.TRAFFIC_JAM) 0xFFE53935.toInt() else 0xFFFFB300.toInt()
             canvas.drawPath(routePath, routeFillPaint)
         }
+    }
+
+    private fun cachedTraffic(key: TileKey): TrafficTile? = synchronized(trafficCache) {
+        val t = trafficCache[key] ?: return null
+        if (System.currentTimeMillis() - t.fetchedAtMs > TRAFFIC_TTL_MS) {
+            requestTraffic(key)
+        }
+        t
+    }
+
+    private fun drawTrafficTile(canvas: Canvas, key: TileKey) {
+        if (key.z > MAX_TRAFFIC_TILE_ZOOM) {
+            val diff = key.z - MAX_TRAFFIC_TILE_ZOOM
+            val anc = key.ancestor(MAX_TRAFFIC_TILE_ZOOM)
+            val entry = cachedTraffic(anc)
+            if (entry == null) {
+                requestTraffic(anc)
+                drawTrafficFallback(canvas, anc, diff, key)
+                return
+            }
+            val bmp = entry.bitmap ?: return
+            val part = max(1, TILE shr diff)
+            val sx = (key.x - (anc.x shl diff)) * part
+            val sy = (key.y - (anc.y shl diff)) * part
+            src.set(sx, sy, (sx + part).coerceAtMost(TILE), (sy + part).coerceAtMost(TILE))
+            canvas.drawBitmap(bmp, src, dst, tilePaint)
+            return
+        }
+        val entry = cachedTraffic(key)
+        if (entry != null) {
+            entry.bitmap?.let { canvas.drawBitmap(it, null, dst, tilePaint) }
+        } else {
+            requestTraffic(key)
+            drawTrafficFallback(canvas, key, 0, key)
+        }
+    }
+
+    private fun drawTrafficFallback(canvas: Canvas, baseKey: TileKey, extraShift: Int, targetKey: TileKey) {
+        for (lvl in 1..3) {
+            val z = baseKey.z - lvl
+            if (z < MIN_TRAFFIC_ZOOM) return
+            val anc = targetKey.ancestor(z)
+            val bmp = cachedTraffic(anc)?.bitmap ?: continue
+            val totalShift = lvl + extraShift
+            val part = max(1, TILE shr totalShift)
+            val sx = (targetKey.x - (anc.x shl totalShift)) * part
+            val sy = (targetKey.y - (anc.y shl totalShift)) * part
+            src.set(sx, sy, (sx + part).coerceAtMost(TILE), (sy + part).coerceAtMost(TILE))
+            canvas.drawBitmap(bmp, src, dst, tilePaint)
+            return
+        }
+    }
+
+    private fun requestTraffic(key: TileKey) {
+        if (key.z !in MIN_TRAFFIC_ZOOM..MAX_TRAFFIC_TILE_ZOOM) return
+        synchronized(trafficCache) {
+            if (!trafficInFlight.add(key)) return
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                trafficSemaphore.acquire()
+                val url = "https://mt1.google.com/vt?lyrs=h,traffic&x=${key.x}&y=${key.y}&z=${key.z}&apistyle=s.e%3Aa%7Cp.v%3Aoff"
+                val req = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").build()
+                val bytes = engine.client.newCall(req).execute().use { r ->
+                    if (!r.isSuccessful) null else r.body.bytes()
+                }
+                if (bytes != null && bytes.isNotEmpty()) {
+                    val opts = BitmapFactory.Options().apply {
+                        inPremultiplied = false
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                    val raw = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                    if (raw != null) {
+                        if (raw.width == TILE && raw.height == TILE) {
+                            val px = IntArray(TILE * TILE)
+                            raw.getPixels(px, 0, TILE, 0, 0, TILE, TILE)
+                            raw.recycle()
+                            val grid = ByteArray(64 * 64)
+                            var hasAny = false
+                            for (i in px.indices) {
+                                val p = px[i]
+                                val a = p ushr 24
+                                if (a < 80) {
+                                    px[i] = 0
+                                    continue
+                                }
+                                val r = (p shr 16) and 0xFF
+                                val g = (p shr 8) and 0xFF
+                                val b = p and 0xFF
+                                val (quantized, spd) = when {
+                                    r < 55 && g < 65 && b < 65 -> 0xD2141517.toInt() to 0.toByte()
+                                    g > r + 25 -> 0xEB38C764.toInt() to 0.toByte()
+                                    r > 170 && g > 115 -> 0xF5FFB300.toInt() to 1.toByte()
+                                    r > 150 && g < 105 -> 0xF5E53935.toInt() to 2.toByte()
+                                    r > 75 && g < 55 -> 0xF59E1B18.toInt() to 2.toByte()
+                                    else -> 0 to 0.toByte()
+                                }
+                                px[i] = quantized
+                                if (quantized != 0) {
+                                    hasAny = true
+                                    if (spd > 0) {
+                                        val gx = (i % TILE) shr 2
+                                        val gy = (i / TILE) shr 2
+                                        val gi = gy * 64 + gx
+                                        if (spd > grid[gi]) grid[gi] = spd
+                                    }
+                                }
+                            }
+                            val outBmp = if (hasAny) Bitmap.createBitmap(px, TILE, TILE, Bitmap.Config.ARGB_8888) else null
+                            synchronized(trafficCache) {
+                                trafficCache[key] = TrafficTile(outBmp, if (hasAny) grid else null, System.currentTimeMillis())
+                            }
+                            if (hasAny) onInvalidate()
+                        } else {
+                            raw.recycle()
+                            synchronized(trafficCache) {
+                                trafficCache[key] = TrafficTile(null, null, System.currentTimeMillis())
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                runCatching { trafficSemaphore.release() }
+                synchronized(trafficCache) { trafficInFlight.remove(key) }
+            }
+        }
+    }
+
+    private fun sampleRouteTrafficIntervals(pts: List<app.minemaps.engine.geo.LatLng>, z: Int): List<app.minemaps.engine.routing.TrafficInterval> {
+        if (pts.size < 2) return emptyList()
+        val n = (1 shl z).toDouble()
+        val out = ArrayList<app.minemaps.engine.routing.TrafficInterval>()
+        var runStart = 0
+        var runSpeed = TrafficSpeed.NORMAL
+        for (i in pts.indices) {
+            val wx = Mercator.lonToX(pts[i].lng) * n
+            val wy = Mercator.latToY(pts[i].lat) * n
+            val tx = wx.toInt().coerceIn(0, (1 shl z) - 1)
+            val ty = wy.toInt().coerceIn(0, (1 shl z) - 1)
+            val grid = synchronized(trafficCache) { trafficCache[TileKey(z, tx, ty)]?.grid }
+            val spd = if (grid != null) {
+                val gx = ((wx - tx) * 64.0).toInt().coerceIn(0, 63)
+                val gy = ((wy - ty) * 64.0).toInt().coerceIn(0, 63)
+                var maxSpd: Byte = 0
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = (gx + dx).coerceIn(0, 63)
+                    val ny = (gy + dy).coerceIn(0, 63)
+                    val s = grid[ny * 64 + nx]
+                    if (s > maxSpd) maxSpd = s
+                }
+                when (maxSpd.toInt()) {
+                    2 -> TrafficSpeed.TRAFFIC_JAM
+                    1 -> TrafficSpeed.SLOW
+                    else -> TrafficSpeed.NORMAL
+                }
+            } else {
+                TrafficSpeed.NORMAL
+            }
+            if (i == 0) {
+                runSpeed = spd
+                runStart = 0
+            } else if (spd != runSpeed) {
+                if (runSpeed != TrafficSpeed.NORMAL) {
+                    out.add(app.minemaps.engine.routing.TrafficInterval(runStart, i, runSpeed))
+                }
+                runStart = i - 1
+                runSpeed = spd
+            }
+        }
+        if (runSpeed != TrafficSpeed.NORMAL && runStart < pts.lastIndex) {
+            out.add(app.minemaps.engine.routing.TrafficInterval(runStart, pts.lastIndex, runSpeed))
+        }
+        return out
     }
 
     private fun alertBitmap(kind: RoadAlertKind, flashOn: Boolean): Bitmap {
@@ -758,6 +952,9 @@ class MapRenderer(
         private const val TILE = 256
         private const val MAX_FALLBACK_LEVELS = 5
         private const val MAX_TILE_ZOOM = 20
+        private const val MIN_TRAFFIC_ZOOM = 11
+        private const val MAX_TRAFFIC_TILE_ZOOM = 16
+        private const val TRAFFIC_TTL_MS = 180_000L
         private const val LABEL_CACHE_BYTES = 4 * 1024 * 1024
         private const val LABEL_PAD = 4
         private const val LAYOUT_MARGIN_PX = 160
