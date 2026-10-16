@@ -192,23 +192,8 @@ class MapScreen(
             .build()
     }
 
-    private fun icon(res: Int): CarIcon =
-        CarIcon.Builder(IconCompat.createWithResource(carContext, res)).setTint(CarColor.DEFAULT).build()
-
-    private fun mapController(): MapController {
-        val strip = ActionStrip.Builder()
-            .addAction(Action.PAN)
-            .addAction(Action.Builder().setIcon(icon(R.drawable.ic_car_zoom_in)).setOnClickListener { actions.zoomIn() }.build())
-            .addAction(Action.Builder().setIcon(icon(R.drawable.ic_car_zoom_out)).setOnClickListener { actions.zoomOut() }.build())
-            .addAction(
-                Action.Builder()
-                    .setIcon(icon(if (following) R.drawable.ic_car_following else R.drawable.ic_car_not_following))
-                    .setOnClickListener { actions.recenter() }
-                    .build(),
-            )
-            .build()
-        return MapController.Builder().setMapActionStrip(strip).build()
-    }
+    private fun mapController(): MapController =
+        MapController.Builder().setMapActionStrip(CarStrips.mapActionStrip(carContext, actions, following)).build()
 
     private fun permissionTemplate(): Template =
         MessageTemplate.Builder("Location permission is needed to show your position")
@@ -254,7 +239,8 @@ class MapScreen(
         list.setNoItemsMessage("Save places on your phone to see them here")
         return ListTemplate.Builder()
             .setSingleList(list.build())
-            .setTitle(carContext.getString(R.string.app_name))
+            .setTitle("Places")
+            .setHeaderAction(Action.BACK)
             .build()
     }
 

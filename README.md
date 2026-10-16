@@ -2,7 +2,7 @@
 
 A real-world map drawn as a Minecraft-style block world, for the phone and for Android Auto.
 OpenStreetMap data (OpenMapTiles vector tiles) is rasterised by our own engine onto a global block grid and
-textured with original pixel art. There is no MapLibre and no routing: the Android Auto side uses the POI category.
+textured with original pixel art. There is no MapLibre and no routing: the Android Auto side is a map-only navigation-category app.
 
 Design decisions are in `docs/ADR-001-architecture.md`, the renderer rules in `docs/ENGINE-SPEC.md`,
 the art pipeline in `docs/ASSETS.md`, licences in `docs/THIRD_PARTY.md`, and what is verified in `docs/STATUS.md`.
@@ -26,9 +26,10 @@ Phone (`:app`)
 - Settings: theme (system/light/dark), item icons, label names (English/Latin or local language; transliteration needs Android 10+), tile cache size and clearing; licences screen.
 - Offline behaviour: cached tiles keep rendering, a banner shows when the network is down.
 
-Android Auto (POI category, `MapWithContentTemplate`, car API level 7)
-- Draws the same map on the car surface (software canvas), follow mode centred in the stable area, zoom in/out, recenter, PAN action.
-- Content pane: saved places sorted by distance (tap flies there), status rows (offline, location off, finding location),
+Android Auto (navigation category without routing, `NavigationTemplate`, car API level 7; sideload only)
+- Takes the host's map slot (full screen or the split dashboard) and draws the same map on the car surface (software canvas), follow mode centred in the stable area, zoom in/out, recenter, PAN action, street-names toggle. It never starts guidance, so other navigation apps are unaffected.
+- Handles `geo:` navigation intents (shows the place, or lists search results); no directions.
+- Places screen (action strip pin): saved places sorted by distance (tap flies there), status rows (offline, location off, finding location),
   permission message with a "Grant on phone" action.
 
 ## Prerequisites

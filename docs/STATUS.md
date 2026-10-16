@@ -7,7 +7,7 @@
 | 1 | Architecture decision, engine spec, art generator | done |
 | 2 | Gradle project, `:mapengine`, desktop render tool, minimal app | done |
 | 3 | Phone app (map view, location, search, saved places, settings, inspect) | done |
-| 4 | Android Auto (POI category, `MapWithContentTemplate`), tested on the DHU | done (DHU only) |
+| 4 | Android Auto (NAVIGATION category without routing, `NavigationTemplate` root + `MapWithContentTemplate` places list), tested on the DHU | done (DHU only) |
 | 5 | Polish: launcher icon, refresh coalescing, R8 release build, perf re-measure, docs | done |
 | 6 | Look v2: tinted textures, decorative trees, water depth, tintable arrow, bookmark icons | done |
 | 8 | Name resolution (English/Latin labels), street-name toggle, credit fade + (i), vanilla arrow centring | done (batch 1 of the feature round) |
@@ -89,7 +89,7 @@ Look v2 (verified with renders under `/tmp/mm/v2/render/` and screenshots): deco
 
 | criterion | state | evidence |
 |---|---|---|
-| POI category, `MapWithContentTemplate`, no navigation category | Verified | merged manifest, `pm query-services`, host accepted templates |
+| NAVIGATION category (no routing), `NavigationTemplate` root, `MapWithContentTemplate` places | Verified on the DHU | merged manifest, host accepted templates, MineMaps takes the map slot (`~/mm-qa/u3/`) |
 | Appears in DHU launcher and launches with map + list | Verified | `/tmp/mm/car/12_dhu_launcher.png`, `16_relaunch.png`, release build `/tmp/mm/release_car_map.png` |
 | Following keeps target at stable-area centre across sizes | Verified | logs + shots for default, 720p, wide, 6in (`/tmp/mm/car/25_*`, `26_*`, `27_*`) |
 | Zoom in/out, recenter, flyTo | Verified | `/tmp/mm/car/18_*`, `23_*`, `24_*` |
@@ -160,7 +160,8 @@ Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 - English label mode transliterates names that have no Latin-script tag with ICU, which needs Android 10+ (API 29); on Android 8-9 such names stay in their local script. ICU output is phonetic (e.g. Arabic without vowels), not an official romanisation.
 - The car screen shows no OpenStreetMap/OpenMapTiles attribution; the phone shows it at start, behind an (i) button, in Settings and on the Licences screen.
 
-- No routing or turn-by-turn, by design: the car app uses the POI category.
+- No routing or turn-by-turn, by design: the car app declares the NAVIGATION category only to get the map slot and layouts, never starts guidance, and is therefore sideload-only (not Play-compliant).
+- The `androidx.car.app.action.NAVIGATE` handling is covered by JVM tests; the host-to-service delivery was not reproduced on the DHU (no adb entry point; voice assistant not available on the emulator).
 - Vector data is z14 and is overzoomed to the block grid, so building footprints are simplified; tunnels and trams are hidden.
 - The public OpenFreeMap and Photon instances have no SLA; Photon latency of about 14 s was observed.
 - Android Auto was verified only on the DHU with an emulator and a sideloaded Android Auto 17.6, not on a real vehicle or head unit, and not with a physical phone.

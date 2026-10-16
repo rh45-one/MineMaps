@@ -51,12 +51,20 @@ not a smooth vector map with a pixel filter.
   bias results to the camera position, and send a User-Agent. Nominatim was rejected because its policy
   forbids autocomplete. The base URL is configurable for self-hosting.
 
-### 5. Android Auto: POI category + `MapWithContentTemplate` + `ACCESS_SURFACE`
-- The `NAVIGATION` category is meant for turn-by-turn apps (it must handle navigation intents, quality
-  rule NF-6). We have no routing in v1, so declaring it would be inaccurate.
-- `androidx.car.app.category.POI` with `androidx.car.app.MAP_TEMPLATES` + `androidx.car.app.ACCESS_SURFACE`
-  lets an app **draw its own map** with `MapWithContentTemplate` (Car API level 7, so `minCarApiLevel=7`).
-  The content pane is a list of saved/nearby places, which suits the POI category.
+### 5. Android Auto: NAVIGATION category (no routing) + `NavigationTemplate` + `ACCESS_SURFACE`
+- Android Auto gives the host's **map slot** (full screen, or the map pane of the split dashboard next to media apps)
+  only to apps in `androidx.car.app.category.NAVIGATION`. A POI-category app is always second to Google Maps and can't take
+  that slot, so MineMaps declares `NAVIGATION` with `androidx.car.app.NAVIGATION_TEMPLATES` (plus `MAP_TEMPLATES`, kept for
+  the `MapWithContentTemplate` places list) and `ACCESS_SURFACE`, `minCarApiLevel=7`.
+- There is still **no routing or turn-by-turn**: the app never calls `NavigationManager.navigationStarted`, so other apps'
+  guidance is never suppressed. This is deliberate and means the app does not meet the Play quality rules for navigation
+  apps (e.g. NF-1/4/7); it is sideload-only ("Unknown sources" in Android Auto developer settings), not Play-compliant.
+- Root screen: a map-first `NavigationTemplate` (no navigation info or travel estimate; `MessageInfo` only for status such
+  as missing permission, offline, location off). Action strip: Places (pushes a `MapWithContentTemplate` list of saved
+  places), street-names toggle. Map action strip: PAN, zoom in/out, recenter.
+- The `androidx.car.app.action.NAVIGATE` intent (`geo:` scheme) is handled in `Session.onCreateScreen/onNewIntent`:
+  `geo:lat,lon` and `geo:0,0?q=lat,lon(label)` show the place with the search pin and a "doesn't give directions" toast;
+  `geo:0,0?q=text` runs a Photon search and lists the results.
 - Map action strip: PAN, zoom in, zoom out, recenter. `SurfaceCallback` handles
   `onSurfaceAvailable/Destroyed`, `onVisibleAreaChanged/onStableAreaChanged`, `onScroll/onScale/onFling/onClick`.
 - Dark mode comes from `CarContext.isDarkMode()` and `Session.onCarConfigurationChanged`. The night palette is applied

@@ -39,6 +39,7 @@ import kotlin.math.pow
 interface CarMapActions {
     val following: StateFlow<Boolean>
     val networkState: StateFlow<NetState>
+    val streetNames: StateFlow<Boolean>
 
     fun zoomIn()
 
@@ -47,6 +48,11 @@ interface CarMapActions {
     fun recenter()
 
     fun flyTo(lat: Double, lon: Double)
+
+    fun toggleStreetNames()
+
+    /** Centres the map on a place and marks it with the search pin. */
+    fun showPlace(lat: Double, lon: Double)
 }
 
 class CarMapController(
@@ -67,6 +73,8 @@ class CarMapController(
 
     override val following = MutableStateFlow(false)
     override val networkState = MutableStateFlow(NetState.OK)
+    override val streetNames = MutableStateFlow(true)
+    private var searchPin: LatLng? = null
 
     private val main = Handler(Looper.getMainLooper())
     private var renderer: MapRenderer? = null
@@ -106,6 +114,11 @@ class CarMapController(
     private var arrowColor: Int = app.minemaps.data.ArrowColors.DEFAULT
     private var gotFix = false
     private var cameraLoaded = false
+
+    private val frameCallback = Choreographer.FrameCallback { frameNs ->
+        frameQueued = false
+        if (!released) renderFrame(frameNs)
+    }
 
     init {
         following.value = container.location.hasPermission()
@@ -157,10 +170,9 @@ class CarMapController(
                     renderer?.pack = it.texturePack
                     nameMode = names(it)
                     showStreetNames = it.showStreetNames
-                    renderer?.apply {
-                        this.nameMode = nameMode
-                        this.showStreetNames = showStreetNames
-                    }
+                    streetNames.value = it.showStreetNames
+                    renderer?.nameMode = names(it)
+                    renderer?.showStreetNames = it.showStreetNames
                     renderer?.arrowColor = it.arrowColor
                     requestRender()
                 }
@@ -237,6 +249,16 @@ class CarMapController(
             animateTo(Mercator.lonToX(l.longitude), Mercator.latToY(l.latitude), if (zoom < 14.0) FOLLOW_ZOOM else zoom)
         }
         requestRender()
+    }
+
+    override fun toggleStreetNames() {
+        scope.launch { container.settings.setShowStreetNames(!showStreetNames) }
+    }
+
+    override fun showPlace(lat: Double, lon: Double) {
+        if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) return
+        searchPin = LatLng(lat, lon)
+        flyTo(lat, lon)
     }
 
     override fun flyTo(lat: Double, lon: Double) {
@@ -334,11 +356,6 @@ class CarMapController(
         return Viewport(cx + off[0], (cy + off[1]), zoom, w, h, pr)
     }
 
-    private val frameCallback = Choreographer.FrameCallback { frameNs ->
-        frameQueued = false
-        if (!released) renderFrame(frameNs)
-    }
-
     fun requestRender() {
         if (released) return
         if (Looper.myLooper() == Looper.getMainLooper()) postFrame() else main.post { postFrame() }
@@ -389,7 +406,7 @@ class CarMapController(
         val player = l?.let {
             PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, it.bearing, if (it.hasSpeed()) it.speed else 0f)
         }
-        return MapOverlays(player = player, bookmarks = savedPlaces.map { Bookmark(it.lat, it.lon, it.icon, it.name) }, searchPin = null)
+        return MapOverlays(player = player, bookmarks = savedPlaces.map { Bookmark(it.lat, it.lon, it.icon, it.name) }, searchPin = searchPin)
     }
 
     private fun draw() {

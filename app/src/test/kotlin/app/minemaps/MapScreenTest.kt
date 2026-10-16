@@ -32,6 +32,9 @@ class MapScreenTest {
     private class FakeActions : CarMapActions {
         override val following = MutableStateFlow(true)
         override val networkState = MutableStateFlow(NetState.OK)
+        override val streetNames = MutableStateFlow(true)
+        var toggled = 0
+        var shown: Pair<Double, Double>? = null
         var recentered = 0
         var flewTo: Pair<Double, Double>? = null
 
@@ -45,6 +48,15 @@ class MapScreenTest {
 
         override fun flyTo(lat: Double, lon: Double) {
             flewTo = lat to lon
+        }
+
+        override fun toggleStreetNames() {
+            toggled++
+            streetNames.value = !streetNames.value
+        }
+
+        override fun showPlace(lat: Double, lon: Double) {
+            shown = lat to lon
         }
     }
 
@@ -148,5 +160,45 @@ class MapScreenTest {
         pending.toList().also { pending.clear() }.forEach { it() }
         for (i in 11..20) f.places.value = (1..i).map { place(it) }
         assertTrue(scheduled - afterStart <= 2)
+    }
+
+    @Test
+    fun rootScreenIsANavigationTemplateWithoutRouteInformation() {
+        val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        val actions = FakeActions()
+        var places = 0
+        val screen = app.minemaps.car.NavScreen(ctx, actions, MutableStateFlow(LocationState(fix(), LocationStatus.OK)), { true }, {}, { places++ }, InvalidateScheduler { _, _ -> })
+        ScreenController(screen).moveToState(Lifecycle.State.STARTED)
+        val t = screen.onGetTemplate()
+        assertIs<androidx.car.app.navigation.model.NavigationTemplate>(t)
+        assertEquals(null, t.navigationInfo)
+        assertEquals(null, t.destinationTravelEstimate)
+        val map = t.mapActionStrip!!.actions
+        assertEquals(4, map.size)
+        assertTrue(map.contains(Action.PAN))
+        val strip = t.actionStrip!!.actions
+        assertEquals(2, strip.size)
+        strip[0].onClickDelegate!!.sendClick(object : androidx.car.app.OnDoneCallback {
+            override fun onSuccess(response: androidx.car.app.serialization.Bundleable?) {}
+
+            override fun onFailure(response: androidx.car.app.serialization.Bundleable) {}
+        })
+        strip[1].onClickDelegate!!.sendClick(object : androidx.car.app.OnDoneCallback {
+            override fun onSuccess(response: androidx.car.app.serialization.Bundleable?) {}
+
+            override fun onFailure(response: androidx.car.app.serialization.Bundleable) {}
+        })
+        assertEquals(1, places)
+        assertEquals(1, actions.toggled)
+    }
+
+    @Test
+    fun rootScreenWithoutPermissionOffersGrantAndShowsAMessage() {
+        val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        val screen = app.minemaps.car.NavScreen(ctx, FakeActions(), MutableStateFlow(LocationState(null, LocationStatus.SEARCHING)), { false }, {}, {}, InvalidateScheduler { _, _ -> })
+        ScreenController(screen).moveToState(Lifecycle.State.STARTED)
+        val t = screen.onGetTemplate() as androidx.car.app.navigation.model.NavigationTemplate
+        assertEquals("Grant on phone", t.actionStrip!!.actions[1].title.toString())
+        assertIs<androidx.car.app.navigation.model.MessageInfo>(t.navigationInfo)
     }
 }
