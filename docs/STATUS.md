@@ -29,7 +29,7 @@
 ## Test counts (last run)
 
 - `:mapengine:test`: 120 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory; name resolution with real tiles; viewport rotation; place index incl. a 50k-entry query benchmark; label obstacles; pure-JVM `MinecraftImporter` golden test against `client-26.3.jar` + synthetic pack/PNG tests).
-- `:app:testDebugUnitTest`: 73 tests, 0 failures (Photon parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec and backup import/export, update semver/JSON/policy/checksum parsing, `geo:` navigation intent parsing and handler, stable-area math, car `NavScreen`/`MapScreen` with Robolectric, car host allowlist).
+- `:app:testDebugUnitTest`: 74 tests, 0 failures (Photon parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec and backup import/export, update semver/JSON/policy/checksum parsing, `geo:` navigation intent parsing and handler, stable-area math, car `NavScreen`/`MapScreen` with Robolectric, car host allowlist).
 - `:app:lintRelease`: 0 errors, 17 warnings, none in the Security category.
 
 ## Stability campaign (emulator + DHU)
@@ -116,7 +116,7 @@ Look v2 (verified with renders under `/tmp/mm/v2/render/` and screenshots): deco
 
 | criterion | state | evidence |
 |---|---|---|
-| Pure-JVM engine with unit tests; Android modules build | Verified | 120 + 73 tests, `assembleDebug`, `assembleRelease` |
+| Pure-JVM engine with unit tests; Android modules build | Verified | 120 + 74 tests, `assembleDebug`, `assembleRelease` |
 | Release build with R8 runs | Verified | release APK ~1.9 MB; phone map, search and car map smoke-tested (`/tmp/mm/release_*.png`) |
 | No crashes/ANRs in the test sessions | Verified for the final builds | logcat scans; earlier hardware-canvas crashes were fixed by the software canvas |
 | Network etiquette (User-Agent, <= 4 concurrent, caching, negative-cache of failing tiles) | Verified | `ProviderFailureTest`, `OpenMapTilesSource` |

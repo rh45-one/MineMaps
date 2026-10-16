@@ -54,7 +54,7 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     private var scaling = false
     private var lastFocusX = 0f
     private var lastFocusY = 0f
-    private val rotation = RotationGesture()
+    private val rotation = RotationGesture(minSpanPx = RotationGesture.MIN_SPAN_DP * resources.displayMetrics.density)
     private var pendingRotation = 0.0
 
     private val gestures = GestureDetector(
@@ -287,14 +287,20 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
     }
 
     private fun trackRotation(event: MotionEvent) {
-        if (event.pointerCount != 2) {
-            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL || event.pointerCount < 2) rotation.end()
+        if (event.pointerCount < 2 || event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            rotation.end()
+            pendingRotation = 0.0
             return
         }
-        val angle = Math.toDegrees(kotlin.math.atan2((event.getY(1) - event.getY(0)).toDouble(), (event.getX(1) - event.getX(0)).toDouble()))
+        if (event.pointerCount > 2) return
+        val dx = (event.getX(1) - event.getX(0)).toDouble()
+        val dy = (event.getY(1) - event.getY(0)).toDouble()
+        val angle = Math.toDegrees(kotlin.math.atan2(dy, dx))
+        val span = RotationGesture.span(event.getX(0), event.getY(0), event.getX(1), event.getY(1))
         when (event.actionMasked) {
-            MotionEvent.ACTION_POINTER_DOWN -> rotation.start(angle)
-            MotionEvent.ACTION_MOVE -> pendingRotation += rotation.update(angle)
+            MotionEvent.ACTION_POINTER_DOWN -> rotation.start(angle, span)
+            MotionEvent.ACTION_POINTER_UP -> rotation.reanchor(angle, span)
+            MotionEvent.ACTION_MOVE -> pendingRotation += rotation.update(angle, span)
         }
     }
 

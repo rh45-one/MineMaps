@@ -29,14 +29,14 @@ class RotationTest {
         val g = RotationGesture()
         g.start(0.0)
         var total = 0.0
-        for (a in listOf(3.0, 6.0, 9.0, 11.0, 5.0, -8.0, 11.5)) total += g.update(a)
+        for (a in listOf(4.0, 9.0, 14.0, 19.0, 21.5, 10.0, -12.0, 18.0)) total += g.update(a)
         assertEquals(0.0, total, 1e-9)
         assertEquals(false, g.engaged)
     }
 
     @Test
     fun afterThresholdFollowsFingersOneToOne() {
-        val g = RotationGesture()
+        val g = RotationGesture(thresholdDeg = 12.0)
         g.start(0.0)
         assertEquals(0.0, g.update(6.0), 1e-9)
         assertEquals(4.0, g.update(16.0), 1e-9)
@@ -46,14 +46,39 @@ class RotationTest {
         g.end()
         g.start(100.0)
         assertEquals(0.0, g.update(105.0), 1e-9)
-        val n = RotationGesture()
+        val n = RotationGesture(thresholdDeg = 12.0)
         n.start(0.0)
         assertEquals(-3.0, n.update(-15.0), 1e-9)
-        val w = RotationGesture()
+        val w = RotationGesture(thresholdDeg = 12.0)
         w.start(175.0)
         assertEquals(0.0, w.update(-177.0), 1e-9)
         assertEquals(false, w.engaged)
         assertEquals(5.0, w.update(-168.0), 1e-9)
+    }
+
+    @Test
+    fun pinchDominatedAndCloseFingerMovementsResistRotation() {
+        // Radial pinch movement (span growing fast while angle drifts slightly) must not engage rotation.
+        val pinch = RotationGesture(thresholdDeg = 22.0, minSpanPx = 150.0)
+        pinch.start(0.0, spanPx = 200.0)
+        for (i in 1..15) {
+            // 2 deg drift per step, but 35 px radial zoom per step (radial >> tangential arc ~7 px)
+            assertEquals(0.0, pinch.update(i * 2.0, spanPx = 200.0 + i * 35.0), 1e-9)
+        }
+        assertEquals(false, pinch.engaged)
+
+        // Fingers closer than minSpanPx must not rotate even if the angle swings wildly.
+        val close = RotationGesture(thresholdDeg = 22.0, minSpanPx = 150.0)
+        close.start(0.0, spanPx = 90.0)
+        assertEquals(0.0, close.update(15.0, spanPx = 90.0), 1e-9)
+        assertEquals(0.0, close.update(35.0, spanPx = 90.0), 1e-9)
+        assertEquals(false, close.engaged)
+
+        // Update without prior start() initializes cleanly without jumping from 0.0.
+        val unstarted = RotationGesture(thresholdDeg = 22.0)
+        assertEquals(0.0, unstarted.update(135.0, spanPx = 300.0), 1e-9)
+        assertEquals(0.0, unstarted.update(145.0, spanPx = 300.0), 1e-9)
+        assertEquals(false, unstarted.engaged)
     }
 
     @Test
