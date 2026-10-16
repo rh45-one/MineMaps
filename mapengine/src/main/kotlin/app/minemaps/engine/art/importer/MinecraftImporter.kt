@@ -73,7 +73,7 @@ object MinecraftImporter {
     const val PINNED_VERSION = "26.3"
     const val PINNED_SHA1 = "e877b6a07acd633fb3bb475002175cec036e7b87"
     const val PINNED_SIZE = 41_483_720L
-    const val IMPORTER_VERSION = 1
+    const val IMPORTER_VERSION = 2
     const val PINNED_URL = "https://piston-data.mojang.com/v1/objects/$PINNED_SHA1/client.jar"
 
     private const val T = 16
@@ -148,11 +148,24 @@ object MinecraftImporter {
         return im.resizeBox(T, T)
     }
 
-    private fun centerX(im: Rgba): Rgba {
+    private fun centerXY(im: Rgba): Rgba {
         val box = im.alphaBBox() ?: return im
-        val shift = Math.rint(T / 2.0 - (box[0] + box[2]) / 2.0).toInt()
+        val dx = Math.rint(T / 2.0 - (box[0] + box[2]) / 2.0).toInt()
+        val dy = Math.rint(T / 2.0 - (box[1] + box[3]) / 2.0).toInt()
+        if (dx == 0 && dy == 0) return im
         val out = Rgba(im.w, im.h)
-        out.paste(im, shift, 0)
+        out.paste(im, dx, dy)
+        return out
+    }
+
+    private fun chestFromEntity(im: Rgba): Rgba {
+        val lid = im.crop(42, 14, 56, 19).transposed(Rgba.Rotation.FLIP_Y)
+        val base = im.crop(42, 33, 56, 43).transposed(Rgba.Rotation.FLIP_Y)
+        val lock = im.crop(1, 1, 3, 5).transposed(Rgba.Rotation.FLIP_Y)
+        val out = Rgba(T, T)
+        out.paste(lid, 1, 1)
+        out.paste(base, 1, 5)
+        out.paste(lock, 7, 4)
         return out
     }
 
@@ -206,7 +219,7 @@ object MinecraftImporter {
             "minecart" to { item("minecart") }, "mug" to { item("honey_bottle") },
             "pickaxe" to { item("iron_pickaxe") }, "compass" to { item("compass_00") }, "bell" to { item("bell") },
             "fish" to { item("cod") }, "pin" to { tx.img("map/decorations/red_banner") },
-            "player" to { centerX(scaleIcon(tx.img("map/decorations/player"))) }, "diamond" to { item("diamond") },
+            "player" to { centerXY(scaleIcon(tx.img("map/decorations/player"))) }, "diamond" to { item("diamond") },
             "iron_ingot" to { item("iron_ingot") }, "redstone" to { item("redstone") },
             "golden_apple" to { item("golden_apple") }, "cake" to { item("cake") }, "cookie" to { item("cookie") },
             "map" to { if (tx.has("item/filled_map")) item("filled_map") else item("map") },
@@ -214,6 +227,7 @@ object MinecraftImporter {
             "shovel" to { item("iron_shovel") }, "bow" to { item("bow") }, "torch" to { tx.img("block/torch") },
             "lantern" to { item("lantern") }, "poppy" to { tx.img("block/poppy") }, "boat" to { item("oak_boat") },
             "bucket" to { item("bucket") }, "star" to { item("nether_star") },
+            "chest" to { chestFromEntity(tx.img("entity/chest/normal")) },
         )
 
         val orig = Json.parseToJsonElement(original.json).jsonObject
@@ -263,6 +277,8 @@ object MinecraftImporter {
                     add(JsonPrimitive(8))
                     add(JsonPrimitive(16))
                 }
+            } else {
+                im = centerXY(im)
             }
             outIcons[name] = add(im)
             onProgress(++step * 100 / total)

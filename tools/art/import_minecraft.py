@@ -162,13 +162,28 @@ def scale_icon(im):
     return im.resize((T, T), Image.BOX)
 
 
-def center_x(im):
+def center_xy(im):
     box = im.getchannel('A').getbbox()
     if not box:
         return im
-    shift = round(T / 2 - (box[0] + box[2]) / 2)
+    dx = round(T / 2 - (box[0] + box[2]) / 2)
+    dy = round(T / 2 - (box[1] + box[3]) / 2)
+    if dx == 0 and dy == 0:
+        return im
     out = Image.new('RGBA', im.size)
-    out.paste(im, (shift, 0))
+    out.paste(im, (dx, dy))
+    return out
+
+
+def chest_from_entity(im):
+    """Composes the front face of Minecraft's 64x64 entity/chest/normal.png (lid + base + lock) into a centered 16x16 icon."""
+    lid = im.crop((42, 14, 56, 19)).transpose(Image.FLIP_TOP_BOTTOM)
+    base = im.crop((42, 33, 56, 43)).transpose(Image.FLIP_TOP_BOTTOM)
+    lock = im.crop((1, 1, 3, 5)).transpose(Image.FLIP_TOP_BOTTOM)
+    out = Image.new('RGBA', (T, T))
+    out.paste(lid, (1, 1))
+    out.paste(base, (1, 5))
+    out.paste(lock, (7, 4))
     return out
 
 
@@ -223,7 +238,7 @@ def recipes(tx):
         'minecart': lambda: item('minecart'), 'mug': lambda: item('honey_bottle'),
         'pickaxe': lambda: item('iron_pickaxe'), 'compass': lambda: item('compass_00'), 'bell': lambda: item('bell'),
         'fish': lambda: item('cod'), 'pin': lambda: tx.img('map/decorations/red_banner'),
-        'player': lambda: center_x(scale_icon(tx.img('map/decorations/player'))), 'diamond': lambda: item('diamond'),
+        'player': lambda: center_xy(scale_icon(tx.img('map/decorations/player'))), 'diamond': lambda: item('diamond'),
         'iron_ingot': lambda: item('iron_ingot'), 'redstone': lambda: item('redstone'),
         'golden_apple': lambda: item('golden_apple'), 'cake': lambda: item('cake'), 'cookie': lambda: item('cookie'),
         'map': lambda: item('filled_map') if tx.has('item/filled_map') else item('map'),
@@ -231,7 +246,8 @@ def recipes(tx):
         'shovel': lambda: item('iron_shovel'), 'bow': lambda: item('bow'), 'torch': lambda: tx.img('block/torch'),
         'lantern': lambda: item('lantern'), 'poppy': lambda: tx.img('block/poppy'), 'boat': lambda: item('oak_boat'),
         'bucket': lambda: item('bucket'), 'star': lambda: item('nether_star'),
-        # 'bed' and 'chest' have no 2D item texture in the game (3D models), so they keep the MineMaps drawing.
+        'chest': lambda: chest_from_entity(tx.img('entity/chest/normal')),
+        # 'bed' has no 2D item texture in the game (3D model), so it keeps the MineMaps drawing.
     }
     return textures, icons
 
@@ -287,6 +303,8 @@ def main():
                 kept.append(f'{name} (no 2D texture in the game)')
         elif name == 'pin':
             meta['anchors']['pin'] = [8, 16]  # banner: bottom of the pole
+        else:
+            im = center_xy(im)
         meta['icons'][name] = add(im)
 
     atlas = Image.new('RGBA', (COLS * T, ((len(cells) + COLS - 1) // COLS) * T))

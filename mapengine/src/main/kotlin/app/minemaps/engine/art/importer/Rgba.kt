@@ -71,6 +71,7 @@ class Rgba(val w: Int, val h: Int, val px: IntArray = IntArray(w * h)) {
         Rotation.CCW90 -> Rgba(h, w).also { o -> for (y in 0 until o.h) for (x in 0 until o.w) o[x, y] = this[w - 1 - y, x] }
         Rotation.R180 -> Rgba(w, h).also { o -> for (y in 0 until h) for (x in 0 until w) o[x, y] = this[w - 1 - x, h - 1 - y] }
         Rotation.CW90 -> Rgba(h, w).also { o -> for (y in 0 until o.h) for (x in 0 until o.w) o[x, y] = this[y, h - 1 - x] }
+        Rotation.FLIP_Y -> Rgba(w, h).also { o -> for (y in 0 until h) for (x in 0 until w) o[x, y] = this[x, h - 1 - y] }
     }
 
     /** Pillow `paste` without a mask: copies pixels (including alpha), clipped to this image. */
@@ -118,7 +119,7 @@ class Rgba(val w: Int, val h: Int, val px: IntArray = IntArray(w * h)) {
         return if (x1 < 0) null else intArrayOf(x0, y0, x1 + 1, y1 + 1)
     }
 
-    enum class Rotation { CCW90, R180, CW90 }
+    enum class Rotation { CCW90, R180, CW90, FLIP_Y }
 
     private companion object {
         const val PRECISION = 7

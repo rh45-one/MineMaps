@@ -578,22 +578,22 @@ ICONS = {
         "......kkkkk.....",
         "................",
         "................"]),
-    'book': ({'k': K, 'b': '#7a3b1e', 'B': '#5a2a14', 'p': '#f2ead8', 'g': '#e3b341'}, [
-        "................",
+    'book': ({'k': K, 's': '#5c3112', 'b': '#9e5a28', 'l': '#c2763b', 'p': '#f5ecd7', 'P': '#d6c8ad', 'y': '#ffd83d', 'r': '#e53935'}, [
         "................",
         "...kkkkkkkkkk...",
-        "...kbbbbbbbbBk..",
-        "...kbgggggbbBk..",
-        "...kbbbbbbbbBk..",
-        "...kbbgggbbbBk..",
-        "...kbbbbbbbbBk..",
-        "...kbbbbbbbbBk..",
-        "...kbbbbbbbbBk..",
-        "...kbbbbbbbbBk..",
-        "...kBBBBBBBBBk..",
-        "...kppppppppppk.",
-        "....kkkkkkkkkk..",
-        "................",
+        "...ksllllllbk...",
+        "...ksbbbbbbbk...",
+        "...ksbyyyyybk...",
+        "...ksbyrrrybk...",
+        "...ksbyyyyybk...",
+        "...ksbbbbbbbk...",
+        "...ksbbbbbbbk...",
+        "...ksbbbbbbbk...",
+        "...ksbbbbbbbk...",
+        "...kkkkkkkkkk...",
+        "...kpppppppPk...",
+        "...kPPPPPPPPk...",
+        "...kkkkkkkkkk...",
         "................"]),
     'sapling': ({'k': '#14300c', 'g': '#4caf50', 'G': '#2e7d32', 'l': '#9ae66e', 't': '#6d4c2f'}, [
         "................",
@@ -680,22 +680,22 @@ ICONS = {
         "......kSSk......",
         ".......kk.......",
         "................"]),
-    'compass': ({'k': K, 'c': '#9aa0a8', 'C': '#666c74', 'f': '#efe8d6', 'r': '#e53935', 'b': '#3a3a3a'}, [
+    'compass': ({'k': '#141517', 'c': '#b8c0c8', 'C': '#6e7680', 'f': '#f5efe2', 'r': '#e53935', 'b': '#2b3138', 'Y': '#ffd83d'}, [
         "................",
         ".....kkkkkk.....",
-        "....kccccccK....".replace('K', 'k'),
-        "...kcffffffck...",
-        "..kcfffrffffCk..",
-        "..kcffrrffffCk..",
-        "..kcfffrbfffCk..",
-        "..kcffffbbffCk..",
-        "..kcffffbfffCk..",
-        "..kcffffffffCk..",
-        "...kCffffffCk...",
-        "....kCCCCCCk....",
+        "...kkcccccckk...",
+        "..kccffrrffCCk..",
+        ".kcfffrrrrfffCk.",
+        ".kcffrrrrrrffCk.",
+        ".kcffffrrffffCk.",
+        ".kcffffYYffffCk.",
+        ".kcffffYYffffCk.",
+        ".kcffffbbffffCk.",
+        ".kcffbbbbbbffCk.",
+        ".kcfffbbbbfffCk.",
+        "..kCCffbbffCCk..",
+        "...kkCCCCCCkk...",
         ".....kkkkkk.....",
-        "................",
-        "................",
         "................"]),
     'bell': ({'k': '#4a3500', 'g': '#f2c230', 'G': '#c99212', 'l': '#fff1a0', 'w': '#6d4c2f'}, [
         "................",
@@ -904,21 +904,21 @@ ICONS.update({
         "...kkGGGGGGkk...",
         ".....kkkkkk.....",
         "................"]),
-    'chest': ({'k': '#2e1d0c', 'w': '#a8702e', 'W': '#7a4f1e', 's': '#d8d8d8', 'S': '#3a3a3a'}, [
+    'chest': ({'k': '#141517', 'l': '#d6994a', 'w': '#a8702e', 'W': '#7a4f1e', 'y': '#ffd83d', 'Y': '#c99212'}, [
         "................",
         "................",
         ".kkkkkkkkkkkkkk.",
+        ".kllllllllllllk.",
+        ".klwwwwwwwwwwlk.",
+        ".kwwwwwwwwwwwwk.",
+        ".kkkkkkyykkkkkk.",
+        ".kwwwwwyywwwwwk.",
+        ".kwwwwwYYwwwwwk.",
+        ".kwWWWWkkWWWWwk.",
         ".kwwwwwwwwwwwwk.",
         ".kwWWWWWWWWWWwk.",
-        ".kwwwwwwwwwwwwk.",
-        ".kkkkkkssskkkkk.",
-        ".kwwwwwsSswwwwk.",
-        ".kwwwwwwwwwwwwk.",
-        ".kwWWWWWWWWWWwk.",
-        ".kwwwwwwwwwwwwk.",
         ".kWWWWWWWWWWWWk.",
         ".kkkkkkkkkkkkkk.",
-        "................",
         "................",
         "................"]),
     'sword': ({'k': '#1f262b', 'w': '#eef6f8', 'l': '#b8c8d0', 'D': '#6f8590', 'g': '#4a3520', 'b': '#7a5230'}, [
@@ -1100,6 +1100,19 @@ BOOKMARK_ICONS = ['pin', 'bed', 'chest', 'diamond', 'emerald', 'gold_ingot', 'ir
                   'minecart', 'boat', 'bucket', 'star']
 
 
+def center_icon(im):
+    box = im.getchannel('A').getbbox()
+    if not box:
+        return im
+    dx = round(T / 2 - (box[0] + box[2]) / 2)
+    dy = round(T / 2 - (box[1] + box[3]) / 2)
+    if dx == 0 and dy == 0:
+        return im
+    out = new()
+    out.paste(im, (dx, dy))
+    return out
+
+
 def draw_icon(pal, rows, name):
     assert len(rows) == T, f"{name}: {len(rows)} rows"
     img = new(); px = img.load()
@@ -1108,7 +1121,7 @@ def draw_icon(pal, rows, name):
         for x, ch in enumerate(row):
             if ch != '.':
                 px[x, y] = hexc(pal[ch])
-    return img
+    return img if name == 'pin' else center_icon(img)
 
 
 APP_ICON = ({'g': '#69a83f', 'G': '#4b822b', 'l': '#82c052', 'w': '#3567d8', 'W': '#5b8ff0', 's': '#8a8a8a',
