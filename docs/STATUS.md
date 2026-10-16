@@ -12,9 +12,10 @@
 | 6 | Look v2: tinted textures, decorative trees, water depth, tintable arrow, bookmark icons | done |
 | 8 | Name resolution (English/Latin labels), street-name toggle, credit fade + (i), vanilla arrow centring | done (batch 1 of the feature round) |
 | 9 | Map rotation with compass (phone), on-device place index + faster search | done (batch 2) |
-| 11 | Final polish: Photon-order search merge (transit collapse, nearby local hits first), lint cleanup, regression pass | done (batch 4) |
 | 10 | Minecraft-style UI (ui/theme: palette, bevel, Mc* components, pixel glyphs), responsive phone/tablet layouts, search ranking, marker label obstacles | done (batch 3) |
+| 11 | Final polish: Photon-order search merge (transit collapse, nearby local hits first), lint cleanup, regression pass | done (batch 4) |
 | 7 | Switchable texture pack (original / Minecraft from the user's own game files), icon anchors | done; vanilla verified on phone, car and desktop renders |
+| 12 | Tag-driven GitHub releases, in-app updater, saved-place backup, debug-gated LeakCanary, on-device Minecraft texture importer, Android Auto `NAVIGATION` category | done |
 
 ## Resuming work
 
@@ -27,8 +28,8 @@
 
 ## Test counts (last run)
 
-- `:mapengine:test`: 114 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory; name resolution with real tiles; viewport rotation; place index incl. a 50k-entry query benchmark; label obstacles).
-- `:app:testDebugUnitTest`: 47 tests, 0 failures (Photon parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec, stable-area math, car `MapScreen` with Robolectric, car host allowlist).
+- `:mapengine:test`: 120 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory; name resolution with real tiles; viewport rotation; place index incl. a 50k-entry query benchmark; label obstacles; pure-JVM `MinecraftImporter` golden test against `client-26.3.jar` + synthetic pack/PNG tests).
+- `:app:testDebugUnitTest`: 73 tests, 0 failures (Photon parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec and backup import/export, update semver/JSON/policy/checksum parsing, `geo:` navigation intent parsing and handler, stable-area math, car `NavScreen`/`MapScreen` with Robolectric, car host allowlist).
 - `:app:lintRelease`: 0 errors, 17 warnings, none in the Security category.
 
 ## Stability campaign (emulator + DHU)
@@ -115,12 +116,12 @@ Look v2 (verified with renders under `/tmp/mm/v2/render/` and screenshots): deco
 
 | criterion | state | evidence |
 |---|---|---|
-| Pure-JVM engine with unit tests; Android modules build | Verified | 57 + 19 tests, `assembleDebug`, `assembleRelease` |
+| Pure-JVM engine with unit tests; Android modules build | Verified | 120 + 73 tests, `assembleDebug`, `assembleRelease` |
 | Release build with R8 runs | Verified | release APK ~1.9 MB; phone map, search and car map smoke-tested (`/tmp/mm/release_*.png`) |
 | No crashes/ANRs in the test sessions | Verified for the final builds | logcat scans; earlier hardware-canvas crashes were fixed by the software canvas |
 | Network etiquette (User-Agent, <= 4 concurrent, caching, negative-cache of failing tiles) | Verified | `ProviderFailureTest`, `OpenMapTilesSource` |
-| Lint | Verified | 0 errors, 18 warnings |
-| Release signing | Not done | debug keystore fallback only |
+| Lint | Verified | 0 errors, 17 warnings |
+| Release signing | Verified | permanent release keystore in `~/.config/minemaps/release.jks` + GitHub Actions secrets; verified by `tools/ci/verify-apk.sh` |
 
 ## Performance (emulator only)
 
@@ -170,6 +171,5 @@ Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 - The car uses a software canvas (`lockCanvas`) instead of `lockHardwareCanvas`.
 - Performance numbers are from the emulator only; there are no real-device measurements.
 - No offline area download; only the tile cache (200 MB, 30 days) is available offline.
-- Release signing is not configured (debug keystore fallback).
 - No Play quality review has been done.
 - Search results from Photon can contain odd entries (stops, platforms) as returned by the service.

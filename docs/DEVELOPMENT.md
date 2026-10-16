@@ -9,6 +9,7 @@ For specific design and subsystem documentation, see:
 - [`docs/RELEASING.md`](RELEASING.md) — Tag-driven GitHub Actions releases, signing keystore, secrets, and verification.
 - [`docs/STATUS.md`](STATUS.md) — Verification matrix, benchmark numbers, stability campaign results, and known limitations.
 - [`docs/THIRD_PARTY.md`](THIRD_PARTY.md) — Third-party libraries, fonts, and data licences.
+- [`LICENCE`](../LICENCE) — Project licence (CC BY-NC 4.0).
 
 ---
 

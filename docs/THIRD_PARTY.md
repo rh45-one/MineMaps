@@ -6,8 +6,10 @@
 |---|---|---|
 | OpenStreetMap data | ODbL 1.0 | "© OpenStreetMap contributors" (attribution chip and licences screen) |
 | OpenMapTiles schema and tiles | Schema and tile design CC-BY 4.0 | "© OpenMapTiles" |
-| OpenFreeMap (default tile server `tiles.openfreemap.org/planet`) | Public instance, free, commercial use allowed, no key | Attribution "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"; unique `User-Agent` (`MineMaps/<version> (Android)`, `MineMaps-dev/0.1` for the desktop tool); bulk/offline downloads are capped (<= 3000 tiles / 50 MB per download, <= 4 parallel requests) so the engine only fetches what the viewport needs, with at most 4 concurrent requests. No SLA. |
-| Photon (komoot, `photon.komoot.io`) | Public instance, fair-use terms, no SLA; results are OSM data (ODbL) | Debounced (450 ms, >= 3 characters), stale requests cancelled, `User-Agent` sent. A latency of about 14 s was observed from the test machine. |
+| OpenFreeMap (default tile server `tiles.openfreemap.org/planet`) | Public instance, free, commercial use allowed, no key | Attribution "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"; unique `User-Agent` (`MineMaps/<version> (Android)`, `MineMaps-dev/0.1` for the desktop tool); bulk/offline downloads are capped (<= 3000 tiles / 50 MB per download, <= 4 parallel requests) so the engine only fetches what the viewport needs (plus ~26 z12 tiles within 20 km for the local place index), with at most 4 concurrent requests. No SLA. |
+| Photon (komoot, `photon.komoot.io`) | Public instance, fair-use terms, no SLA; results are OSM data (ODbL) | Debounced, stale requests cancelled, camera bias (`location_bias_scale=0.2` + zoom), `User-Agent` sent, results merged with the on-device place index and cached in memory. |
+| GitHub Releases API (`api.github.com`) | Public REST API, rate-limited | Contacted only by release builds when checking for updates (configurable: every launch / daily / weekly / manual only). |
+| Mojang Launcher Servers (`piston-data.mojang.com`) | Official Minecraft client distribution; assets © Mojang Studios ([Minecraft EULA](https://www.minecraft.net/en-us/eula)) | Contacted only when the user explicitly chooses *Include Minecraft textures* in Settings; the client jar is SHA-1 verified, converted to an atlas in app-private storage, and deleted. Never bundled in releases. |
 
 Both URLs are configurable in `local.properties` so self-hosted or commercial sources can be used instead.
 
@@ -44,5 +46,6 @@ Licences are taken from each library's published POM; re-check before redistribu
 | JUnit 4.13.2 | EPL-1.0 |
 | kotlin-test, kotlinx-coroutines-test, AndroidX Test core, androidx.car.app:app-testing | Apache-2.0 |
 | Robolectric 4.17 | MIT |
+| LeakCanary 2.14 (`debugImplementation` only, not in release builds) | Apache-2.0 |
 | Pillow (art scripts) | HPND (PIL licence) |
 | Android Auto Desktop Head Unit 2.0, Android Auto app 17.6 (sideloaded for testing only) | Google proprietary terms; not redistributed |

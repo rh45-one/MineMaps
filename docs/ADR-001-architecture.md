@@ -65,7 +65,7 @@ not a smooth vector map with a pixel filter.
 - The `androidx.car.app.action.NAVIGATE` intent (`geo:` scheme) is handled in `Session.onCreateScreen/onNewIntent`:
   `geo:lat,lon` and `geo:0,0?q=lat,lon(label)` show the place with the search pin and a "doesn't give directions" toast;
   `geo:0,0?q=text` runs a Photon search and lists the results.
-- Map action strip: PAN, zoom in, zoom out, recenter. `SurfaceCallback` handles
+- `SurfaceCallback` handles
   `onSurfaceAvailable/Destroyed`, `onVisibleAreaChanged/onStableAreaChanged`, `onScroll/onScale/onFling/onClick`.
 - Dark mode comes from `CarContext.isDarkMode()` and `Session.onCarConfigurationChanged`. The night palette is applied
   when tiles are composed.
