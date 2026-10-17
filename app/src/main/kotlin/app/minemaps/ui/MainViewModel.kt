@@ -176,6 +176,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             val persisted = container.mapState.load()
             if (persisted != null) {
                 camera = persisted
+                container.mapState.update(persisted)
                 initialCamera.value = persisted
                 if (container.location.hasPermission()) {
                     following.value = true
@@ -185,6 +186,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
                 val last = container.location.lastKnown()
                 val cam = if (last != null) Camera(last.latitude, last.longitude, 16.0) else Camera.WORLD
                 camera = cam
+                container.mapState.update(cam)
                 initialCamera.value = cam
                 if (last != null) following.value = true
             }

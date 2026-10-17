@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.StrictMode
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import app.minemaps.data.Camera
 import app.minemaps.data.MapStateRepository
 import app.minemaps.data.SavedPlacesRepository
 import app.minemaps.data.SettingsRepository
@@ -86,21 +87,27 @@ class AppContainer(app: Application) {
         var lastFetchMs = 0L
         while (true) {
             val s = settings.settings.firstOrNull()
-            val c = mapState.current
-            if (s == null || !s.showRoadAlerts || c == null || c.zoom < 12.0 || !online()) {
+            val c = mapState.current ?: location.lastKnown()?.let { Camera(it.latitude, it.longitude, 16.0) }
+            if (s == null || !s.showRoadAlerts || c == null || c.zoom < 10.5 || !online()) {
                 if (s != null && !s.showRoadAlerts && roadAlerts.value.isNotEmpty()) roadAlerts.value = emptyList()
-                delay(5_000)
+                delay(2_000)
                 continue
             }
             val now = System.currentTimeMillis()
             val movedM = if (lastLat.isFinite() && lastLon.isFinite()) RouteTracker.metersBetween(lastLat, lastLon, c.lat, c.lon) else Double.MAX_VALUE
             if (movedM > 4_000.0 || now - lastFetchMs > 5 * 60_000L) {
-                lastLat = c.lat
-                lastLon = c.lon
-                lastFetchMs = now
-                runCatching { roadAlertsClient.fetchNearby(c.lat, c.lon) }.onSuccess { roadAlerts.value = it }
+                runCatching { roadAlertsClient.fetchNearby(c.lat, c.lon) }
+                    .onSuccess {
+                        lastLat = c.lat
+                        lastLon = c.lon
+                        lastFetchMs = now
+                        roadAlerts.value = it
+                    }
+                    .onFailure {
+                        delay(8_000)
+                    }
             }
-            delay(10_000)
+            delay(4_000)
         }
     }
 

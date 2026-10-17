@@ -531,6 +531,7 @@ private fun MapScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 MapView(ctx, renderer).also {
+                    it.onCameraChanged = vm::onCameraChanged
                     it.setCamera(vm.camera ?: initial)
                     controller.view = it
                 }

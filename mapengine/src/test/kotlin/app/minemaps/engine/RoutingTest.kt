@@ -186,6 +186,19 @@ class RoutingTest {
         assertEquals("Limit: 50 km/h", alerts[0].detail)
         assertEquals(app.minemaps.engine.routing.RoadAlertKind.HAZARD, alerts[1].kind)
 
+        val nominatimSample = """
+            [
+              {"osm_id": 992007215, "lat": "40.4166836", "lon": "-3.6592351", "category": "highway", "type": "speed_camera", "extratags": {"maxspeed": "90", "description": "M-30 Km 7.8"}},
+              {"osm_id": 441126464, "lat": "40.3534995", "lon": "-3.8524511", "category": "highway", "type": "construction", "name": "A-5 Obras"}
+            ]
+        """.trimIndent()
+        val nomCams = app.minemaps.engine.routing.RoadAlertsParser.parseNominatim(nominatimSample, app.minemaps.engine.routing.RoadAlertKind.SPEED_CAMERA)
+        assertEquals(2, nomCams.size)
+        assertEquals(app.minemaps.engine.routing.RoadAlertKind.SPEED_CAMERA, nomCams[0].kind)
+        assertEquals("Limit: 90 km/h \u00b7 M-30 Km 7.8", nomCams[0].detail)
+        assertEquals(app.minemaps.engine.routing.RoadAlertKind.HAZARD, nomCams[1].kind)
+        assertEquals("A-5 Obras", nomCams[1].detail)
+
         // Recenter zoom cycling
         assertEquals(16.5, RouteTracker.nextRecenterZoom(14.5), 1e-3)
         assertEquals(18.5, RouteTracker.nextRecenterZoom(16.5), 1e-3)

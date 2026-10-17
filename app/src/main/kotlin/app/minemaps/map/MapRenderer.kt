@@ -605,7 +605,7 @@ class MapRenderer(
             }
         }
         drawBookmarks(canvas, viewport, overlays.bookmarks)
-        if (overlays.roadAlerts.isNotEmpty() && viewport.zoom >= 12.5) {
+        if (overlays.roadAlerts.isNotEmpty() && viewport.zoom >= 10.5) {
             drawRoadAlerts(canvas, viewport, overlays.roadAlerts)
         }
         overlays.searchPin?.let { drawPin(canvas, viewport, it.lat, it.lng, size) }
