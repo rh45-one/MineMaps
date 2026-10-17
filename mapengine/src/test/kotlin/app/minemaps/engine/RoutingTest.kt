@@ -199,6 +199,35 @@ class RoutingTest {
         assertEquals(app.minemaps.engine.routing.RoadAlertKind.HAZARD, nomCams[1].kind)
         assertEquals("A-5 Obras", nomCams[1].detail)
 
+        val postPassSample = """
+            {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "osm_id": 992006682,
+                    "tags": { "note": "F120 JAAM A-5 Km 22.99", "highway": "speed_camera", "maxspeed": "120" }
+                  },
+                  "geometry": { "type": "Point", "coordinates": [-3.9141802, 40.3038166] }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "osm_id": 777001,
+                    "tags": { "enforcement": "average_speed", "maxspeed": "90" }
+                  },
+                  "geometry": { "type": "Point", "coordinates": [-3.80, 40.40] }
+                }
+              ]
+            }
+        """.trimIndent()
+        val ppAlerts = app.minemaps.engine.routing.RoadAlertsParser.parsePostPass(postPassSample)
+        assertEquals(2, ppAlerts.size)
+        assertEquals("Speed Camera / Radar", ppAlerts[0].label)
+        assertEquals("Limit: 120 km/h \u00b7 F120 JAAM A-5 Km 22.99", ppAlerts[0].detail)
+        assertEquals("Section Speed Radar", ppAlerts[1].label)
+
         // Recenter zoom cycling
         assertEquals(16.5, RouteTracker.nextRecenterZoom(14.5), 1e-3)
         assertEquals(18.5, RouteTracker.nextRecenterZoom(16.5), 1e-3)

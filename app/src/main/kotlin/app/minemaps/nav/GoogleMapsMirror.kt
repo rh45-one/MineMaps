@@ -7,6 +7,8 @@ import android.content.Intent
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import app.minemaps.engine.routing.RoadAlert
+import app.minemaps.engine.routing.RoadAlertKind
 import app.minemaps.engine.routing.TurnDirection
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -18,9 +20,17 @@ data class MirroredNavInfo(
     val updatedAtMs: Long = System.currentTimeMillis(),
 )
 
+data class MirroredAlertNotice(
+    val kind: RoadAlertKind,
+    val label: String,
+    val detail: String,
+    val reportedAtMs: Long = System.currentTimeMillis(),
+)
+
 object GoogleMapsMirror {
     const val GMAPS_PACKAGE = "com.google.android.apps.maps"
     val active = MutableStateFlow<MirroredNavInfo?>(null)
+    val latestAlertNotice = MutableStateFlow<MirroredAlertNotice?>(null)
     @Volatile
     private var dismissedSession = false
     @Volatile
@@ -139,6 +149,19 @@ object GoogleMapsMirror {
             else -> TurnDirection.STRAIGHT
         }
     }
+
+    /** Detects mobile speed camera, police/radar, crash, construction, or hazard alerts inside Google Maps notifications. */
+    fun parseAlertNotice(title: String?, text: String?, subText: String?, bigText: String? = null): MirroredAlertNotice? {
+        val combined = listOfNotNull(title, text, subText, bigText).joinToString(" ").trim()
+        val lower = combined.lowercase()
+        if (lower.isEmpty()) return null
+        val isRadar = listOf("speed camera", "mobile speed", "speed trap", "radar", "cámara de velocidad", "camara de velocidad", "control de velocidad", "radars").any { it in lower }
+        val isHazard = listOf("crash", "accident", "accidente", "roadworks", "construction", "obras", "hazard", "peligro", "stalled vehicle", "vehículo detenido", "lane closure", "carril cortado", "object on road").any { it in lower }
+        if (!isRadar && !isHazard) return null
+        val kind = if (isRadar) RoadAlertKind.SPEED_CAMERA else RoadAlertKind.HAZARD
+        val label = if (isRadar) "Mobile Speed Camera (Google Maps)" else "Road Alert (Google Maps)"
+        return MirroredAlertNotice(kind, label, combined.replace('\n', ' ').take(120))
+    }
 }
 
 class GoogleMapsNotificationService : NotificationListenerService() {
@@ -167,13 +190,16 @@ class GoogleMapsNotificationService : NotificationListenerService() {
 
     private fun updateFrom(sbn: StatusBarNotification) {
         val n = sbn.notification ?: return
-        val isNav = n.category == Notification.CATEGORY_NAVIGATION || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
-        if (!isNav) return
         val ex = n.extras ?: return
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val big = ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
         val sub = ex.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+        GoogleMapsMirror.parseAlertNotice(title, text, sub, big)?.let {
+            GoogleMapsMirror.latestAlertNotice.value = it
+        }
+        val isNav = n.category == Notification.CATEGORY_NAVIGATION || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
+        if (!isNav) return
         val exitIntent = n.actions?.firstOrNull { a ->
             val label = a.title?.toString()?.lowercase().orEmpty()
             "exit" in label || "stop" in label || "cancel" in label || "close" in label || "salir" in label || "cerrar" in label

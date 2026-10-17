@@ -21,6 +21,7 @@ import app.minemaps.engine.search.PlaceIndex
 import app.minemaps.engine.search.PlacePrefetcher
 import app.minemaps.map.MapEngine
 import app.minemaps.map.TexturePackManager
+import app.minemaps.nav.GoogleMapsMirror
 import app.minemaps.nav.NavigationController
 import app.minemaps.search.GooglePlacesClient
 import app.minemaps.search.PhotonClient
@@ -85,6 +86,25 @@ class AppContainer(app: Application) {
         var lastLat = Double.NaN
         var lastLon = Double.NaN
         var lastFetchMs = 0L
+        var dbAlerts: List<RoadAlert> = emptyList()
+        val gmapsPins = LinkedHashMap<String, Pair<RoadAlert, Long>>()
+        appScope.launch {
+            GoogleMapsMirror.latestAlertNotice.collect { notice ->
+                if (notice == null) return@collect
+                val loc = location.lastKnown()
+                val lat = loc?.latitude ?: mapState.current?.lat ?: return@collect
+                val lon = loc?.longitude ?: mapState.current?.lon ?: return@collect
+                val id = "gmaps_${notice.kind.name}_${(lat * 200).toInt()}_${(lon * 200).toInt()}"
+                synchronized(gmapsPins) {
+                    gmapsPins[id] = RoadAlert(id, lat, lon, notice.kind, notice.label, notice.detail) to notice.reportedAtMs
+                }
+                val now = System.currentTimeMillis()
+                val activeGmaps = synchronized(gmapsPins) {
+                    gmapsPins.values.filter { now - it.second < 30 * 60_000L }.map { it.first }
+                }
+                roadAlerts.value = (dbAlerts + activeGmaps).distinctBy { it.id }
+            }
+        }
         while (true) {
             val s = settings.settings.firstOrNull()
             val c = mapState.current ?: location.lastKnown()?.let { Camera(it.latitude, it.longitude, 16.0) }
@@ -95,13 +115,17 @@ class AppContainer(app: Application) {
             }
             val now = System.currentTimeMillis()
             val movedM = if (lastLat.isFinite() && lastLon.isFinite()) RouteTracker.metersBetween(lastLat, lastLon, c.lat, c.lon) else Double.MAX_VALUE
-            if (movedM > 4_000.0 || now - lastFetchMs > 5 * 60_000L) {
+            if (movedM > 5_000.0 || now - lastFetchMs > 5 * 60_000L) {
                 runCatching { roadAlertsClient.fetchNearby(c.lat, c.lon) }
-                    .onSuccess {
+                    .onSuccess { fetched ->
                         lastLat = c.lat
                         lastLon = c.lon
                         lastFetchMs = now
-                        roadAlerts.value = it
+                        dbAlerts = fetched
+                        val activeGmaps = synchronized(gmapsPins) {
+                            gmapsPins.values.filter { now - it.second < 30 * 60_000L }.map { it.first }
+                        }
+                        roadAlerts.value = (dbAlerts + activeGmaps).distinctBy { it.id }
                     }
                     .onFailure {
                         delay(8_000)
