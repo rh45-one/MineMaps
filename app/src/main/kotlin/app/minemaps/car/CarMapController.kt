@@ -39,6 +39,8 @@ interface CarMapActions {
     val following: StateFlow<Boolean>
     val networkState: StateFlow<NetState>
     val streetNames: StateFlow<Boolean>
+    val traffic: StateFlow<Boolean> get() = MutableStateFlow(true)
+    val roadAlertsEnabled: StateFlow<Boolean> get() = MutableStateFlow(true)
 
     fun zoomIn()
 
@@ -49,6 +51,10 @@ interface CarMapActions {
     fun flyTo(lat: Double, lon: Double)
 
     fun toggleStreetNames()
+
+    fun toggleTraffic() {}
+
+    fun toggleRoadAlerts() {}
 
     /** Centres the map on a place and marks it with the search pin (and starts routing if enabled). */
     fun showPlace(lat: Double, lon: Double, title: String = "Destination")
@@ -62,6 +68,8 @@ class CarMapController(
     override val following = MutableStateFlow(false)
     override val networkState = MutableStateFlow(NetState.OK)
     override val streetNames = MutableStateFlow(true)
+    override val traffic = MutableStateFlow(true)
+    override val roadAlertsEnabled = MutableStateFlow(true)
     private var searchPin: LatLng? = null
     private var activeRoute: app.minemaps.engine.routing.RoutePlan? = null
     private var roadAlerts: List<app.minemaps.engine.routing.RoadAlert> = emptyList()
@@ -201,6 +209,8 @@ class CarMapController(
                     showTraffic = it.showTraffic
                     showRoadAlerts = it.showRoadAlerts
                     streetNames.value = it.showStreetNames
+                    traffic.value = it.showTraffic
+                    roadAlertsEnabled.value = it.showRoadAlerts
                     renderer?.nameMode = names(it)
                     renderer?.showStreetNames = it.showStreetNames
                     renderer?.arrowColor = it.arrowColor
@@ -337,6 +347,14 @@ class CarMapController(
 
     override fun toggleStreetNames() {
         scope.launch { container.settings.setShowStreetNames(!showStreetNames) }
+    }
+
+    override fun toggleTraffic() {
+        scope.launch { container.settings.setShowTraffic(!showTraffic) }
+    }
+
+    override fun toggleRoadAlerts() {
+        scope.launch { container.settings.setShowRoadAlerts(!showRoadAlerts) }
     }
 
     override fun showPlace(lat: Double, lon: Double, title: String) {

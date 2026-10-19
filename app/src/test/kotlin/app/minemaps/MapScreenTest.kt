@@ -33,7 +33,11 @@ class MapScreenTest {
         override val following = MutableStateFlow(true)
         override val networkState = MutableStateFlow(NetState.OK)
         override val streetNames = MutableStateFlow(true)
+        override val traffic = MutableStateFlow(true)
+        override val roadAlertsEnabled = MutableStateFlow(true)
         var toggled = 0
+        var trafficToggled = 0
+        var alertsToggled = 0
         var shown: Pair<Double, Double>? = null
         var recentered = 0
         var flewTo: Pair<Double, Double>? = null
@@ -53,6 +57,16 @@ class MapScreenTest {
         override fun toggleStreetNames() {
             toggled++
             streetNames.value = !streetNames.value
+        }
+
+        override fun toggleTraffic() {
+            trafficToggled++
+            traffic.value = !traffic.value
+        }
+
+        override fun toggleRoadAlerts() {
+            alertsToggled++
+            roadAlertsEnabled.value = !roadAlertsEnabled.value
         }
 
         override fun showPlace(lat: Double, lon: Double, title: String) {
@@ -177,19 +191,20 @@ class MapScreenTest {
         assertEquals(4, map.size)
         assertTrue(map.contains(Action.PAN))
         val strip = t.actionStrip!!.actions
-        assertEquals(2, strip.size)
-        strip[0].onClickDelegate!!.sendClick(object : androidx.car.app.OnDoneCallback {
+        assertEquals(4, strip.size)
+        val done = object : androidx.car.app.OnDoneCallback {
             override fun onSuccess(response: androidx.car.app.serialization.Bundleable?) {}
 
             override fun onFailure(response: androidx.car.app.serialization.Bundleable) {}
-        })
-        strip[1].onClickDelegate!!.sendClick(object : androidx.car.app.OnDoneCallback {
-            override fun onSuccess(response: androidx.car.app.serialization.Bundleable?) {}
-
-            override fun onFailure(response: androidx.car.app.serialization.Bundleable) {}
-        })
+        }
+        strip[0].onClickDelegate!!.sendClick(done)
+        strip[1].onClickDelegate!!.sendClick(done)
+        strip[2].onClickDelegate!!.sendClick(done)
+        strip[3].onClickDelegate!!.sendClick(done)
         assertEquals(1, places)
         assertEquals(1, actions.toggled)
+        assertEquals(1, actions.trafficToggled)
+        assertEquals(1, actions.alertsToggled)
     }
 
     @Test
