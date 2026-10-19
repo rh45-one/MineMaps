@@ -28,6 +28,8 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         private set
     var bearing = 0.0
         private set
+    var pitch = 0f
+        private set
 
     var overlays: MapOverlays = MapOverlays.EMPTY
         set(value) {
@@ -134,7 +136,7 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         },
     ).apply { isQuickScaleEnabled = false }
 
-    fun viewport(): Viewport = Viewport(centerX, centerY, zoom, max(width, 1), max(height, 1), renderer.pixelRatio, bearing)
+    fun viewport(): Viewport = Viewport(centerX, centerY, zoom, max(width, 1), max(height, 1), renderer.pixelRatio, bearing, pitch)
 
     private fun finite(vararg v: Double) = v.all { it.isFinite() }
 
@@ -225,19 +227,58 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         if (!to.isFinite()) return
         cancelAnimation()
         val b0 = bearing
+        val p0 = pitch
         val delta = RotationGesture.angleDelta(b0, to)
-        runAnimation(durationMs) { f -> bearing = normalizeBearing(b0 + delta * f) }
+        runAnimation(durationMs) { f ->
+            bearing = normalizeBearing(b0 + delta * f)
+            pitch = p0 * (1f - f)
+        }
     }
 
     private fun normalizeBearing(b: Double): Double = ((b % 360.0) + 360.0) % 360.0
 
-    fun follow(lat: Double, lon: Double) {
+    fun follow(lat: Double, lon: Double, navMode: Boolean = false, headingDeg: Float? = null, targetZoom: Double? = null) {
         if (width == 0 || animator != null || !finite(lat, lon)) return
-        val target = Viewport(Mercator.lonToX(lon), Mercator.latToY(lat), zoom, width, height, renderer.pixelRatio)
-        val screen = viewport().worldToScreen(target.centerX, target.centerY)
+        val z = (targetZoom ?: zoom).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        val targetBearing = if (navMode && headingDeg != null && headingDeg.isFinite()) normalizeBearing(headingDeg.toDouble()) else bearing
+        val targetPitch = if (navMode && z >= 15.2) 38f else 0f
+        val pwx = Mercator.lonToX(lon)
+        val pwy = Mercator.latToY(lat.coerceIn(-Camera.MAX_LAT, Camera.MAX_LAT))
+        val targetCenter = if (navMode && z >= 15.2) {
+            Viewport.forwardLookCenter(pwx, pwy, z, max(height, 1), renderer.pixelRatio, targetBearing, 0.18)
+        } else {
+            app.minemaps.engine.geo.PointD(pwx, pwy)
+        }
+        val screen = viewport().worldToScreen(targetCenter.x, targetCenter.y)
         val off = max(abs(screen.x - width / 2.0), abs(screen.y - height / 2.0))
-        if (off < 2.0) return
-        if (off > max(width, height)) setCamera(Camera(lat, lon, zoom, bearing)) else animateTo(lat, lon, zoom, 400L)
+        val bDelta = RotationGesture.angleDelta(bearing, targetBearing)
+        val pDelta = targetPitch - pitch
+        val zDelta = z - zoom
+        if (off < 2.0 && abs(bDelta) < 1.2 && abs(pDelta) < 1f && abs(zDelta) < 0.05) return
+        if (off > max(width, height)) {
+            centerX = targetCenter.x
+            centerY = targetCenter.y
+            zoom = z
+            bearing = targetBearing
+            pitch = targetPitch
+            cameraChanged()
+        } else {
+            val x0 = centerX
+            val y0 = centerY
+            val z0 = zoom
+            val b0 = bearing
+            val p0 = pitch
+            var dx = targetCenter.x - x0
+            if (dx > 0.5) dx -= 1.0 else if (dx < -0.5) dx += 1.0
+            val dy = targetCenter.y - y0
+            runAnimation(450L) { f ->
+                centerX = wrap(x0 + dx * f)
+                centerY = (y0 + dy * f).coerceIn(0.0, 1.0)
+                zoom = z0 + zDelta * f
+                bearing = normalizeBearing(b0 + bDelta * f)
+                pitch = p0 + pDelta * f
+            }
+        }
     }
 
     fun fitBounds(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double, maxZoom: Double = 19.0) {

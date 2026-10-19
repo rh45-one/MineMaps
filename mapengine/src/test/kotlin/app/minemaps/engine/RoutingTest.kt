@@ -238,5 +238,17 @@ class RoutingTest {
         val highwayZ = RouteTracker.targetDrivingZoom(30f, "motorway")!!
         val streetZ = RouteTracker.targetDrivingZoom(6f, "minor")!!
         assertTrue(highwayZ < streetZ, "highway zoom ($highwayZ) should be more zoomed-out than city street ($streetZ)")
+        assertTrue(highwayZ >= 15.8 && highwayZ <= 16.5, "highway zoom ($highwayZ) should stay readable at ~16.1 like Google Maps")
+
+        // Forward-look lower-third navigation framing across headings
+        val pwx = app.minemaps.engine.geo.Mercator.lonToX(-3.84)
+        val pwy = app.minemaps.engine.geo.Mercator.latToY(40.40)
+        for (heading in listOf(0.0, 90.0, 215.0)) {
+            val c = app.minemaps.engine.geo.Viewport.forwardLookCenter(pwx, pwy, 16.5, 1000, 2f, heading, 0.18)
+            val vp = app.minemaps.engine.geo.Viewport(c.x, c.y, 16.5, 600, 1000, 2f, heading, 38f)
+            val screen = vp.worldToScreen(pwx, pwy)
+            assertEquals(300.0, screen.x, 1.0)
+            assertEquals(680.0, screen.y, 1.0)
+        }
     }
 }

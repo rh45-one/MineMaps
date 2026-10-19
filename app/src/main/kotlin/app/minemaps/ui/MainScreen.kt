@@ -456,20 +456,30 @@ private fun MapScreen(
     LaunchedEffect(settings.showStreetNames) { renderer.showStreetNames = settings.showStreetNames }
 
     val player = loc.location
+    val effectiveHeading = remember(player, deviceHeading) {
+        when {
+            player != null && player.hasSpeed() && player.speed > 2.5f && player.hasBearing() -> player.bearing
+            deviceHeading != null -> deviceHeading!!
+            player != null && player.hasBearing() -> player.bearing
+            else -> 0f
+        }
+    }
+    val inNavView = activePlan != null || navBanner != null || (player != null && player.hasSpeed() && player.speed >= 2.5f)
     var detectedRoadClass by remember { mutableStateOf<String?>(null) }
     var lastRoadProbeMs by remember { mutableStateOf(0L) }
     var lastManualRecenterMs by remember { mutableStateOf(0L) }
-    LaunchedEffect(player, following, pending, settings.dynamicDrivingZoom) {
+    LaunchedEffect(player, following, pending, settings.dynamicDrivingZoom, inNavView, effectiveHeading) {
         val l = player ?: return@LaunchedEffect
         val view = controller.view ?: return@LaunchedEffect
         if (!following) return@LaunchedEffect
         val z = pending
         if (z != null) {
-            view.animateTo(l.latitude, l.longitude, z)
             vm.pendingFlyZoom.value = null
+            view.follow(l.latitude, l.longitude, navMode = inNavView, headingDeg = effectiveHeading, targetZoom = z)
             return@LaunchedEffect
         }
         val now = System.currentTimeMillis()
+        var targetZ: Double? = null
         if (settings.dynamicDrivingZoom && l.hasSpeed() && l.speed >= 1.5f && now - lastManualRecenterMs > 12_000L) {
             if (now - lastRoadProbeMs > 5_000L) {
                 lastRoadProbeMs = now
@@ -479,23 +489,14 @@ private fun MapScreen(
                 detectedRoadClass = hit?.roadClass
             }
             val dynZ = app.minemaps.engine.routing.RouteTracker.targetDrivingZoom(l.speed, detectedRoadClass)
-            if (dynZ != null && kotlin.math.abs(view.zoom - dynZ) >= 0.45) {
-                view.animateTo(l.latitude, l.longitude, dynZ, 600L)
-                return@LaunchedEffect
+            if (dynZ != null && kotlin.math.abs(view.zoom - dynZ) >= 0.35) {
+                targetZ = dynZ
             }
         }
-        view.follow(l.latitude, l.longitude)
+        view.follow(l.latitude, l.longitude, navMode = inNavView, headingDeg = effectiveHeading, targetZoom = targetZ)
     }
 
     val visibleAlerts = if (settings.showRoadAlerts) roadAlerts else emptyList()
-    val effectiveHeading = remember(player, deviceHeading) {
-        when {
-            player != null && player.hasSpeed() && player.speed > 2.5f && player.hasBearing() -> player.bearing
-            deviceHeading != null -> deviceHeading!!
-            player != null && player.hasBearing() -> player.bearing
-            else -> 0f
-        }
-    }
     val overlays = remember(player, effectiveHeading, saved, searchPin, activePlan, settings.showTraffic, visibleAlerts) {
         MapOverlays(
             player = player?.let { PlayerMarker(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 0f, effectiveHeading, if (it.hasSpeed()) it.speed else 0f) },

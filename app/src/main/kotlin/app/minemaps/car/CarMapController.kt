@@ -59,17 +59,6 @@ class CarMapController(
     private val container: AppContainer,
     private val scope: CoroutineScope,
 ) : SurfaceCallback, CarMapActions {
-    private class Anim(
-        val startNs: Long,
-        val durNs: Long,
-        val fromX: Double,
-        val fromY: Double,
-        val fromZ: Double,
-        val toX: Double,
-        val toY: Double,
-        val toZ: Double,
-    )
-
     override val following = MutableStateFlow(false)
     override val networkState = MutableStateFlow(NetState.OK)
     override val streetNames = MutableStateFlow(true)
@@ -86,6 +75,23 @@ class CarMapController(
     private var cx = Mercator.lonToX(0.0)
     private var cy = Mercator.latToY(30.0)
     private var zoom = 17.0
+    private var bearing = 0.0
+    private var pitch = 0f
+
+    private class Anim(
+        val startNs: Long,
+        val durNs: Long,
+        val fromX: Double,
+        val fromY: Double,
+        val fromZ: Double,
+        val toX: Double,
+        val toY: Double,
+        val toZ: Double,
+        val fromB: Double = 0.0,
+        val toB: Double = 0.0,
+        val fromP: Float = 0f,
+        val toP: Float = 0f,
+    )
 
     private var anim: Anim? = null
     private var flingVx = 0.0
@@ -266,21 +272,39 @@ class CarMapController(
                         if (kotlin.math.abs(zoom - dynZ) >= 0.35) targetZ = dynZ
                     }
                 }
-                animateTo(Mercator.lonToX(l.longitude), Mercator.latToY(l.latitude), targetZ)
+                val navMode = activeRoute != null || (l.hasSpeed() && l.speed >= 2.0f)
+                val targetB = when {
+                    navMode && l.hasSpeed() && l.speed > 2.0f && l.hasBearing() -> l.bearing.toDouble()
+                    navMode && deviceHeading != null -> deviceHeading!!.toDouble()
+                    else -> bearing
+                }
+                val targetP = if (navMode && targetZ >= 15.2) 38f else 0f
+                val pwx = Mercator.lonToX(l.longitude)
+                val pwy = Mercator.latToY(l.latitude)
+                val hPx = surface?.height?.takeIf { it > 0 } ?: 600
+                val pr = max(1f, (surface?.dpi ?: DEFAULT_DPI) / 160f)
+                val center = if (navMode && targetZ >= 15.2) {
+                    Viewport.forwardLookCenter(pwx, pwy, targetZ, hPx, pr, targetB, 0.16)
+                } else {
+                    app.minemaps.engine.geo.PointD(pwx, pwy)
+                }
+                animateTo(center.x, center.y, targetZ, 500L, targetB, targetP)
             }
         }
         requestRender()
     }
 
-    private fun camera() = Camera(Mercator.yToLat(cy), Mercator.xToLon(cx), zoom, container.mapState.current?.bearing ?: 0.0)
+    private fun camera() = Camera(Mercator.yToLat(cy), Mercator.xToLon(cx), zoom, bearing)
 
     private fun wrap(x: Double) = x - Math.floor(x)
 
-    private fun animateTo(tx: Double, ty: Double, tz: Double, durationMs: Long = 500L) {
+    private fun animateTo(tx: Double, ty: Double, tz: Double, durationMs: Long = 500L, tb: Double = bearing, tp: Float = pitch) {
         if (!tx.isFinite() || !ty.isFinite() || !tz.isFinite()) return
         var dx = tx - cx
         if (dx > 0.5) dx -= 1.0 else if (dx < -0.5) dx += 1.0
-        anim = Anim(System.nanoTime(), durationMs * 1_000_000L, cx, cy, zoom, cx + dx, ty.coerceIn(0.0, 1.0), tz.coerceIn(MIN_ZOOM, MAX_ZOOM))
+        var db = (tb - bearing) % 360.0
+        if (db > 180.0) db -= 360.0 else if (db <= -180.0) db += 360.0
+        anim = Anim(System.nanoTime(), durationMs * 1_000_000L, cx, cy, zoom, cx + dx, ty.coerceIn(0.0, 1.0), tz.coerceIn(MIN_ZOOM, MAX_ZOOM), bearing, bearing + db, pitch, tp)
         requestRender()
     }
 
@@ -416,7 +440,7 @@ class CarMapController(
         val size = 256.0 * pr * 2.0.pow(zoom)
         val area = stableArea?.takeIf { !it.isEmpty } ?: visibleArea?.takeIf { !it.isEmpty }
         val off = if (area != null) StableArea.worldOffset(w, h, area.left, area.top, area.right, area.bottom, size) else doubleArrayOf(0.0, 0.0)
-        return Viewport(cx + off[0], (cy + off[1]), zoom, w, h, pr)
+        return Viewport(cx + off[0], (cy + off[1]), zoom, w, h, pr, bearing, pitch)
     }
 
     fun requestRender() {
@@ -443,6 +467,8 @@ class CarMapController(
             cx = wrap(a.fromX + (a.toX - a.fromX) * e)
             cy = a.fromY + (a.toY - a.fromY) * e
             zoom = a.fromZ + (a.toZ - a.fromZ) * e
+            bearing = ((a.fromB + (a.toB - a.fromB) * e) % 360.0 + 360.0) % 360.0
+            pitch = (a.fromP + (a.toP - a.fromP) * e.toFloat()).coerceIn(0f, 50f)
             if (t >= 1.0) anim = null else more = true
         }
         if (flingVx * flingVx + flingVy * flingVy > 400.0) {

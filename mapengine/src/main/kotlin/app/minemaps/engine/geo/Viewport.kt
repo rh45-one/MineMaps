@@ -19,6 +19,7 @@ class Viewport(
     val heightPx: Int,
     val pixelRatio: Float,
     val bearingDeg: Double = 0.0,
+    val pitchDeg: Float = 0f,
 ) {
     init {
         require(centerX.isFinite() && centerY.isFinite() && zoom.isFinite() && bearingDeg.isFinite()) { "viewport centre/zoom/bearing must be finite" }
@@ -30,7 +31,7 @@ class Viewport(
 
     val worldSizePx: Double get() = 256.0 * pixelRatio * 2.0.pow(zoom)
 
-    fun withBearing(deg: Double) = Viewport(centerX, centerY, zoom, widthPx, heightPx, pixelRatio, deg)
+    fun withBearing(deg: Double) = Viewport(centerX, centerY, zoom, widthPx, heightPx, pixelRatio, deg, pitchDeg)
 
     /** Screen position of a world point: the offset from the centre is rotated by -bearing (the screen's up points to compass bearing [bearingDeg]). */
     fun worldToScreen(wx: Double, wy: Double): PointD {
@@ -53,9 +54,16 @@ class Viewport(
 
     fun screenToWorldY(sy: Double): Double = screenToWorld(widthPx / 2.0, sy).y
 
-    /** Axis-aligned world bounds (minX, minY, maxX, maxY) of the four screen corners. */
+    /** Axis-aligned world bounds (minX, minY, maxX, maxY) of the four screen corners (expanded toward the horizon when tilted). */
     fun worldBounds(): DoubleArray {
-        val c = listOf(screenToWorld(0.0, 0.0), screenToWorld(widthPx.toDouble(), 0.0), screenToWorld(0.0, heightPx.toDouble()), screenToWorld(widthPx.toDouble(), heightPx.toDouble()))
+        val topY = if (pitchDeg > 1f) -heightPx * 0.55 else 0.0
+        val sidePad = if (pitchDeg > 1f) widthPx * 0.22 else 0.0
+        val c = listOf(
+            screenToWorld(-sidePad, topY),
+            screenToWorld(widthPx + sidePad, topY),
+            screenToWorld(-sidePad, heightPx.toDouble()),
+            screenToWorld(widthPx + sidePad, heightPx.toDouble()),
+        )
         return doubleArrayOf(c.minOf { it.x }, c.minOf { it.y }, c.maxOf { it.x }, c.maxOf { it.y })
     }
 
@@ -92,5 +100,32 @@ class Viewport(
         val slots = ArrayList<TileSlot>((x1 - x0 + 1) * (y1 - y0 + 1))
         for (y in y0..y1) for (x in x0..x1) slots.add(TileSlot(TileKey(z, Math.floorMod(x, n), y), x))
         return slots
+    }
+
+    companion object {
+        /**
+         * Computes the camera world centre `(cx, cy)` so that the player at `(playerWx, playerWy)` sits in the
+         * lower third of the screen (`0.5 + forwardFraction` down from the top) with the road ahead extending upward
+         * along [bearingDeg], matching Google Maps' navigation framing.
+         */
+        fun forwardLookCenter(
+            playerWx: Double,
+            playerWy: Double,
+            zoom: Double,
+            heightPx: Int,
+            pixelRatio: Float,
+            bearingDeg: Double,
+            forwardFraction: Double = 0.18,
+        ): PointD {
+            val worldSizePx = 256.0 * pixelRatio * 2.0.pow(zoom)
+            val rad = Math.toRadians(bearingDeg)
+            val cosB = cos(rad)
+            val sinB = sin(rad)
+            val dy = -forwardFraction * heightPx
+            val rawX = playerWx + (-dy * sinB) / worldSizePx
+            val cx = rawX - floor(rawX)
+            val cy = (playerWy + (dy * cosB) / worldSizePx).coerceIn(0.0, 1.0)
+            return PointD(cx, cy)
+        }
     }
 }
