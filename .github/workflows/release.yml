@@ -65,14 +65,18 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "dist/MineMaps-$TAG.apk"
           (cd dist && sha256sum "MineMaps-$TAG.apk" > "MineMaps-$TAG.apk.sha256")
           cat "dist/MineMaps-$TAG.apk.sha256"
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           flags=()
           if [[ "$TAG" == *-rc.* ]]; then flags+=(--prerelease); fi
-          gh release create "$TAG" "dist/MineMaps-$TAG.apk" "dist/MineMaps-$TAG.apk.sha256" --title "MineMaps $TAG" --generate-notes --verify-tag "${flags[@]}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "dist/MineMaps-$TAG.apk" "dist/MineMaps-$TAG.apk.sha256" --clobber
+          else
+            gh release create "$TAG" "dist/MineMaps-$TAG.apk" "dist/MineMaps-$TAG.apk.sha256" --title "MineMaps $TAG" --generate-notes --verify-tag "${flags[@]}"
+          fi
       - name: Remove keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
