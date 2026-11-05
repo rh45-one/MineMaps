@@ -138,6 +138,41 @@ Setting up Android Auto on the emulator:
 3. **Grant permissions & notification listener:** Grant runtime permissions to `com.google.android.projection.gearhead` via `pm grant` and enable its notification listener (`cmd notification allow_listener com.google.android.projection.gearhead/com.google.android.gearhead.notifications.SharedNotificationListenerManager`).
 4. **Start the DHU:** Run `adb forward tcp:5277 tcp:5277` and launch `~/Android/Sdk/extras/google/auto/desktop-head-unit` (optionally with `-c config/default.ini`, `default_720p.ini`, `default_1080p.ini`, etc.). The DHU binary requires `libc++.so.1`, `libc++abi.so.1`, and `libunwind.so.1` on `LD_LIBRARY_PATH`.
 
+### Android Auto compatibility diagnostics
+
+Distinguish discovery/eligibility failures (not in **Customise launcher**), host connection/template errors,
+rendering failures, location failures, and background process termination before changing code. A working
+Samsung phone does not establish the cause of a Xiaomi failure. Record model, ROM/Android/HyperOS version,
+MineMaps and Android Auto versions, install method, connection type, exact error and phone-lock state.
+Check another Android Auto map app on the same connection to separate phone/car setup from MineMaps.
+
+With USB debugging enabled and the affected phone selected (`adb -s SERIAL` if needed), collect:
+
+```bash
+adb shell dumpsys package app.minemaps
+adb shell dumpsys package com.google.android.projection.gearhead
+adb shell pm list packages -i app.minemaps
+adb logcat -v threadtime > minemaps-android-auto.log
+```
+
+Start log capture before connecting/launching MineMaps, reproduce the failure, then stop it with Ctrl+C.
+Keep the full local log for diagnosis (a PID filter misses host failures and process restarts), but redact
+locations, destinations, account details and other apps' information before sharing excerpts. Do not clear
+app data or reinstall first: that can erase evidence and user bookmarks. Do not disable release host
+certificate validation as a compatibility workaround.
+
+For lock-screen failures on Xiaomi/HyperOS, test user-enabled unrestricted battery use and background
+autostart where available; record whether this changes the result. For missing launcher entries, check
+Android Auto developer/unknown-source settings and install-source filtering. The updater's installer
+metadata is a best-effort compatibility mechanism, not a universal exemption from host policy.
+If an in-app update did not restore launcher visibility, do not assume that the OEM installer honoured its
+metadata extras. Record the actual install source; the README describes a best-effort `adb install -r -i`
+test using the official signed release without deleting data. Neither this nor host-API fallback changes
+can guarantee discovery; supported-store distribution and host acceptance remain separate requirements.
+
+Car protocol regression tests use explicit handshakes at API 1, 2, 6 and 7 plus an unknown handshake.
+`TestCarContext` without a handshake must not masquerade as an API-7 host.
+
 ---
 
 ## Desktop render tool & benchmark

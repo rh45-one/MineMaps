@@ -3,7 +3,6 @@ package app.minemaps.car
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
 import androidx.car.app.Screen
-import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
@@ -21,7 +20,7 @@ class SearchResultsScreen(
     private val userLocation: (() -> android.location.Location?)? = null,
 ) : Screen(carContext) {
     override fun onGetTemplate(): Template {
-        val limit = carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST)
+        val limit = CarHostCapabilities.listLimit(carContext)
         val loc = userLocation?.invoke()
         val list = ItemList.Builder()
         for (r in results.take(limit)) {
@@ -41,7 +40,7 @@ class SearchResultsScreen(
         }
         list.setNoItemsMessage("No results")
         val content = ListTemplate.Builder().setSingleList(list.build()).setTitle("Results").setHeaderAction(Action.BACK).build()
-        if (runCatching { carContext.carAppApiLevel }.getOrDefault(7) < 7) return content
+        if (CarHostCapabilities.apiLevel(carContext) < 7) return content
         return MapWithContentTemplate.Builder()
             .setMapController(MapController.Builder().setMapActionStrip(CarStrips.mapActionStrip(carContext, actions, actions.following.value)).build())
             .setContentTemplate(content)

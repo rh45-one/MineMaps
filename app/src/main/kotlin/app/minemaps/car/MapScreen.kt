@@ -5,7 +5,6 @@ import android.location.Location
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
 import androidx.car.app.Screen
-import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarColor
@@ -197,7 +196,7 @@ class MapScreen(
     override fun onGetTemplate(): Template {
         state = compute()
         val content: Template = if (!state.permission) permissionTemplate() else listTemplate()
-        if (runCatching { carContext.carAppApiLevel }.getOrDefault(7) < 7) return content
+        if (CarHostCapabilities.apiLevel(carContext) < 7) return content
         return MapWithContentTemplate.Builder()
             .setMapController(mapController())
             .setContentTemplate(content)
@@ -268,7 +267,7 @@ class MapScreen(
                 container.location.state,
                 { ContextCompat.checkSelfPermission(carContext, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(carContext, Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED },
                 { container.location.refresh(); controller.recenter() },
-                { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) },
+                { CarHostCapabilities.listLimit(carContext) },
                 icons = icons,
                 languageFlow = container.settings.settings.map { it.appLanguage },
             )

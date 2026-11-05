@@ -2,6 +2,13 @@
 
 Authoritative spec for the block renderer. See ADR-001 for the rationale behind it.
 
+## Android Auto integration boundary
+The engine is independent of phone brand and Android Auto host protocol. The Android adapter negotiates
+capabilities via `CarContext.carAppApiLevel`: API 1 uses the root navigation template without a map action
+strip and plain place/result lists; API 2+ adds map controls; API 7+ wraps lists in `MapWithContentTemplate`.
+An unavailable handshake is treated as API 1, never optimistically as API 7. These fallbacks do not bypass
+Android Auto's phone/ROM requirements, install-source checks, or OEM background-execution restrictions.
+
 ## Coordinates
 - World coords `wx, wy ∈ [0,1)` Web Mercator (y down). `lonToX = (lon+180)/360`,
   `latToY = (1 - ln(tan φ + sec φ)/π)/2`, latitude clamped to ±85.05112878.

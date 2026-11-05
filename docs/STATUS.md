@@ -27,7 +27,21 @@
 - Emulator `mm_phone` and the DHU are test fixtures only; follow the `docs/DEVELOPMENT.md` procedure after any cold boot (head unit server must be restarted).
 - Gate before finishing: `./gradlew :mapengine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:lintRelease`.
 
-## Test counts (last run)
+## Compatibility verification (Windows, 2026-11-05)
+
+- Car regression suite (`MapScreenTest`): 13 tests passed, including four new compatibility tests.
+- Full app suite: 81 tests, 2 failures in existing DataStore tests
+  (`LabelNamesTest.legacyAndUnknownValuesMapToEnglish`,
+  `RotationTest.bearingPersistsAndOldDataLoadsAsNorthUp`): Windows file replacement/rename errors.
+- Engine suite: 126 tests, 1 failure and 2 skipped. The failure is the unchanged
+  `SourceHardeningTest.putIntoReadOnlyDirDoesNotThrowAndLeavesNoTempFiles`, where Windows refuses
+  `File.setWritable(false)` on a directory. The complete gate is therefore **not green** on this machine.
+- Debug and R8 release APK assembly succeeded. No release key is configured on this machine, so the
+  local release build is debug-signed and must not be used to update official installs.
+- Release lint passed (0 errors); warnings and hints remain in existing code/resources.
+- No physical device or DHU verification was possible; `adb devices` listed no devices.
+
+## Previously recorded test counts (Linux)
 
 - `:mapengine:test`: 124 tests, 0 failures (incl. MVT fuzzing: 20k random inputs, 5k fixture mutations, crafted malformed lengths/varints/gzip bombs; cache corruption; byte-bounded tile memory; name resolution with real tiles; viewport rotation; place index incl. a 50k-entry query benchmark; label obstacles; pure-JVM `MinecraftImporter` golden test against `client-26.3.jar` + synthetic pack/PNG tests; `RoutingTest` covering polyline decoding, OSRM & Google Routes v2 traffic parsing, and `RouteTracker` progress/off-route/arrival).
 - `:app:testDebugUnitTest`: 76 tests, 0 failures (Photon & Google Places parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec and backup import/export, update semver/JSON/policy/checksum parsing, `geo:` & shared Google Maps URL/text parsing, Google Maps notification mirror parsing, stable-area math, car `NavScreen`/`MapScreen` with Robolectric, car host allowlist).
@@ -152,6 +166,17 @@ Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 - The app imports the pack into `filesDir/packs/vanilla/` (atomic, sha256-checked `meta.json`), from the pinned jar (download now / after the next update on unmetered Wi-Fi) or from a file; a bundled pack wins over the stored one.
 
 ## Known limitations
+
+- Android Auto compatibility: root map controls are gated at host API 2; API 1 retains zoom/recenter in
+  the main strip. Place/result lists use `MapWithContentTemplate` only at API 7+, and API 1 uses the
+  baseline six-item list limit without querying the API-2 constraint service. Unknown handshakes fall
+  back to API 1. Regression coverage includes unknown/API 1/2/6/7 hosts, permission states, legacy
+  control clicks and result-list limits. Physical Xiaomi/HyperOS behaviour has not been reproduced;
+  this is compatibility hardening, not a confirmed fix for the reported S24/Xiaomi difference. The user
+  reports MineMaps missing from the Xiaomi launcher despite enabling developer/unknown-source settings
+  and using the in-app updater; discovery/installer eligibility still needs affected-device diagnostics.
+- Sideload eligibility and OEM battery/autostart policies are outside the app's control; an in-app update
+  cannot guarantee Android Auto launcher visibility. See README troubleshooting and developer diagnostics.
 
 - The updater was verified end to end on the emulator only (local fake GitHub API); the first real update will be the first run against api.github.com. Play Protect can block self-updates from an unknown developer (INSTALL_FAILED_VERIFICATION_FAILURE is shown in the dialog).
 - Map overlays use system bars + display cutout insets (safeDrawing minus the keyboard). Swipe-to-delete in the saved list was dropped in favour of a confirm dialog.
