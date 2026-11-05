@@ -67,11 +67,36 @@ Because MineMaps is installed from GitHub rather than the Google Play Store, fol
 2. Scroll all the way to the bottom and tap **Version** about 10 times until it asks to enable developer mode, then tap **OK**.
 3. Tap the **three-dot menu (⋮)** in the top-right corner and open **Developer settings**.
 4. Tap **Application Mode** and set it to **Developer**, and scroll down to check **Unknown sources**.
-5. **Android Auto 14+ installer check:** Modern Android Auto (`v14+`) also verifies that `CarAppService` apps were installed through Google's Package Installer with Play Store installer metadata.
-   - If MineMaps does not appear in **Android Auto → Customise launcher** right after a browser install, either install an update once through MineMaps' in-app updater (which invokes Google Package Installer with the required metadata) or install over USB with `tools/phone.sh --release`.
+5. **Installation restrictions:** Some Android Auto versions filter sideloaded apps based on their install source. MineMaps cannot override the host's eligibility checks. An in-app update or a USB install with `tools/phone.sh --release` may help on some devices, but is not guaranteed to make the app eligible.
 6. Check **Customise launcher** in the main Android Auto settings to make sure **MineMaps** is ticked.
 
-Next time you connect your phone to your car, **MineMaps** will appear in your Android Auto app launcher and can take the main map view (full screen or split dashboard).
+Reconnect your phone after setup. If Android Auto accepts the sideloaded app, MineMaps can take the main map view (full screen or split dashboard).
+
+### If it works on one phone but not another
+
+- **Missing from the launcher:** Check developer settings and **Customise launcher** above on that phone, update Android Auto, open MineMaps on the phone once, then reconnect. If Android Auto itself cannot connect, first check whether another map app works with the same car/cable. Android Auto requires a supported phone/ROM with Google services; not every Xiaomi/HyperOS ROM supports it.
+- **Opens but stops updating with the phone locked:** In the phone's app settings, allow MineMaps to run without battery restrictions. On Xiaomi/HyperOS, also check background autostart if that option is available. These are user-controlled settings; the app cannot silently bypass them.
+- **Map works but your position is missing:** Open MineMaps on the phone, grant location permission and turn on system location, then reconnect.
+- **Crashes or shows an error/blank screen:** Report the exact message, phone model, Android/HyperOS version, MineMaps version, Android Auto version, USB/wireless connection type, and whether it happens with the phone unlocked. See [diagnostics](docs/DEVELOPMENT.md#android-auto-compatibility-diagnostics).
+
+MineMaps adapts controls to the negotiated Android Auto host API (API 1: zoom/recenter in the main strip; API 2+: separate map controls; API 7+: maps beside place/result lists). This is not a guarantee of compatibility with every phone, ROM, host version, or sideloading policy.
+
+**Still absent after enabling Unknown sources and using the updater?** With USB debugging enabled and
+[Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) on your computer,
+collect the install source, then try installing the **official GitHub release APK** over the existing app:
+
+```text
+adb shell pm list packages -i app.minemaps
+adb install -r -i com.android.vending "MineMaps-vX.Y.Z.apk"
+adb shell pm list packages -i app.minemaps
+```
+
+Replace the filename with the downloaded APK path. This asks Android to record Play Store installer metadata;
+it does **not** make the app Play-distributed or bypass all Android Auto checks. `-r` keeps app data and Android
+still requires a matching signing key. Do not uninstall or use a local debug-signed build to resolve a signature
+error. Open MineMaps, disconnect/reconnect Android Auto, then check **Customise launcher** again. If it remains
+absent, report the install-source output and phone/ROM/Android Auto versions; repeating in-app updates is not a
+guaranteed remedy. Review diagnostic output for private information before sharing it.
 
 ---
 

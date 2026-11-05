@@ -59,7 +59,10 @@ not a smooth vector map with a pixel filter.
 - Android Auto gives the host's **map slot** (full screen, or the map pane of the split dashboard next to media apps)
   only to apps in `androidx.car.app.category.NAVIGATION`. A POI-category app is always second to Google Maps and can't take
   that slot, so MineMaps declares `NAVIGATION` with `androidx.car.app.NAVIGATION_TEMPLATES` (plus `MAP_TEMPLATES`, kept for
-  the `MapWithContentTemplate` places list) and `ACCESS_SURFACE`, `minCarApiLevel=7`.
+   the `MapWithContentTemplate` places list) and `ACCESS_SURFACE`, `minCarApiLevel=1`.
+  The root uses API-1-compatible zoom/recenter actions in the main strip on legacy hosts; API 2+
+  adds the separate map action strip and PAN. Places/results use plain lists below API 7, and
+  `MapWithContentTemplate` at API 7+. Unknown handshake capabilities are treated conservatively as API 1.
 - There is still **no routing or turn-by-turn**: the app never calls `NavigationManager.navigationStarted`, so other apps'
   guidance is never suppressed. This is deliberate and means the app does not meet the Play quality rules for navigation
   apps (e.g. NF-1/4/7); it is sideload-only ("Unknown sources" in Android Auto developer settings), not Play-compliant.

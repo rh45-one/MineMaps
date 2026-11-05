@@ -129,6 +129,7 @@ class NavScreen(
 
     override fun onGetTemplate(): Template {
         val permission = hasPermission()
+        val supportsMapActions = CarHostCapabilities.apiLevel(carContext) >= 2
         val strip = ActionStrip.Builder()
             .addAction(Action.Builder().setIcon(CarStrips.icon(carContext, R.drawable.ic_car_places)).setOnClickListener { onOpenPlaces() }.build())
         if (!permission) {
@@ -147,6 +148,12 @@ class NavScreen(
                     )
                     .build(),
             )
+        } else if (!supportsMapActions) {
+            // API 1 has no map action strip. Keep essential controls in the main strip
+            // (four actions including Places); appearance toggles remain on the phone.
+            strip.addAction(Action.Builder().setIcon(CarStrips.icon(carContext, R.drawable.ic_car_zoom_in)).setOnClickListener { actions.zoomIn() }.build())
+            strip.addAction(Action.Builder().setIcon(CarStrips.icon(carContext, R.drawable.ic_car_zoom_out)).setOnClickListener { actions.zoomOut() }.build())
+            strip.addAction(Action.Builder().setIcon(CarStrips.icon(carContext, R.drawable.ic_car_following)).setOnClickListener { actions.recenter() }.build())
         } else {
             strip.addAction(
                 Action.Builder()
@@ -169,7 +176,9 @@ class NavScreen(
         }
         val template = NavigationTemplate.Builder()
             .setActionStrip(strip.build())
-            .setMapActionStrip(CarStrips.mapActionStrip(carContext, actions, following))
+        if (supportsMapActions) {
+            template.setMapActionStrip(CarStrips.mapActionStrip(carContext, actions, following))
+        }
         shownKey = key()
         message(permission)?.let { (title, sub) ->
             val mb = MessageInfo.Builder(title)

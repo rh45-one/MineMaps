@@ -1,6 +1,7 @@
 package app.minemaps
 
 import android.location.Location
+import androidx.car.app.HandshakeInfo
 import androidx.car.app.model.Action
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.MessageTemplate
@@ -10,6 +11,7 @@ import androidx.car.app.testing.TestCarContext
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import app.minemaps.car.CarMapActions
+import app.minemaps.car.CarHostCapabilities
 import app.minemaps.car.InvalidateScheduler
 import app.minemaps.car.MapScreen
 import app.minemaps.data.SavedPlace
@@ -36,15 +38,17 @@ class MapScreenTest {
         override val traffic = MutableStateFlow(true)
         override val roadAlertsEnabled = MutableStateFlow(true)
         var toggled = 0
+        var zoomedIn = 0
+        var zoomedOut = 0
         var trafficToggled = 0
         var alertsToggled = 0
         var shown: Pair<Double, Double>? = null
         var recentered = 0
         var flewTo: Pair<Double, Double>? = null
 
-        override fun zoomIn() {}
+        override fun zoomIn() { zoomedIn++ }
 
-        override fun zoomOut() {}
+        override fun zoomOut() { zoomedOut++ }
 
         override fun recenter() {
             recentered++
@@ -94,8 +98,10 @@ class MapScreenTest {
         status: LocationState = LocationState(fix(), LocationStatus.OK),
         limit: Int = 6,
         scheduler: InvalidateScheduler = InvalidateScheduler { _, _ -> },
+        apiLevel: Int? = 7,
     ): Fixture {
         val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        apiLevel?.let { ctx.updateHandshakeInfo(HandshakeInfo("test", it)) }
         val actions = FakeActions()
         val placesFlow = MutableStateFlow(places)
         val locFlow = MutableStateFlow(status)
@@ -179,6 +185,7 @@ class MapScreenTest {
     @Test
     fun rootScreenIsANavigationTemplateWithoutRouteInformation() {
         val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        ctx.updateHandshakeInfo(HandshakeInfo("test", 7))
         val actions = FakeActions()
         var places = 0
         val screen = app.minemaps.car.NavScreen(ctx, actions, MutableStateFlow(LocationState(fix(), LocationStatus.OK)), { true }, {}, { places++ }, InvalidateScheduler { _, _ -> })
@@ -215,5 +222,77 @@ class MapScreenTest {
         val t = screen.onGetTemplate() as androidx.car.app.navigation.model.NavigationTemplate
         assertEquals("Grant on phone", t.actionStrip!!.actions[1].title.toString())
         assertIs<androidx.car.app.navigation.model.MessageInfo>(t.navigationInfo)
+    }
+
+    @Test
+    fun rootUsesMapControlsOnlyWhenSupportedByNegotiatedHost() {
+        for (level in listOf(null, 1, 2, 6, 7)) {
+            for (permission in listOf(false, true)) {
+                val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+                level?.let { ctx.updateHandshakeInfo(HandshakeInfo("test", it)) }
+                val screen = app.minemaps.car.NavScreen(ctx, FakeActions(), MutableStateFlow(LocationState(fix(), LocationStatus.OK)), { permission }, {}, {}, InvalidateScheduler { _, _ -> })
+                val template = screen.onGetTemplate() as androidx.car.app.navigation.model.NavigationTemplate
+                if ((level ?: 1) >= 2) {
+                    assertEquals(4, template.mapActionStrip!!.actions.size)
+                } else {
+                    assertEquals(null, template.mapActionStrip)
+                    assertEquals(if (permission) 4 else 2, template.actionStrip!!.actions.size)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun apiOneZoomAndRecenterControlsRemainUsable() {
+        val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+        ctx.updateHandshakeInfo(HandshakeInfo("test", 1))
+        val actions = FakeActions()
+        val screen = app.minemaps.car.NavScreen(ctx, actions, MutableStateFlow(LocationState(fix(), LocationStatus.OK)), { true }, {}, {}, InvalidateScheduler { _, _ -> })
+        val template = screen.onGetTemplate() as androidx.car.app.navigation.model.NavigationTemplate
+        val done = object : androidx.car.app.OnDoneCallback {
+            override fun onSuccess(response: androidx.car.app.serialization.Bundleable?) {}
+            override fun onFailure(response: androidx.car.app.serialization.Bundleable) { error("Click failed") }
+        }
+        template.actionStrip!!.actions.drop(1).forEach { it.onClickDelegate!!.sendClick(done) }
+        assertEquals(1, actions.zoomedIn)
+        assertEquals(1, actions.zoomedOut)
+        assertEquals(1, actions.recentered)
+    }
+
+    @Test
+    fun placesUsePlainContentBeforeApiSevenIncludingUnknownHandshake() {
+        for (level in listOf(null, 1, 2, 6, 7)) {
+            for (permission in listOf(false, true)) {
+                val template = fixture(permission = permission, apiLevel = level).screen.onGetTemplate()
+                val content = if ((level ?: 1) >= 7) {
+                    assertIs<MapWithContentTemplate>(template).contentTemplate
+                } else {
+                    template
+                }
+                if (permission) assertIs<ListTemplate>(content) else assertIs<MessageTemplate>(content)
+            }
+        }
+    }
+
+    @Test
+    fun searchResultsRespectHostApiAndListLimit() {
+        val results = (1..20).map {
+            app.minemaps.search.SearchResult("Result $it", "", "", 48.85, 2.29, null, null, null)
+        }
+        for (level in listOf(null, 1, 2, 6, 7)) {
+            val ctx = TestCarContext.createCarContext(ApplicationProvider.getApplicationContext())
+            level?.let { ctx.updateHandshakeInfo(HandshakeInfo("test", it)) }
+            assertEquals(level ?: 1, CarHostCapabilities.apiLevel(ctx))
+            val limit = CarHostCapabilities.listLimit(ctx)
+            assertTrue(limit > 0)
+            if ((level ?: 1) < 2) assertEquals(6, limit)
+            val template = app.minemaps.car.SearchResultsScreen(ctx, results, FakeActions()).onGetTemplate()
+            val content = if ((level ?: 1) >= 7) {
+                assertIs<MapWithContentTemplate>(template).contentTemplate
+            } else {
+                template
+            }
+            assertEquals(minOf(limit, results.size), assertIs<ListTemplate>(content).singleList!!.items.size)
+        }
     }
 }
