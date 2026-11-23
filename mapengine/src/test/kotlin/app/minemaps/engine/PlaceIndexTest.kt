@@ -137,4 +137,16 @@ class PlaceIndexTest {
         assertTrue(idx.isLandmark(hits.getValue("Eiffel Tower")))
         assertTrue(!idx.isLandmark(hits.getValue("Eiffel Cafe")))
     }
+
+    @Test
+    fun metersMatchesTrueNorthSouthAndEastWestDistancesAtHighLatitude() {
+        // Oslo (~60°N): 0.01° latitude is ~1113 m; without cos(lat) on dy it was ~2226 m
+        val lat0 = 60.0
+        val lon0 = 10.75
+        val x0 = Mercator.lonToX(lon0)
+        val y0 = Mercator.latToY(lat0)
+        val y1 = Mercator.latToY(lat0 + 0.01)
+        val ns = PlaceIndex.meters(x0, y0, x0, y1)
+        assertEquals(1113.0, ns, 25.0, "north-south distance at 60N should be ~1113 m, got $ns")
+    }
 }

@@ -153,4 +153,13 @@ class RasterizerTest {
         assertEquals(0, Block.auxHeightBucket(b))
         assertTrue(Block.auxMaterial(b) in intArrayOf(0, 3, 4), "large footprint -> stone/concrete/brick, got ${Block.auxMaterial(b)}")
     }
+
+    @Test
+    fun extremeNegativePolygonCoordinatesDoNotUnderflowOrCorruptGrid() {
+        // Polygon with one vertex inside the tile and others at Int.MIN_VALUE (outside to top-left)
+        val weird = polygon(intArrayOf(Int.MIN_VALUE, Int.MIN_VALUE, -100_000, Int.MIN_VALUE, 10, 10, Int.MIN_VALUE, 10), tags = emptyMap())
+        val g = GridRasterizer.rasterize(tile("water", weird), vt, vt)
+        // Far bottom-right cell must remain untouched (GRASS, not corrupted by Int.MIN_VALUE - 1 wraparound)
+        assertEquals(Block.GRASS.id, g.clsAt(200, 200))
+    }
 }

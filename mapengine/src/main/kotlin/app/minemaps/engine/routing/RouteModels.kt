@@ -147,19 +147,26 @@ object RouteTracker {
         var nextStep: RouteStep? = null
         var distToNext = remDist
         if (plan.steps.isNotEmpty()) {
-            var chosenIdx = plan.steps.lastIndex
+            var chosenIdx = -1
+            var prevStepSeg = 0
             for (sIdx in plan.steps.indices) {
                 val s = plan.steps[sIdx]
+                val stepSeg = nearestPointIndex(pts, s.maneuverPoint.lat, s.maneuverPoint.lng, prevStepSeg)
+                prevStepSeg = stepSeg
                 if (s.direction == TurnDirection.DEPART && plan.steps.size > 1) continue
-                val stepSeg = nearestPointIndex(pts, s.maneuverPoint.lat, s.maneuverPoint.lng)
                 if (stepSeg > bestSeg) {
                     chosenIdx = sIdx
                     break
                 }
             }
-            val step = plan.steps[chosenIdx]
-            nextStep = step
-            distToNext = metersBetween(lat, lon, step.maneuverPoint.lat, step.maneuverPoint.lng)
+            if (chosenIdx >= 0) {
+                val step = plan.steps[chosenIdx]
+                nextStep = step
+                distToNext = metersBetween(lat, lon, step.maneuverPoint.lat, step.maneuverPoint.lng)
+            } else {
+                nextStep = RouteStep("Arrive at destination", "", remDist, remDuration, TurnDirection.ARRIVE, dest)
+                distToNext = remDist
+            }
         }
 
         return RouteProgress(
@@ -172,10 +179,11 @@ object RouteTracker {
         )
     }
 
-    private fun nearestPointIndex(pts: List<LatLng>, lat: Double, lon: Double): Int {
-        var best = 0
+    private fun nearestPointIndex(pts: List<LatLng>, lat: Double, lon: Double, startIdx: Int = 0): Int {
+        val from = startIdx.coerceIn(0, (pts.size - 1).coerceAtLeast(0))
+        var best = from
         var bestD = Double.MAX_VALUE
-        for (i in pts.indices) {
+        for (i in from until pts.size) {
             val d = metersBetween(lat, lon, pts[i].lat, pts[i].lng)
             if (d < bestD) {
                 bestD = d

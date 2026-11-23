@@ -114,8 +114,9 @@ object GridRasterizer {
                 if (y0 == y1) continue
                 val lo = min(y0, y1)
                 val hi = max(y0, y1)
-                val rFirst = max(ceil(lo - 0.5).toInt(), LO)
-                val rLast = min(ceil(hi - 0.5).toInt() - 1, HI - 1)
+                if (hi < LO || lo > HI) continue
+                val rFirst = max(ceil(lo.coerceIn(LO.toDouble(), HI.toDouble()) - 0.5).toInt(), LO)
+                val rLast = min(ceil(hi.coerceIn(LO.toDouble(), HI.toDouble()) - 0.5).toInt() - 1, HI - 1)
                 for (row in rFirst..rLast) {
                     val yc = row + 0.5
                     val t = (yc - y0) / (y1 - y0)
@@ -130,9 +131,13 @@ object GridRasterizer {
             java.util.Arrays.sort(xs, 0, c)
             var k = 0
             while (k + 1 < c) {
-                val first = max(ceil(xs[k] - 0.5).toInt(), LO)
-                val last = min(ceil(xs[k + 1] - 0.5).toInt() - 1, HI - 1)
-                for (x in first..last) grid.set(x, row, block, aux)
+                val xLo = xs[k]
+                val xHi = xs[k + 1]
+                if (xHi >= LO && xLo <= HI) {
+                    val first = max(ceil(xLo.coerceIn(LO.toDouble(), HI.toDouble()) - 0.5).toInt(), LO)
+                    val last = min(ceil(xHi.coerceIn(LO.toDouble(), HI.toDouble()) - 0.5).toInt() - 1, HI - 1)
+                    for (x in first..last) grid.set(x, row, block, aux)
+                }
                 k += 2
             }
         }

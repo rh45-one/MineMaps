@@ -44,25 +44,26 @@ object RouteParsers {
 
     /** Parses an OSRM `/route/v1/driving/...` JSON response into a [RoutePlan]. */
     fun parseOsrm(text: String, latinize: (String) -> String = { it }): RoutePlan? = runCatching {
-        val root = json.parseToJsonElement(text).jsonObject
+        val root = json.parseToJsonElement(text) as? JsonObject ?: return null
         val routes = root["routes"] as? JsonArray ?: return null
-        val route = routes.firstOrNull()?.jsonObject ?: return null
+        val route = routes.firstOrNull() as? JsonObject ?: return null
         val geom = str(route, "geometry") ?: return null
         val pts = PolylineCodec.decode(geom)
         if (pts.size < 2) return null
-        val distance = route["distance"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-        val duration = route["duration"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        val distance = (route["distance"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        val duration = (route["duration"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
 
         val steps = ArrayList<RouteStep>()
         val legs = route["legs"] as? JsonArray
         legs?.forEach { legEl ->
-            val legSteps = legEl.jsonObject["steps"] as? JsonArray ?: return@forEach
+            val legObj = legEl as? JsonObject ?: return@forEach
+            val legSteps = legObj["steps"] as? JsonArray ?: return@forEach
             legSteps.forEach { stepEl ->
-                val s = stepEl.jsonObject
-                val m = s["maneuver"]?.jsonObject ?: return@forEach
-                val loc = m["location"]?.jsonArray
-                val lon = loc?.getOrNull(0)?.jsonPrimitive?.doubleOrNull
-                val lat = loc?.getOrNull(1)?.jsonPrimitive?.doubleOrNull
+                val s = stepEl as? JsonObject ?: return@forEach
+                val m = s["maneuver"] as? JsonObject ?: return@forEach
+                val loc = m["location"] as? JsonArray
+                val lon = (loc?.getOrNull(0) as? JsonPrimitive)?.doubleOrNull
+                val lat = (loc?.getOrNull(1) as? JsonPrimitive)?.doubleOrNull
                 if (lat == null || lon == null || !lat.isFinite() || !lon.isFinite()) return@forEach
                 val type = str(m, "type").orEmpty()
                 val mod = str(m, "modifier").orEmpty()
@@ -75,8 +76,8 @@ object RouteParsers {
                 }
                 val dir = osrmDirection(type, mod)
                 val instruction = formatOsrmInstruction(type, dir, road)
-                val sDist = s["distance"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-                val sDur = s["duration"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+                val sDist = (s["distance"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+                val sDur = (s["duration"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
                 steps.add(RouteStep(instruction, road, sDist, sDur, dir, LatLng(lat, lon)))
             }
         }
@@ -118,41 +119,41 @@ object RouteParsers {
 
     /** Parses a Google Routes API v2 `computeRoutes` JSON response (with optional traffic speed intervals). */
     fun parseGoogleRoutes(text: String, latinize: (String) -> String = { it }): RoutePlan? = runCatching {
-        val root = json.parseToJsonElement(text).jsonObject
+        val root = json.parseToJsonElement(text) as? JsonObject ?: return null
         val routes = root["routes"] as? JsonArray ?: return null
-        val route = routes.firstOrNull()?.jsonObject ?: return null
-        val encoded = route["polyline"]?.jsonObject?.let { str(it, "encodedPolyline") } ?: return null
+        val route = routes.firstOrNull() as? JsonObject ?: return null
+        val encoded = (route["polyline"] as? JsonObject)?.let { str(it, "encodedPolyline") } ?: return null
         val pts = PolylineCodec.decode(encoded)
         if (pts.size < 2) return null
-        val distance = route["distanceMeters"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        val distance = (route["distanceMeters"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
         val duration = parseGoogleDuration(str(route, "duration"))
 
         val steps = ArrayList<RouteStep>()
         val intervals = ArrayList<TrafficInterval>()
         val legs = route["legs"] as? JsonArray
         legs?.forEach { legEl ->
-            val leg = legEl.jsonObject
+            val leg = legEl as? JsonObject ?: return@forEach
             (leg["steps"] as? JsonArray)?.forEach { stepEl ->
-                val s = stepEl.jsonObject
-                val nav = s["navigationInstruction"]?.jsonObject
+                val s = stepEl as? JsonObject ?: return@forEach
+                val nav = s["navigationInstruction"] as? JsonObject
                 val rawInstr = nav?.let { str(it, "instructions") }?.replace('\n', ' ')?.trim()?.let(latinize).orEmpty()
                 val maneuver = nav?.let { str(it, "maneuver") }.orEmpty()
                 val dir = googleDirection(maneuver)
-                val locObj = s["startLocation"]?.jsonObject?.get("latLng")?.jsonObject
-                val lat = locObj?.get("latitude")?.jsonPrimitive?.doubleOrNull
-                val lon = locObj?.get("longitude")?.jsonPrimitive?.doubleOrNull
+                val locObj = (s["startLocation"] as? JsonObject)?.get("latLng") as? JsonObject
+                val lat = (locObj?.get("latitude") as? JsonPrimitive)?.doubleOrNull
+                val lon = (locObj?.get("longitude") as? JsonPrimitive)?.doubleOrNull
                 if (lat != null && lon != null && lat.isFinite() && lon.isFinite()) {
-                    val sDist = s["distanceMeters"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                    val sDist = (s["distanceMeters"] as? JsonPrimitive)?.doubleOrNull ?: 0.0
                     val sDur = parseGoogleDuration(str(s, "staticDuration"))
                     val instr = rawInstr.ifBlank { formatOsrmInstruction("", dir, "") }
                     steps.add(RouteStep(instr, "", sDist, sDur, dir, LatLng(lat, lon)))
                 }
             }
-            val advisory = leg["travelAdvisory"]?.jsonObject ?: route["travelAdvisory"]?.jsonObject
+            val advisory = (leg["travelAdvisory"] as? JsonObject) ?: (route["travelAdvisory"] as? JsonObject)
             (advisory?.get("speedReadingIntervals") as? JsonArray)?.forEach { ivEl ->
-                val iv = ivEl.jsonObject
-                val start = iv["startPolylinePointIndex"]?.jsonPrimitive?.intOrNull ?: 0
-                val end = iv["endPolylinePointIndex"]?.jsonPrimitive?.intOrNull ?: 0
+                val iv = ivEl as? JsonObject ?: return@forEach
+                val start = (iv["startPolylinePointIndex"] as? JsonPrimitive)?.intOrNull ?: 0
+                val end = (iv["endPolylinePointIndex"] as? JsonPrimitive)?.intOrNull ?: 0
                 val speed = when (str(iv, "speed")) {
                     "SLOW" -> TrafficSpeed.SLOW
                     "TRAFFIC_JAM" -> TrafficSpeed.TRAFFIC_JAM
@@ -164,11 +165,11 @@ object RouteParsers {
             }
         }
         if (intervals.isEmpty()) {
-            val routeAdv = route["travelAdvisory"]?.jsonObject
+            val routeAdv = route["travelAdvisory"] as? JsonObject
             (routeAdv?.get("speedReadingIntervals") as? JsonArray)?.forEach { ivEl ->
-                val iv = ivEl.jsonObject
-                val start = iv["startPolylinePointIndex"]?.jsonPrimitive?.intOrNull ?: 0
-                val end = iv["endPolylinePointIndex"]?.jsonPrimitive?.intOrNull ?: 0
+                val iv = ivEl as? JsonObject ?: return@forEach
+                val start = (iv["startPolylinePointIndex"] as? JsonPrimitive)?.intOrNull ?: 0
+                val end = (iv["endPolylinePointIndex"] as? JsonPrimitive)?.intOrNull ?: 0
                 val speed = when (str(iv, "speed")) {
                     "SLOW" -> TrafficSpeed.SLOW
                     "TRAFFIC_JAM" -> TrafficSpeed.TRAFFIC_JAM

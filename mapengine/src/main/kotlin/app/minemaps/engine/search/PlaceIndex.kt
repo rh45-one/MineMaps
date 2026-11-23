@@ -194,8 +194,9 @@ class PlaceIndex(private val maxEntries: Int = 50_000) {
 
         fun meters(ax: Double, ay: Double, bx: Double, by: Double): Double {
             val lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ay + by) / 2)))
-            val dx = (ax - bx).let { if (it > 0.5) it - 1 else if (it < -0.5) it + 1 else it } * EARTH_M * cos(lat)
-            return hypot(dx, (ay - by) * EARTH_M)
+            val scale = EARTH_M * cos(lat)
+            val dx = (ax - bx).let { if (it > 0.5) it - 1 else if (it < -0.5) it + 1 else it } * scale
+            return hypot(dx, (ay - by) * scale)
         }
     }
 }

@@ -8,6 +8,7 @@ import app.minemaps.engine.routing.RouteStep
 import app.minemaps.engine.routing.RouteTracker
 import app.minemaps.engine.routing.TrafficSpeed
 import app.minemaps.engine.routing.TurnDirection
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -249,6 +250,119 @@ class RoutingTest {
             val screen = vp.worldToScreen(pwx, pwy)
             assertEquals(300.0, screen.x, 1.0)
             assertEquals(680.0, screen.y, 1.0)
+        }
+    }
+
+    @Test
+    fun routeTrackerSynthesizesArriveStepOnFinalLegWithoutArriveManeuver() {
+        val p0 = LatLng(41.8900, 12.4900)
+        val p1 = LatLng(41.8900, 12.4950)
+        val p2 = LatLng(41.8950, 12.4950)
+        // Google Routes v2 style: steps have startLocation and no ARRIVE maneuver
+        val steps = listOf(
+            RouteStep("Head east", "Via A", 400.0, 40.0, TurnDirection.DEPART, p0),
+            RouteStep("Turn left onto Via B", "Via B", 550.0, 60.0, TurnDirection.LEFT, p1),
+        )
+        val plan = RoutePlan(listOf(p0, p1, p2), steps, 950.0, 100.0, providerLabel = "Google Maps")
+
+        // Past p1 on the final leg, still ~300 m from p2
+        val finalLeg = RouteTracker.evaluate(plan, 41.8925, 12.4950)
+        assertEquals(false, finalLeg.arrived)
+        assertEquals(TurnDirection.ARRIVE, finalLeg.currentStep?.direction)
+        assertEquals(finalLeg.remainingDistanceMeters, finalLeg.distanceToNextStepMeters, 1e-3)
+    }
+
+    @Test
+    fun parsersTolerateJsonNullOnOptionalObjects() {
+        val postPassWithNullGeom = """
+            {
+              "type": "FeatureCollection",
+              "features": [
+                { "type": "Feature", "properties": { "osm_id": 1, "tags": { "highway": "speed_camera" } }, "geometry": null },
+                { "type": "Feature", "properties": { "osm_id": 2, "tags": { "highway": "speed_camera", "maxspeed": "80" } }, "geometry": { "type": "Point", "coordinates": [2.35, 48.85] } }
+              ]
+            }
+        """.trimIndent()
+        val pp = app.minemaps.engine.routing.RoadAlertsParser.parsePostPass(postPassWithNullGeom)
+        assertEquals(1, pp.size)
+        assertEquals("cam_2", pp[0].id)
+
+        val overpassWithNullTags = """
+            {
+              "elements": [
+                { "type": "node", "id": 10, "lat": 48.85, "lon": 2.35, "tags": null },
+                { "type": "node", "id": 11, "lat": 48.86, "lon": 2.36, "tags": { "highway": "speed_camera" } }
+              ]
+            }
+        """.trimIndent()
+        val op = app.minemaps.engine.routing.RoadAlertsParser.parseOverpass(overpassWithNullTags)
+        assertEquals(1, op.size)
+        assertEquals("cam_11", op[0].id)
+
+        val googleWithNullAdvisory = """
+            {
+              "routes": [
+                {
+                  "distanceMeters": 1000,
+                  "duration": "120s",
+                  "polyline": { "encodedPolyline": "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
+                  "travelAdvisory": null,
+                  "legs": [
+                    {
+                      "travelAdvisory": null,
+                      "steps": [
+                        {
+                          "distanceMeters": 1000,
+                          "staticDuration": "120s",
+                          "startLocation": { "latLng": { "latitude": 38.5, "longitude": -120.2 } },
+                          "navigationInstruction": null
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+        val gp = RouteParsers.parseGoogleRoutes(googleWithNullAdvisory)
+        assertNotNull(gp)
+        assertEquals(1, gp.steps.size)
+    }
+
+    @Test
+    fun roadAlertsClientPropagatesCancellationWithoutFallbackCalls() {
+        val callCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val started = java.util.concurrent.CountDownLatch(1)
+        val client = okhttp3.OkHttpClient.Builder().addInterceptor(okhttp3.Interceptor { chain ->
+            callCount.incrementAndGet()
+            started.countDown()
+            try {
+                Thread.sleep(5_000)
+            } catch (e: InterruptedException) {
+                throw java.io.IOException("cancelled", e)
+            }
+            throw java.io.IOException("timeout")
+        }).build()
+        val alertsClient = app.minemaps.engine.routing.RoadAlertsClient(
+            clientProvider = { client },
+            userAgent = "test",
+            overpassUrl = "https://overpass.test/1",
+            postPassUrl = "https://postpass.test/1",
+            nominatimUrl = "https://nominatim.test/1",
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                val job = launch(kotlinx.coroutines.Dispatchers.Default) {
+                    alertsClient.fetchNearby(48.85, 2.35)
+                }
+                assertTrue(started.await(2, java.util.concurrent.TimeUnit.SECONDS))
+                job.cancel()
+                job.join()
+            }
+            assertEquals(1, callCount.get(), "cancelled fetchNearby must not invoke fallback providers")
+        } finally {
+            client.dispatcher.executorService.shutdownNow()
+            client.connectionPool.evictAll()
         }
     }
 }
