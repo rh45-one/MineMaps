@@ -33,6 +33,37 @@ class DiskTileCacheTest {
         dir.deleteRecursively()
     }
 
+    @Test
+    fun concurrentGetAndEvictEnforcesMaxBytesWithoutTimSortFailure() {
+        val dir = Files.createTempDirectory("tilecache-race").toFile()
+        try {
+            var tick = 1_000_000L
+            val cache = DiskTileCache(dir, maxBytes = 4_000, ttlMillis = 60_000, clock = { tick += 1000; tick })
+            val payload = ByteArray(150) { 7 }
+            for (i in 0 until 20) cache.put("k$i", payload)
+            val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+            val readers = List(4) { r ->
+                Thread {
+                    var i = r
+                    while (!stop.get()) {
+                        cache.get("k${i % 60}")
+                        i++
+                    }
+                }.apply { start() }
+            }
+            for (i in 20 until 120) {
+                cache.put("k$i", payload)
+            }
+            stop.set(true)
+            readers.forEach { it.join(5000) }
+            assertTrue(cache.sizeBytes() <= 4_000, "cache exceeded maxBytes: ${cache.sizeBytes()}")
+            val actualOnDisk = dir.listFiles { f -> f.name.endsWith(".tile") }?.sumOf { it.length() } ?: 0L
+            assertTrue(actualOnDisk <= 4_000, "actual bytes on disk exceeded maxBytes: $actualOnDisk")
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     private object File2 {
         fun touch(dir: java.io.File, @Suppress("UNUSED_PARAMETER") n: Int) {
             dir.listFiles()?.forEachIndexed { i, f -> f.setLastModified(1000L + i) }

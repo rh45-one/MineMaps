@@ -30,6 +30,7 @@ class OpenMapTilesSource(
     private val cache: DiskTileCache,
     private val tileJsonTtlMillis: Long = 24L * 3600 * 1000,
     maxConcurrent: Int = 4,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : TileSource {
     private class TileJson(val template: String, val minZoom: Int, val maxZoom: Int)
 
@@ -44,6 +45,14 @@ class OpenMapTilesSource(
     @Volatile
     private var tileJsonFetchedAt = 0L
 
+    @Volatile
+    private var tileJsonRetryAt = 0L
+
+    override val reportsNetworkSuccess: Boolean = true
+
+    @Volatile
+    override var onNetworkSuccess: (() -> Unit)? = null
+
     override val maxZoom: Int get() = tileJson?.maxZoom ?: 14
 
     override suspend fun fetch(key: TileKey): ByteArray? {
@@ -56,8 +65,12 @@ class OpenMapTilesSource(
         return try {
             val response = permits.withPermit { execute(url, MAX_TILE_BYTES, tileClient) }
             when (response.code) {
-                200 -> response.body.also { cache.put(name, it) }
+                200 -> {
+                    onNetworkSuccess?.invoke()
+                    response.body.also { cache.put(name, it) }
+                }
                 404, 204 -> {
+                    onNetworkSuccess?.invoke()
                     cache.put(name, ByteArray(0))
                     null
                 }
@@ -69,12 +82,19 @@ class OpenMapTilesSource(
     }
 
     override fun cachedKeys(z: Int): List<TileKey> {
-        val prefix = tileJson?.let { "t_${it.template.hashCode().toUInt().toString(16)}_${z}_" } ?: return emptyList()
+        val tj = tileJson ?: loadCachedTileJson() ?: return emptyList()
+        val prefix = "t_${tj.template.hashCode().toUInt().toString(16)}_${z}_"
         return cache.names().mapNotNull { n ->
             if (!n.startsWith(prefix)) return@mapNotNull null
             val p = n.removePrefix(prefix).split('_')
             if (p.size == 2) TileKey(z, p[0].toIntOrNull() ?: return@mapNotNull null, p[1].toIntOrNull() ?: return@mapNotNull null) else null
         }
+    }
+
+    private fun loadCachedTileJson(): TileJson? {
+        tileJson?.let { return it }
+        val cached = cache.get(TILEJSON_NAME) ?: return null
+        return runCatching { parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis) }.getOrNull()
     }
 
     private class Result(val code: Int, val body: ByteArray)
@@ -110,9 +130,11 @@ class OpenMapTilesSource(
     }
 
     private suspend fun resolveTileJson(): TileJson {
-        tileJson?.let { if (System.currentTimeMillis() - tileJsonFetchedAt < tileJsonTtlMillis) return it }
+        val now = clock()
+        tileJson?.let { if (now - tileJsonFetchedAt < tileJsonTtlMillis || now < tileJsonRetryAt) return it }
         return tileJsonMutex.withLock {
-            tileJson?.let { if (System.currentTimeMillis() - tileJsonFetchedAt < tileJsonTtlMillis) return it }
+            val t = clock()
+            tileJson?.let { if (t - tileJsonFetchedAt < tileJsonTtlMillis || t < tileJsonRetryAt) return it }
             val cached = cache.get(TILEJSON_NAME)
             if (cached != null && cache.isFresh(cached, tileJsonTtlMillis)) {
                 runCatching { parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis) }.getOrNull()?.let { return it }
@@ -121,12 +143,18 @@ class OpenMapTilesSource(
                 val r = permits.withPermit { execute(tileJsonUrl, MAX_TILEJSON_BYTES) }
                 if (r.code != 200) throw IOException("HTTP ${r.code} for $tileJsonUrl")
                 val text = String(r.body, Charsets.UTF_8)
-                val parsed = parse(text, System.currentTimeMillis())
+                val parsed = parse(text, clock())
+                tileJsonRetryAt = 0L
+                onNetworkSuccess?.invoke()
                 cache.put(TILEJSON_NAME, r.body)
                 parsed
             } catch (e: IOException) {
                 val stale = cached?.let { runCatching { parse(String(it.bytes, Charsets.UTF_8), it.fetchedAtMillis) }.getOrNull() }
-                stale ?: throw e
+                if (stale != null) {
+                    tileJsonRetryAt = clock() + TILEJSON_RETRY_COOLDOWN_MS
+                    return@withLock stale
+                }
+                throw e
             }
         }
     }
@@ -155,6 +183,7 @@ class OpenMapTilesSource(
         const val MAX_TILE_BYTES = 8L * 1024 * 1024
         const val MAX_TILEJSON_BYTES = 1L * 1024 * 1024
         const val TILE_CALL_TIMEOUT_SECONDS = 30L
+        const val TILEJSON_RETRY_COOLDOWN_MS = 60_000L
         const val MAX_ZOOM_LIMIT = 16
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2", "::1", "[::1]")
 

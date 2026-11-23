@@ -120,10 +120,26 @@ class MapTileProvider(
 
     private val lock = Any()
     private val pending = HashMap<RenderKey, Job>()
-    private val pendingLabels = HashSet<TileKey>()
+    private val pendingLabels = HashMap<TileKey, Job>()
     private val failedTiles = HashMap<RenderKey, Long>()
     private val failedLabels = HashMap<TileKey, Long>()
     private val labelCache = LruMap<TileKey, TileLabels>(LABEL_CAPACITY)
+    private var resolverGen = 0L
+    @Volatile
+    private var offlineAtSuccessCount = -1L
+
+    private fun markOffline() {
+        offlineAtSuccessCount = repo.networkSuccessCount()
+        _networkState.value = NetState.OFFLINE
+    }
+
+    private fun maybeMarkOnline() {
+        val mark = offlineAtSuccessCount
+        if (mark < 0L || repo.networkSuccessCount() > mark) {
+            offlineAtSuccessCount = -1L
+            _networkState.value = NetState.OK
+        }
+    }
 
     private val grids = SingleFlightCache<TileKey, BlockGrid>(scope, GRID_CAPACITY) { gridKey ->
         val vtKey = gridKey.ancestor(minOf(gridKey.z, repo.maxZoom))
@@ -153,14 +169,25 @@ class MapTileProvider(
 
     fun retainOnly(keys: Collection<TileKey>) {
         val keep = keys.toHashSet()
-        val cancel = synchronized(lock) { pending.filterKeys { it.tile !in keep }.values.toList() }
+        val keepVt = HashSet<TileKey>(keep.size * 2)
+        for (k in keep) {
+            keepVt.add(k)
+            keepVt.add(vectorTileKey(k))
+        }
+        val cancel = synchronized(lock) {
+            pending.filterKeys { it.tile !in keep }.values +
+                pendingLabels.filterKeys { it !in keepVt }.values
+        }
         cancel.forEach { it.cancel() }
     }
 
     fun setNameResolver(resolver: NameResolver) {
-        nameResolver = resolver
-        labelExtractor = LabelExtractor(resolver)
-        labelCache.clear()
+        synchronized(lock) {
+            nameResolver = resolver
+            labelExtractor = LabelExtractor(resolver)
+            resolverGen++
+            labelCache.clear()
+        }
     }
 
     suspend fun inspect(wx: Double, wy: Double, zoom: Double, pixelRatio: Float = 1f): InspectResult? {
@@ -173,27 +200,38 @@ class MapTileProvider(
 
     fun pendingCount(): Int = synchronized(lock) { pending.size }
 
+    fun pendingLabelCount(): Int = synchronized(lock) { pendingLabels.size }
+
     fun labels(vtKey: TileKey): TileLabels? {
         labelCache.get(vtKey)?.let { return it }
+        val job: Job
         synchronized(lock) {
+            labelCache.get(vtKey)?.let { return it }
             failedLabels[vtKey]?.let { until -> if (clock() < until) return null else failedLabels.remove(vtKey) }
-            if (!pendingLabels.add(vtKey)) return null
-        }
-        scope.launch {
-            var attempt = 0
-            try {
+            if (pendingLabels.containsKey(vtKey)) return null
+            job = scope.launch(start = CoroutineStart.LAZY) {
+                var attempt = 0
                 while (true) {
                     try {
+                        val (extractor, gen) = synchronized(lock) { labelExtractor to resolverGen }
                         val tile = repo.get(vtKey)
-                        val result = withContext(cpu) { labelExtractor.extract(tile, vtKey) }
-                        labelCache.put(vtKey, result)
-                        _networkState.value = NetState.OK
+                        val result = withContext(cpu) { extractor.extract(tile, vtKey) }
+                        val stored = synchronized(lock) {
+                            if (gen == resolverGen) {
+                                labelCache.put(vtKey, result)
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        if (!stored) continue
+                        maybeMarkOnline()
                         onLabelsReady?.invoke(vtKey)
                         return@launch
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: IOException) {
-                        _networkState.value = NetState.OFFLINE
+                        markOffline()
                         if (attempt >= maxAttempts) {
                             synchronized(lock) { failedLabels[vtKey] = clock() + IO_FAILURE_WINDOW_MS }
                             return@launch
@@ -208,10 +246,11 @@ class MapTileProvider(
                         return@launch
                     }
                 }
-            } finally {
-                synchronized(lock) { pendingLabels.remove(vtKey) }
             }
+            pendingLabels[vtKey] = job
+            job.invokeOnCompletion { synchronized(lock) { if (pendingLabels[vtKey] === job) pendingLabels.remove(vtKey) } }
         }
+        job.start()
         return null
     }
 
@@ -226,13 +265,13 @@ class MapTileProvider(
                     timings.compose.record(System.nanoTime() - t0)
                     p
                 }
-                _networkState.value = NetState.OK
+                maybeMarkOnline()
                 onTileReady(rk.tile, rk.night, pixels)
                 return
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
-                _networkState.value = NetState.OFFLINE
+                markOffline()
                 if (attempt >= maxAttempts) {
                     synchronized(lock) { failedTiles[rk] = clock() + IO_FAILURE_WINDOW_MS }
                     return

@@ -29,7 +29,9 @@ class DiskTileCache(
         return try {
             val raw = file.readBytes()
             if (raw.size < HEADER) {
-                file.delete()
+                synchronized(lock) {
+                    if (file.delete() && totalBytes >= 0) totalBytes = maxOf(0L, totalBytes - raw.size)
+                }
                 return null
             }
             val buf = ByteBuffer.wrap(raw, 0, HEADER)
@@ -41,7 +43,9 @@ class DiskTileCache(
                 }
                 return null
             }
-            file.setLastModified(clock())
+            synchronized(lock) {
+                file.setLastModified(clock())
+            }
             Entry(raw.copyOfRange(HEADER, raw.size), ts)
         } catch (e: IOException) {
             null
@@ -94,11 +98,14 @@ class DiskTileCache(
     }
 
     private fun evict() {
-        val files = dir.listFiles { f -> f.name.endsWith(EXT) }?.sortedBy { it.lastModified() } ?: return
-        for (f in files) {
-            if (totalBytes <= maxBytes) break
-            val len = f.length()
-            if (f.delete()) totalBytes -= len
+        val target = (maxBytes * 9L) / 10L
+        val entries = dir.listFiles { f -> f.name.endsWith(EXT) }
+            ?.map { Triple(it, it.lastModified(), it.length()) }
+            ?.sortedBy { it.second }
+            ?: return
+        for ((f, _, len) in entries) {
+            if (totalBytes <= target) break
+            if (f.delete()) totalBytes = maxOf(0L, totalBytes - len)
         }
     }
 

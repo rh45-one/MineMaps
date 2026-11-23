@@ -178,4 +178,73 @@ class SourceHardeningTest {
         assertContentEquals(byteArrayOf(9), cache.get("t")!!.bytes)
         File(dir, "x.tile").writeBytes(ByteArray(0))
     }
+
+    @Test
+    fun cachedKeysLoadsTileJsonFromDiskOnColdStart() {
+        val dir = Files.createTempDirectory("cold").toFile()
+        try {
+            var now = 10_000L
+            val cache = DiskTileCache(dir, clock = { now })
+            val client = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                val body = if (req.url.toString() == tileJsonUrl) goodTileJson.toByteArray() else byteArrayOf(1, 2, 3)
+                resp(req, 200, body)
+            }).build()
+            val warmSource = OpenMapTilesSource(tileJsonUrl, client, "ua", cache, clock = { now })
+            val key = TileKey(14, 8296, 5636)
+            assertNotNull(runBlocking { warmSource.fetch(key) })
+
+            // Simulate cold start with a brand-new OpenMapTilesSource before any fetch()
+            val failingClient = OkHttpClient.Builder().addInterceptor(Interceptor { throw IOException("offline") }).build()
+            val coldSource = OpenMapTilesSource(tileJsonUrl, failingClient, "ua", cache, clock = { now })
+            assertEquals(listOf(key), coldSource.cachedKeys(14))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun staleTileJsonFallbackBacksOffInsteadOfRetryingEveryFetch() {
+        val dir = Files.createTempDirectory("backoff").toFile()
+        try {
+            var now = 1_000L
+            var tjCalls = 0
+            var failNetwork = false
+            val cache = DiskTileCache(dir, ttlMillis = 30L * 24 * 3600 * 1000, clock = { now })
+            val client = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                if (req.url.toString() == tileJsonUrl) {
+                    tjCalls++
+                    if (failNetwork) throw IOException("offline")
+                    resp(req, 200, goodTileJson.toByteArray())
+                } else {
+                    if (failNetwork) throw IOException("offline")
+                    resp(req, 200, byteArrayOf(4, 5, 6))
+                }
+            }).build()
+            val source = OpenMapTilesSource(tileJsonUrl, client, "ua", cache, tileJsonTtlMillis = 1_000L, clock = { now })
+            val k1 = TileKey(14, 1, 1)
+            val k2 = TileKey(14, 1, 2)
+            assertNotNull(runBlocking { source.fetch(k1) })
+            assertNotNull(runBlocking { source.fetch(k2) })
+            assertEquals(1, tjCalls)
+
+            // Expire TileJSON TTL (> 1000 ms) while tiles remain fresh, and go offline
+            now += 5_000L
+            failNetwork = true
+            assertNotNull(runBlocking { source.fetch(k1) })
+            assertEquals(2, tjCalls) // 1 attempt that fell back to stale TileJSON
+            // Subsequent fetches within cooldown must NOT retry TileJSON network call
+            assertNotNull(runBlocking { source.fetch(k2) })
+            assertNotNull(runBlocking { source.fetch(k1) })
+            assertEquals(2, tjCalls)
+
+            // After cooldown expires, a single retry is allowed
+            now += OpenMapTilesSource.TILEJSON_RETRY_COOLDOWN_MS + 1
+            assertNotNull(runBlocking { source.fetch(k1) })
+            assertEquals(3, tjCalls)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }
