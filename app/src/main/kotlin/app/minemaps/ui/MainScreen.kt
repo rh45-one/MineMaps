@@ -523,6 +523,14 @@ private fun MapScreen(
         }
     }
 
+    val flyTarget by vm.pendingFlyTarget.collectAsState()
+    LaunchedEffect(flyTarget) {
+        val t = flyTarget ?: return@LaunchedEffect
+        val view = controller.view ?: return@LaunchedEffect
+        vm.pendingFlyTarget.value = null
+        view.animateTo(t.lat, t.lon, t.zoom)
+    }
+
     LaunchedEffect(Unit) {
         vm.messages.collect { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show() }
     }

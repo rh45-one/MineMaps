@@ -153,4 +153,34 @@ class HardeningTest {
             app.minemaps.map.AndroidPngDecoder.decode(byteArrayOf(1, 2, 3))
         }
     }
+
+    @Test
+    fun coarseNetworkLocationDoesNotOverwriteFreshGpsFix() {
+        val gps = android.location.Location(android.location.LocationManager.GPS_PROVIDER).apply {
+            latitude = 48.8566
+            longitude = 2.3522
+            accuracy = 4f
+            elapsedRealtimeNanos = 10_000_000_000L
+        }
+        val coarseNet = android.location.Location(android.location.LocationManager.NETWORK_PROVIDER).apply {
+            latitude = 48.8600
+            longitude = 2.3550
+            accuracy = 500f
+            elapsedRealtimeNanos = 10_001_000_000L
+        }
+        assertTrue(!app.minemaps.location.LocationRepository.isBetterLocation(coarseNet, gps))
+
+        // Once GPS fix is stale (>15s), coarse network fix is accepted
+        val staleNet = android.location.Location(coarseNet).apply {
+            elapsedRealtimeNanos = gps.elapsedRealtimeNanos + 20_000_000_000L
+        }
+        assertTrue(app.minemaps.location.LocationRepository.isBetterLocation(staleNet, gps))
+
+        // Same-provider newer GPS fix is accepted even if accuracy fluctuates
+        val nextGps = android.location.Location(gps).apply {
+            accuracy = 60f
+            elapsedRealtimeNanos = gps.elapsedRealtimeNanos + 1_000_000_000L
+        }
+        assertTrue(app.minemaps.location.LocationRepository.isBetterLocation(nextGps, gps))
+    }
 }

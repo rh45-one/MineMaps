@@ -108,6 +108,38 @@ class GeoIntentTest {
         assertEquals(41.9059, parsed[0].lat, 1e-4)
         assertEquals(12.4809, parsed[0].lon, 1e-4)
     }
+
+    @Test
+    fun sharedUrlsWithEncodedAmpersandAndPercentAreNotTruncatedOrDropped() {
+        assertEquals(
+            GeoTarget.Query("Barnes & Noble"),
+            GeoIntent.parseSharedText("https://maps.google.com/?q=Barnes+%26+Noble"),
+        )
+        assertEquals(
+            GeoTarget.Query("100% Natural"),
+            GeoIntent.parseSharedText("https://maps.google.com/?q=100%25+Natural"),
+        )
+    }
+
+    @Test
+    fun googleMapsMirrorDismissWhenIdleDoesNotSilenceFutureSessions() {
+        app.minemaps.nav.GoogleMapsMirror.onNotificationCleared()
+        // Calling dismissAndExitGoogleMaps() when no Google Maps notification is active must not set dismissedSession
+        app.minemaps.nav.GoogleMapsMirror.dismissAndExitGoogleMaps()
+        val info = app.minemaps.nav.MirroredNavInfo("Turn left", "200 m", "5 min", app.minemaps.engine.routing.TurnDirection.LEFT)
+        app.minemaps.nav.GoogleMapsMirror.onNotificationUpdated(info, null)
+        assertEquals(info, app.minemaps.nav.GoogleMapsMirror.active.value)
+        // Dismissing while active suppresses updates for that session until cleared
+        app.minemaps.nav.GoogleMapsMirror.dismissAndExitGoogleMaps()
+        assertNull(app.minemaps.nav.GoogleMapsMirror.active.value)
+        app.minemaps.nav.GoogleMapsMirror.onNotificationUpdated(info, null)
+        assertNull(app.minemaps.nav.GoogleMapsMirror.active.value)
+        // Clearing resets for the next session
+        app.minemaps.nav.GoogleMapsMirror.onNotificationCleared()
+        app.minemaps.nav.GoogleMapsMirror.onNotificationUpdated(info, null)
+        assertEquals(info, app.minemaps.nav.GoogleMapsMirror.active.value)
+        app.minemaps.nav.GoogleMapsMirror.onNotificationCleared()
+    }
 }
 
 class NavigateHandlerTest {

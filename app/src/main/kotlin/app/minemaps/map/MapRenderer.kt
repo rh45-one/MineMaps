@@ -307,7 +307,11 @@ class MapRenderer(
 
     suspend fun inspect(wx: Double, wy: Double, zoom: Double): InspectResult? = provider.inspect(wx, wy, zoom, pixelRatio)
 
+    private var cameraFlashJob: Job? = null
+
     fun close() {
+        cameraFlashJob?.cancel()
+        cameraFlashJob = null
         scope.cancel()
     }
 
@@ -990,12 +994,17 @@ class MapRenderer(
             dst.set((x - half).roundToInt(), (y - half).roundToInt(), (x + half).roundToInt(), (y + half).roundToInt())
             canvas.drawBitmap(bmp, null, dst, iconPaint)
         }
-        // Trigger a gentle periodic redraw while a speed camera is on screen so its radar lens flashes.
+        // Trigger a single periodic redraw while a speed camera is on screen so its radar lens flashes.
         if (anyCameraVisible) {
-            scope.launch {
-                kotlinx.coroutines.delay(460)
-                onInvalidate()
+            if (cameraFlashJob?.isActive != true) {
+                cameraFlashJob = scope.launch {
+                    kotlinx.coroutines.delay(460)
+                    onInvalidate()
+                }
             }
+        } else {
+            cameraFlashJob?.cancel()
+            cameraFlashJob = null
         }
     }
 

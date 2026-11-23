@@ -86,8 +86,15 @@ class AppContainer(app: Application) {
         var lastLat = Double.NaN
         var lastLon = Double.NaN
         var lastFetchMs = 0L
+        val alertsLock = Any()
         var dbAlerts: List<RoadAlert> = emptyList()
         val gmapsPins = LinkedHashMap<String, Pair<RoadAlert, Long>>()
+        fun publishAlerts(now: Long) {
+            roadAlerts.value = synchronized(alertsLock) {
+                gmapsPins.entries.removeAll { now - it.value.second >= 30 * 60_000L }
+                (dbAlerts + gmapsPins.values.map { it.first }).distinctBy { it.id }
+            }
+        }
         appScope.launch {
             GoogleMapsMirror.latestAlertNotice.collect { notice ->
                 if (notice == null) return@collect
@@ -95,14 +102,10 @@ class AppContainer(app: Application) {
                 val lat = loc?.latitude ?: mapState.current?.lat ?: return@collect
                 val lon = loc?.longitude ?: mapState.current?.lon ?: return@collect
                 val id = "gmaps_${notice.kind.name}_${(lat * 200).toInt()}_${(lon * 200).toInt()}"
-                synchronized(gmapsPins) {
+                synchronized(alertsLock) {
                     gmapsPins[id] = RoadAlert(id, lat, lon, notice.kind, notice.label, notice.detail) to notice.reportedAtMs
                 }
-                val now = System.currentTimeMillis()
-                val activeGmaps = synchronized(gmapsPins) {
-                    gmapsPins.values.filter { now - it.second < 30 * 60_000L }.map { it.first }
-                }
-                roadAlerts.value = (dbAlerts + activeGmaps).distinctBy { it.id }
+                publishAlerts(System.currentTimeMillis())
             }
         }
         while (true) {
@@ -121,11 +124,8 @@ class AppContainer(app: Application) {
                         lastLat = c.lat
                         lastLon = c.lon
                         lastFetchMs = now
-                        dbAlerts = fetched
-                        val activeGmaps = synchronized(gmapsPins) {
-                            gmapsPins.values.filter { now - it.second < 30 * 60_000L }.map { it.first }
-                        }
-                        roadAlerts.value = (dbAlerts + activeGmaps).distinctBy { it.id }
+                        synchronized(alertsLock) { dbAlerts = fetched }
+                        publishAlerts(now)
                     }
                     .onFailure {
                         delay(8_000)

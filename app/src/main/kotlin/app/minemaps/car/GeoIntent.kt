@@ -32,7 +32,7 @@ object GeoIntent {
         }
         val qParam = Regex("""[?&](?:q|query|destination)=([^&#\s]+)""", RegexOption.IGNORE_CASE).find(trimmed)?.groupValues?.get(1)?.let { decode(it) }
         if (!qParam.isNullOrBlank()) {
-            return parse("geo:0,0?q=$qParam")
+            return parseQueryValue(qParam)
         }
         PLAIN_COORDS.find(trimmed)?.let { m ->
             val c = checked(m.groupValues[1].toDoubleOrNull(), m.groupValues[2].toDoubleOrNull())
@@ -58,18 +58,21 @@ object GeoIntent {
         val base = coordinates(coordPart)
         val q = queryString.split('&').firstOrNull { it.startsWith("q=", ignoreCase = true) }?.substring(2)?.let { decode(it) }
         if (q != null && q.isNotBlank()) {
-            val inner = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*(?:\((.*)\))?\s*$""", RegexOption.DOT_MATCHES_ALL).matchEntire(q)
-            if (inner != null) {
-                val c = checked(inner.groupValues[1].toDoubleOrNull(), inner.groupValues[2].toDoubleOrNull()) ?: return null
-                return GeoTarget.Place(c.first, c.second, inner.groups[3]?.value?.let { cleanLabel(it) })
-            }
-            val text = cleanQuery(q)
-            if (text.isNotEmpty()) return GeoTarget.Query(text)
-            return null
+            return parseQueryValue(q)
         }
         if (base == null) return null
         if (base.first == 0.0 && base.second == 0.0) return null
         return GeoTarget.Place(base.first, base.second, null)
+    }
+
+    private fun parseQueryValue(q: String): GeoTarget? {
+        val inner = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*(?:\((.*)\))?\s*$""", RegexOption.DOT_MATCHES_ALL).matchEntire(q)
+        if (inner != null) {
+            val c = checked(inner.groupValues[1].toDoubleOrNull(), inner.groupValues[2].toDoubleOrNull()) ?: return null
+            return GeoTarget.Place(c.first, c.second, inner.groups[3]?.value?.let { cleanLabel(it) })
+        }
+        val text = cleanQuery(q)
+        return if (text.isNotEmpty()) GeoTarget.Query(text) else null
     }
 
     private fun coordinates(s: String): Pair<Double, Double>? {

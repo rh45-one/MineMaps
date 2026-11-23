@@ -160,6 +160,10 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.photon.prewarm() }
     }
 
+    @Volatile
+    private var hasIncomingTarget = false
+    val pendingFlyTarget = MutableStateFlow<Camera?>(null)
+
     init {
         viewModelScope.launch {
             container.settings.settings.collect {
@@ -174,6 +178,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         }
         viewModelScope.launch(Dispatchers.IO) {
             val persisted = container.mapState.load()
+            if (hasIncomingTarget) return@launch
             if (persisted != null) {
                 camera = persisted
                 container.mapState.update(persisted)
@@ -330,7 +335,11 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setNavigationMode(v: app.minemaps.data.NavigationMode) = viewModelScope.launch {
         container.settings.setNavigationMode(v)
-        if (v == app.minemaps.data.NavigationMode.OFF) container.navigation.stop()
+        if (v == app.minemaps.data.NavigationMode.OFF) {
+            container.navigation.stop()
+        } else {
+            app.minemaps.nav.GoogleMapsMirror.resetDismissed()
+        }
     }
 
     fun setMirrorGoogleMaps(v: Boolean) = viewModelScope.launch { container.settings.setMirrorGoogleMaps(v) }
@@ -351,19 +360,24 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun setAppLanguage(v: app.minemaps.data.AppLanguage) = viewModelScope.launch { container.settings.setAppLanguage(v) }
 
     fun handleIncomingTarget(target: app.minemaps.car.GeoTarget, onFlyTo: (Double, Double, Double) -> Unit) {
+        hasIncomingTarget = true
+        screen.value = Screen.MAP
         when (target) {
             is app.minemaps.car.GeoTarget.Place -> {
                 val title = target.label ?: "Shared place"
+                val cam = Camera(target.lat, target.lon, 17.0)
                 searchPin.value = LatLng(target.lat, target.lon)
                 card.value = InfoCard.Inspect(title, "Shared location", target.lat, target.lon)
                 following.value = false
+                camera = cam
+                container.mapState.update(cam)
+                pendingFlyTarget.value = cam
                 onFlyTo(target.lat, target.lon, 17.0)
                 if (navMode != app.minemaps.data.NavigationMode.OFF) {
                     container.navigation.startNavigation(target.lat, target.lon, title)
                 }
             }
             is app.minemaps.car.GeoTarget.Query -> {
-                screen.value = Screen.MAP
                 onQueryChange(target.text)
             }
         }

@@ -112,10 +112,26 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
     }
 
     companion object {
+        private const val STALE_LOCATION_NS = 15_000_000_000L
+
         fun shortestAngleDelta(from: Float, to: Float): Float {
             var d = (to - from) % 360f
             if (d > 180f) d -= 360f else if (d <= -180f) d += 360f
             return d
+        }
+
+        internal fun isBetterLocation(candidate: Location, current: Location?): Boolean {
+            if (current == null) return true
+            val timeDeltaNs = candidate.elapsedRealtimeNanos - current.elapsedRealtimeNanos
+            if (timeDeltaNs < 0L) return false
+            if (timeDeltaNs > STALE_LOCATION_NS) return true
+            val sameProvider = candidate.provider != null && candidate.provider == current.provider
+            if (sameProvider) return true
+            if (candidate.hasAccuracy() && current.hasAccuracy()) {
+                val accDelta = candidate.accuracy - current.accuracy
+                if (accDelta > 50f && candidate.accuracy > current.accuracy * 2f) return false
+            }
+            return true
         }
     }
 
@@ -168,8 +184,7 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
 
         val listener = object : LocationListenerCompat {
             override fun onLocationChanged(location: Location) {
-                val prev = last
-                if (prev != null && location.elapsedRealtimeNanos < prev.elapsedRealtimeNanos) return
+                if (!isBetterLocation(location, last)) return
                 last = location
                 trySend(current())
             }
@@ -210,4 +225,7 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
             context.unregisterReceiver(receiver)
         }
     }
+
+    internal fun isBetterLocation(candidate: Location, current: Location?): Boolean =
+        Companion.isBetterLocation(candidate, current)
 }

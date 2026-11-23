@@ -180,7 +180,11 @@ class CarMapController(
         }
     }
 
+    @Volatile
+    private var sessionActive = true
+
     fun onSessionStarted() {
+        sessionActive = true
         collectJob?.cancel()
         collectJob = scope.launch {
             launch {
@@ -240,6 +244,9 @@ class CarMapController(
     }
 
     fun onSessionStopped() {
+        sessionActive = false
+        frameQueued = false
+        main.removeCallbacks(frameRunnable)
         collectJob?.cancel()
         collectJob = null
     }
@@ -490,12 +497,12 @@ class CarMapController(
     }
 
     fun requestRender() {
-        if (released) return
+        if (released || !sessionActive) return
         if (Looper.myLooper() == Looper.getMainLooper()) postFrame() else main.post { postFrame() }
     }
 
     private fun postFrame() {
-        if (frameQueued || released) return
+        if (frameQueued || released || !sessionActive) return
         frameQueued = true
         val elapsedMs = (System.nanoTime() - lastDrawNs) / 1_000_000L
         val delayMs = (16L - elapsedMs).coerceIn(0L, 16L)

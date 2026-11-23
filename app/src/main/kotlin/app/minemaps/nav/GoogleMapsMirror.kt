@@ -38,7 +38,8 @@ object GoogleMapsMirror {
 
     /** Dismisses the mirrored Google Maps banner and triggers Google Maps' notification "Exit navigation" action if available. */
     fun dismissAndExitGoogleMaps() {
-        dismissedSession = true
+        val hadActive = active.value != null || exitAction != null
+        if (hadActive) dismissedSession = true
         active.value = null
         val pending = exitAction
         exitAction = null
