@@ -20,10 +20,17 @@ class Viewport(
     val pixelRatio: Float,
     val bearingDeg: Double = 0.0,
     val pitchDeg: Float = 0f,
+    val focalX: Double = widthPx / 2.0,
+    val focalY: Double = heightPx / 2.0,
+    val visLeft: Double = 0.0,
+    val visTop: Double = 0.0,
+    val visRight: Double = widthPx.toDouble(),
+    val visBottom: Double = heightPx.toDouble(),
 ) {
     init {
         require(centerX.isFinite() && centerY.isFinite() && zoom.isFinite() && bearingDeg.isFinite()) { "viewport centre/zoom/bearing must be finite" }
         require(widthPx > 0 && heightPx > 0 && pixelRatio.isFinite() && pixelRatio > 0f) { "viewport size/ratio must be positive" }
+        require(focalX.isFinite() && focalY.isFinite()) { "viewport focal point must be finite" }
     }
 
     private val cosB = cos(Math.toRadians(bearingDeg))
@@ -31,18 +38,18 @@ class Viewport(
 
     val worldSizePx: Double get() = 256.0 * pixelRatio * 2.0.pow(zoom)
 
-    fun withBearing(deg: Double) = Viewport(centerX, centerY, zoom, widthPx, heightPx, pixelRatio, deg, pitchDeg)
+    fun withBearing(deg: Double) = Viewport(centerX, centerY, zoom, widthPx, heightPx, pixelRatio, deg, pitchDeg, focalX, focalY, visLeft, visTop, visRight, visBottom)
 
-    /** Screen position of a world point: the offset from the centre is rotated by -bearing (the screen's up points to compass bearing [bearingDeg]). */
+    /** Screen position of a world point: the offset from the centre is rotated by -bearing (the screen's up points to compass bearing [bearingDeg]) around ([focalX], [focalY]). */
     fun worldToScreen(wx: Double, wy: Double): PointD {
         val dx = (wx - centerX) * worldSizePx
         val dy = (wy - centerY) * worldSizePx
-        return PointD(widthPx / 2.0 + dx * cosB + dy * sinB, heightPx / 2.0 - dx * sinB + dy * cosB)
+        return PointD(focalX + dx * cosB + dy * sinB, focalY - dx * sinB + dy * cosB)
     }
 
     fun screenToWorld(sx: Double, sy: Double): PointD {
-        val dx = sx - widthPx / 2.0
-        val dy = sy - heightPx / 2.0
+        val dx = sx - focalX
+        val dy = sy - focalY
         return PointD(centerX + (dx * cosB - dy * sinB) / worldSizePx, centerY + (dx * sinB + dy * cosB) / worldSizePx)
     }
 
@@ -50,9 +57,11 @@ class Viewport(
 
     fun worldToScreenY(wy: Double): Double = worldToScreen(centerX, wy).y
 
-    fun screenToWorldX(sx: Double): Double = screenToWorld(sx, heightPx / 2.0).x
+    @Deprecated("Use screenToWorld(sx, sy); 1D helpers drop bearing cross-terms when bearingDeg != 0.")
+    fun screenToWorldX(sx: Double): Double = screenToWorld(sx, focalY).x
 
-    fun screenToWorldY(sy: Double): Double = screenToWorld(widthPx / 2.0, sy).y
+    @Deprecated("Use screenToWorld(sx, sy); 1D helpers drop bearing cross-terms when bearingDeg != 0.")
+    fun screenToWorldY(sy: Double): Double = screenToWorld(focalX, sy).y
 
     /** Axis-aligned world bounds (minX, minY, maxX, maxY) of the four screen corners (expanded toward the horizon when tilted). */
     fun worldBounds(): DoubleArray {

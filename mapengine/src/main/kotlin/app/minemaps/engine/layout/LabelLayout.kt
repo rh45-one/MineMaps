@@ -88,8 +88,10 @@ object LabelLayout {
         priorityObstacles: List<Obstacle> = emptyList(),
     ): PlacedLayout {
         val zoom = floor(viewport.zoom).toInt()
-        val sw = viewport.widthPx.toFloat()
-        val sh = viewport.heightPx.toFloat()
+        val vLeft = viewport.visLeft.toFloat()
+        val vTop = viewport.visTop.toFloat()
+        val vRight = viewport.visRight.toFloat()
+        val vBottom = viewport.visBottom.toFloat()
         val boxes = Boxes()
         val placedLabels = ArrayList<PlacedLabel>()
         val placedIcons = ArrayList<PlacedIcon>()
@@ -118,7 +120,7 @@ object LabelLayout {
             val y0 = cy - bh / 2
             val x1 = cx + bw / 2
             val y1 = cy + bh / 2
-            if (x1 < 0 || x0 > sw || y1 < 0 || y0 > sh) return
+            if (x1 < vLeft || x0 > vRight || y1 < vTop || y0 > vBottom) return
             if (boxes.collides(x0, y0, x1, y1, TEXT_PAD)) return
             boxes.add(x0, y0, x1, y1, TEXT_PAD)
             placedLabels.add(PlacedLabel(l, cx, cy, w, h, angle.toFloat()))
@@ -142,7 +144,7 @@ object LabelLayout {
                 val y0 = cy - half
                 val x1 = cx + half
                 val y1 = cy + half
-                if (x1 < 0 || x0 > sw || y1 < 0 || y0 > sh) continue
+                if (x1 < vLeft || x0 > vRight || y1 < vTop || y0 > vBottom) continue
                 if (boxes.collides(x0, y0, x1, y1, ICON_PAD)) continue
                 var name: PlacedText? = null
                 if (profile.poiNames && zoom >= POI_NAME_MIN_ZOOM && p.name.isNotBlank()) {

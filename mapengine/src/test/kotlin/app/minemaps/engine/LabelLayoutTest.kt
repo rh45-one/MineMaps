@@ -179,4 +179,47 @@ class LabelLayoutTest {
         val with = LabelLayout.layout(listOf(onMarker, away), emptyList(), vp, measure, RenderProfile.PHONE, 32f, priorityObstacles = listOf(marker))
         assertEquals(listOf("Giza"), with.labels.map { it.label.text })
     }
+
+    @Test
+    fun splitScreenClipsLabelsAndIconsToVisiblePaneAndPreservesFocalCenterAcrossBearings() {
+        // 1280x720 surface with LHD split-screen map pane [0..760] and obscured Spotify pane [760..1280]
+        val cx = 0.5
+        val cy = 0.5
+        for (bearing in listOf(0.0, 90.0, 180.0, 270.0, 137.5)) {
+            val split = Viewport(
+                centerX = cx, centerY = cy, zoom = 18.0,
+                widthPx = 1280, heightPx = 720, pixelRatio = 1f,
+                bearingDeg = bearing, pitchDeg = 38f,
+                focalX = 380.0, focalY = 360.0,
+                visLeft = 0.0, visTop = 0.0, visRight = 760.0, visBottom = 720.0,
+            )
+            // Center must map to split-screen focal point regardless of heading-up bearing
+            val p = split.worldToScreen(cx, cy)
+            assertEquals(380.0, p.x, 1e-6, "focalX at bearing $bearing")
+            assertEquals(360.0, p.y, 1e-6, "focalY at bearing $bearing")
+            // Round-trip screenToWorld at off-center point under rotation
+            val w = split.screenToWorld(200.0, 500.0)
+            val back = split.worldToScreen(w.x, w.y)
+            assertEquals(200.0, back.x, 1e-6, "round-trip x at bearing $bearing")
+            assertEquals(500.0, back.y, 1e-6, "round-trip y at bearing $bearing")
+
+            // Forward-look navigation center keeps player at focalX and lower third of pane height
+            val fl = Viewport.forwardLookCenter(cx, cy, 18.0, 600, 1f, bearing, 0.16)
+            val navVp = Viewport(fl.x, fl.y, 18.0, 1280, 720, 1f, bearing, 38f, focalX = 380.0, focalY = 360.0, visLeft = 0.0, visTop = 60.0, visRight = 760.0, visBottom = 660.0)
+            val playerScreen = navVp.worldToScreen(cx, cy)
+            assertEquals(380.0, playerScreen.x, 1e-6, "nav player x at bearing $bearing")
+            assertEquals(360.0 + 0.16 * 600, playerScreen.y, 1e-6, "nav player y at bearing $bearing")
+        }
+
+        // Labels inside obscured pane [760..1280] must not consume CAR budget
+        val splitNorth = Viewport(cx, cy, 18.0, 1280, 720, 1f, 0.0, 0f, focalX = 380.0, focalY = 360.0, visLeft = 0.0, visTop = 0.0, visRight = 760.0, visBottom = 720.0)
+        val obscuredLabels = (0 until 30).map { i ->
+            val w = splitNorth.screenToWorld(820.0 + (i % 5) * 90.0, 40.0 + (i / 5) * 60.0)
+            Label("Obscured$i", LabelKind.CITY, i, w.x, w.y, 0.0, 0)
+        }
+        val visibleLabelPt = splitNorth.screenToWorld(380.0, 360.0)
+        val visibleLabel = Label("VisibleCity", LabelKind.CITY, 100, visibleLabelPt.x, visibleLabelPt.y, 0.0, 0)
+        val out = LabelLayout.layout(obscuredLabels + visibleLabel, emptyList(), splitNorth, measure, RenderProfile.CAR)
+        assertEquals(listOf("VisibleCity"), out.labels.map { it.label.text })
+    }
 }

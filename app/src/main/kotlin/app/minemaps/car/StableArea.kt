@@ -18,4 +18,19 @@ object StableArea {
         val dy = surfaceHeight / 2.0 - (top + bottom) / 2.0
         return doubleArrayOf(dx / worldSizePx, dy / worldSizePx)
     }
+
+    /**
+     * Computes the active unobscured map pane by intersecting [visibleArea] and [stableArea] when both are non-empty.
+     * Falls back to [visibleArea] when the intersection is empty (e.g., stale [stableArea] during split-screen transition),
+     * or to whichever rect is non-empty.
+     */
+    fun activeArea(visibleArea: android.graphics.Rect?, stableArea: android.graphics.Rect?): android.graphics.Rect? {
+        val vis = visibleArea?.takeIf { !it.isEmpty }
+        val stab = stableArea?.takeIf { !it.isEmpty }
+        if (vis != null && stab != null) {
+            val inter = android.graphics.Rect(vis)
+            return if (inter.intersect(stab)) inter else vis
+        }
+        return vis ?: stab
+    }
 }

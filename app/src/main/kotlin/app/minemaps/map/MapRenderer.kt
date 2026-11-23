@@ -178,6 +178,12 @@ class MapRenderer(
         val zoom: Double,
         val w: Int,
         val h: Int,
+        val focalX: Double,
+        val focalY: Double,
+        val visLeft: Double,
+        val visTop: Double,
+        val visRight: Double,
+        val visBottom: Double,
         val version: Int,
         val icons: Boolean,
         val vts: List<TileKey>,
@@ -229,8 +235,9 @@ class MapRenderer(
         cam3d.rotateX(viewport.pitchDeg)
         cam3d.getMatrix(tiltMatrix)
         cam3d.restore()
-        val px = viewport.widthPx / 2f
-        val py = viewport.heightPx * 0.68f
+        val px = viewport.focalX.toFloat()
+        val visH = (viewport.visBottom - viewport.visTop).toFloat().coerceAtLeast(1f)
+        val py = viewport.visTop.toFloat() + visH * 0.68f
         tiltMatrix.preTranslate(-px, -py)
         tiltMatrix.postTranslate(px, py)
         return true
@@ -317,7 +324,7 @@ class MapRenderer(
         canvas.save()
         if (tilted) canvas.concat(tiltMatrix)
         canvas.save()
-        if (viewport.bearingDeg != 0.0) canvas.rotate(-viewport.bearingDeg.toFloat(), viewport.widthPx / 2f, viewport.heightPx / 2f)
+        if (viewport.bearingDeg != 0.0) canvas.rotate(-viewport.bearingDeg.toFloat(), viewport.focalX.toFloat(), viewport.focalY.toFloat())
         var hash = z
         for (s in slots) {
             hash = hash * 31 + s.key.x * 7 + s.key.y
@@ -387,7 +394,12 @@ class MapRenderer(
 
     private fun retainRing(viewport: Viewport, z: Int, size: Double) {
         val pad = Math.ceil(size).toInt()
-        val padded = Viewport(viewport.centerX, viewport.centerY, viewport.zoom, viewport.widthPx + 2 * pad, viewport.heightPx + 2 * pad, viewport.pixelRatio, viewport.bearingDeg)
+        val padded = Viewport(
+            viewport.centerX, viewport.centerY, viewport.zoom,
+            viewport.widthPx + 2 * pad, viewport.heightPx + 2 * pad,
+            viewport.pixelRatio, viewport.bearingDeg,
+            focalX = viewport.focalX + pad, focalY = viewport.focalY + pad,
+        )
         provider.retainOnly(padded.visibleTiles(z))
     }
 
@@ -443,9 +455,13 @@ class MapRenderer(
         val markers = markerKey(overlays)
         val vts = tiles.map { provider.vectorTileKey(it) }.distinct().sortedWith(compareBy({ it.z }, { it.x }, { it.y }))
         val origin = viewport.worldToScreen(layoutOriginX, layoutOriginY)
-        var shiftX = origin.x - viewport.widthPx / 2.0
-        var shiftY = origin.y - viewport.heightPx / 2.0
-        val key = LayoutKey(viewport.bearingDeg, 0.0, viewport.zoom, viewport.widthPx, viewport.heightPx, labelVersion.get(), showIcons, vts, bookmarks, activePack, markers)
+        var shiftX = origin.x - viewport.focalX
+        var shiftY = origin.y - viewport.focalY
+        val key = LayoutKey(
+            viewport.bearingDeg, 0.0, viewport.zoom, viewport.widthPx, viewport.heightPx,
+            viewport.focalX, viewport.focalY, viewport.visLeft, viewport.visTop, viewport.visRight, viewport.visBottom,
+            labelVersion.get(), showIcons, vts, bookmarks, activePack, markers,
+        )
         var layout = lastLayout
         if (key != lastLayoutKey || layout == null || Math.abs(shiftX) > LAYOUT_MARGIN_PX / 2 || Math.abs(shiftY) > LAYOUT_MARGIN_PX / 2) {
             val labels = ArrayList<Label>()
@@ -456,7 +472,14 @@ class MapRenderer(
                 if (showIcons) pois.addAll(tl.pois)
             }
             val m = LAYOUT_MARGIN_PX
-            val expanded = Viewport(viewport.centerX, viewport.centerY, viewport.zoom, viewport.widthPx + 2 * m, viewport.heightPx + 2 * m, viewport.pixelRatio, viewport.bearingDeg)
+            val expanded = Viewport(
+                viewport.centerX, viewport.centerY, viewport.zoom,
+                viewport.widthPx + 2 * m, viewport.heightPx + 2 * m,
+                viewport.pixelRatio, viewport.bearingDeg,
+                focalX = viewport.focalX + m, focalY = viewport.focalY + m,
+                visLeft = viewport.visLeft + m, visTop = viewport.visTop + m,
+                visRight = viewport.visRight + m, visBottom = viewport.visBottom + m,
+            )
             layout = LabelLayout.layout(labels, pois, expanded, measure, profile, 16f * iconFactor, bookmarkObstacles(expanded, bookmarks, viewport.zoom), markerObstacles(expanded, overlays))
             lastLayout = layout
             lastLayoutKey = key

@@ -1,10 +1,17 @@
 package app.minemaps
 
+import android.graphics.Rect
 import app.minemaps.car.StableArea
 import app.minemaps.engine.geo.Viewport
-import kotlin.test.Test
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class StableAreaTest {
     private data class Case(val w: Int, val h: Int, val l: Int, val t: Int, val r: Int, val b: Int, val zoom: Double)
 
@@ -34,5 +41,22 @@ class StableAreaTest {
         val off = StableArea.worldOffset(1000, 600, 0, 0, 1000, 600, 1e6)
         assertEquals(0.0, off[0], 0.0)
         assertEquals(0.0, off[1], 0.0)
+    }
+
+    @Test
+    fun activeAreaIntersectsVisibleAndStableForLhdAndRhdSplitScreen() {
+        // LHD split screen: Spotify on right [760..1280], full-width stableArea with template insets
+        val lhd = assertNotNull(StableArea.activeArea(Rect(0, 0, 760, 720), Rect(16, 96, 1264, 680)))
+        assertEquals(Rect(16, 96, 760, 680), lhd)
+        assertEquals(388f, lhd.exactCenterX())
+
+        // RHD / left-handed split screen: Spotify on left [0..520], full-width stableArea
+        val rhd = assertNotNull(StableArea.activeArea(Rect(520, 0, 1280, 720), Rect(16, 96, 1264, 680)))
+        assertEquals(Rect(520, 96, 1264, 680), rhd)
+        assertEquals(892f, rhd.exactCenterX())
+
+        // Disjoint stale stableArea falls back to visibleArea
+        val disjoint = assertNotNull(StableArea.activeArea(Rect(0, 0, 500, 720), Rect(600, 0, 1280, 720)))
+        assertEquals(Rect(0, 0, 500, 720), disjoint)
     }
 }

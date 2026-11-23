@@ -291,7 +291,7 @@ class CarMapController(
                 val targetP = if (navMode && targetZ >= 15.2) 38f else 0f
                 val pwx = Mercator.lonToX(l.longitude)
                 val pwy = Mercator.latToY(l.latitude)
-                val hPx = surface?.height?.takeIf { it > 0 } ?: 600
+                val hPx = activeArea()?.height()?.takeIf { it > 0 } ?: surface?.height?.takeIf { it > 0 } ?: 600
                 val pr = max(1f, (surface?.dpi ?: DEFAULT_DPI) / 160f)
                 val center = if (navMode && targetZ >= 15.2) {
                     Viewport.forwardLookCenter(pwx, pwy, targetZ, hPx, pr, targetB, 0.16)
@@ -310,6 +310,7 @@ class CarMapController(
 
     private fun animateTo(tx: Double, ty: Double, tz: Double, durationMs: Long = 500L, tb: Double = bearing, tp: Float = pitch) {
         if (!tx.isFinite() || !ty.isFinite() || !tz.isFinite()) return
+        cameraLoaded = true
         var dx = tx - cx
         if (dx > 0.5) dx -= 1.0 else if (dx < -0.5) dx += 1.0
         var db = (tb - bearing) % 360.0
@@ -404,18 +405,27 @@ class CarMapController(
         flingVy = 0.0
     }
 
+    private fun panByScreenDelta(dxPx: Double, dyPx: Double) {
+        val rad = Math.toRadians(bearing)
+        val cosB = kotlin.math.cos(rad)
+        val sinB = kotlin.math.sin(rad)
+        val size = worldSize()
+        cx = wrap(cx + (dxPx * cosB - dyPx * sinB) / size)
+        cy = (cy + (dxPx * sinB + dyPx * cosB) / size).coerceIn(0.0, 1.0)
+    }
+
     override fun onScroll(distanceX: Float, distanceY: Float) {
         if (!distanceX.isFinite() || !distanceY.isFinite()) return
+        cameraLoaded = true
         following.value = false
         stopMotion()
-        val size = worldSize()
-        cx = wrap(cx + distanceX / size)
-        cy = (cy + distanceY / size).coerceIn(0.0, 1.0)
+        panByScreenDelta(distanceX.toDouble(), distanceY.toDouble())
         requestRender()
     }
 
     override fun onFling(velocityX: Float, velocityY: Float) {
         if (!velocityX.isFinite() || !velocityY.isFinite()) return
+        cameraLoaded = true
         following.value = false
         anim = null
         flingVx = -velocityX.toDouble()
@@ -425,6 +435,7 @@ class CarMapController(
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
         if (!scaleFactor.isFinite() || scaleFactor <= 0f || focusX.isNaN() || focusY.isNaN()) return
+        cameraLoaded = true
         anim = null
         val newZoom = (zoom + ln(scaleFactor.toDouble()) / ln(2.0)).coerceIn(MIN_ZOOM, MAX_ZOOM)
         if (focusX < 0f || focusY < 0f) {
@@ -435,10 +446,9 @@ class CarMapController(
             val w = vp.screenToWorld(focusX.toDouble(), focusY.toDouble())
             zoom = newZoom
             val vp2 = viewport() ?: return
-            val shiftX = (w.x - vp2.screenToWorldX(focusX.toDouble()))
-            val shiftY = (w.y - vp2.screenToWorldY(focusY.toDouble()))
-            cx = wrap(cx + shiftX)
-            cy = (cy + shiftY).coerceIn(0.0, 1.0)
+            val w2 = vp2.screenToWorld(focusX.toDouble(), focusY.toDouble())
+            cx = wrap(cx + (w.x - w2.x))
+            cy = (cy + (w.y - w2.y)).coerceIn(0.0, 1.0)
         }
         requestRender()
     }
@@ -449,16 +459,34 @@ class CarMapController(
 
     private fun worldSize(): Double = 256.0 * max(1f, (surface?.dpi ?: DEFAULT_DPI) / 160f) * 2.0.pow(zoom)
 
+    private fun activeArea(): Rect? = StableArea.activeArea(visibleArea, stableArea)
+
     private fun viewport(): Viewport? {
         val s = surface ?: return null
         val w = s.width
         val h = s.height
         if (w <= 0 || h <= 0) return null
         val pr = max(1f, s.dpi / 160f)
-        val size = 256.0 * pr * 2.0.pow(zoom)
-        val area = stableArea?.takeIf { !it.isEmpty } ?: visibleArea?.takeIf { !it.isEmpty }
-        val off = if (area != null) StableArea.worldOffset(w, h, area.left, area.top, area.right, area.bottom, size) else doubleArrayOf(0.0, 0.0)
-        return Viewport(cx + off[0], (cy + off[1]), zoom, w, h, pr, bearing, pitch)
+        val area = activeArea()
+        val fx = area?.exactCenterX()?.toDouble() ?: (w / 2.0)
+        val fy = area?.exactCenterY()?.toDouble() ?: (h / 2.0)
+        val vis = visibleArea?.takeIf { !it.isEmpty } ?: area
+        return Viewport(
+            centerX = cx,
+            centerY = cy,
+            zoom = zoom,
+            widthPx = w,
+            heightPx = h,
+            pixelRatio = pr,
+            bearingDeg = bearing,
+            pitchDeg = pitch,
+            focalX = fx,
+            focalY = fy,
+            visLeft = (vis?.left ?: 0).toDouble(),
+            visTop = (vis?.top ?: 0).toDouble(),
+            visRight = (vis?.right ?: w).toDouble(),
+            visBottom = (vis?.bottom ?: h).toDouble(),
+        )
     }
 
     fun requestRender() {
@@ -490,9 +518,7 @@ class CarMapController(
             if (t >= 1.0) anim = null else more = true
         }
         if (flingVx * flingVx + flingVy * flingVy > 400.0) {
-            val size = worldSize()
-            cx = wrap(cx + flingVx * dt / size)
-            cy = (cy + flingVy * dt / size).coerceIn(0.0, 1.0)
+            panByScreenDelta(flingVx * dt, flingVy * dt)
             val decay = exp(-dt * 3.5)
             flingVx *= decay
             flingVy *= decay
