@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -51,12 +52,15 @@ class TexturePackManager(
 ) {
     val state = MutableStateFlow<PackUi>(PackUi.Idle)
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val lifecycleLock = Any()
+    private val autoMutex = kotlinx.coroutines.sync.Mutex()
+    private val workMutex = kotlinx.coroutines.sync.Mutex()
     private var job: Job? = null
     private var lastAuto = 0L
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val workDir get() = File(context.cacheDir, "pack-import")
 
-    val busy: Boolean get() = job?.isActive == true
+    val busy: Boolean get() = synchronized(lifecycleLock) { job?.isActive == true }
 
     fun isMetered(): Boolean = connectivity.isActiveNetworkMetered
 
@@ -69,8 +73,14 @@ class TexturePackManager(
     }
 
     fun start() {
-        workDir.deleteRecursively()
-        scope.launch { maybeAutoImport() }
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                workMutex.withLock {
+                    if (!busy) workDir.deleteRecursively()
+                }
+            }
+            maybeAutoImport()
+        }
         runCatching {
             connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
@@ -81,75 +91,94 @@ class TexturePackManager(
     }
 
     suspend fun maybeAutoImport() {
-        if (busy) return
-        val s = settings.settings.first()
-        val eng = engine()
-        val pendingDue = s.texturesPending && installedCode > s.pendingSinceVersionCode && !eng.isPackAvailable(TexturePack.VANILLA)
-        val reimport = s.texturePack == TexturePack.VANILLA && eng.storedPackNeedsReimport
-        if (!pendingDue && !reimport) return
-        if (!onUnmeteredNetwork()) return
-        val now = System.currentTimeMillis()
-        if (now - lastAuto < 60_000) return
-        lastAuto = now
-        importNow(auto = true)
+        autoMutex.withLock {
+            if (busy) return
+            val s = settings.settings.first()
+            val eng = engine()
+            val pendingDue = s.texturesPending && installedCode > s.pendingSinceVersionCode && !eng.isPackAvailable(TexturePack.VANILLA)
+            val reimport = s.texturePack == TexturePack.VANILLA && eng.storedPackNeedsReimport
+            if (!pendingDue && !reimport) return
+            if (!onUnmeteredNetwork()) return
+            val now = System.currentTimeMillis()
+            if (now - lastAuto < 60_000) return
+            lastAuto = now
+            importNow(auto = true)
+        }
     }
 
     fun importNow(auto: Boolean = false) {
-        if (busy) return
-        job = scope.launch {
-            val jar = File(workDir, "client.jar")
-            try {
-                download(jar)
-                runImport(jar, listOf("Minecraft ${MinecraftImporter.PINNED_VERSION} client jar (sha1 $jarSha1)"), MinecraftImporter.PINNED_VERSION, jarSha1, select = true)
-                if (auto) messages.tryEmit("Minecraft textures installed")
-            } catch (e: CancellationException) {
-                state.value = PackUi.Idle
-                throw e
-            } catch (e: Exception) {
-                fail(e, auto)
-            } finally {
-                jar.delete()
+        val newJob = synchronized(lifecycleLock) {
+            if (job?.isActive == true) return
+            val created = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                workMutex.withLock {
+                    val jar = File(workDir, "client.jar")
+                    try {
+                        download(jar)
+                        runImport(jar, listOf("Minecraft ${MinecraftImporter.PINNED_VERSION} client jar (sha1 $jarSha1)"), MinecraftImporter.PINNED_VERSION, jarSha1, select = true)
+                        if (auto) messages.tryEmit("Minecraft textures installed")
+                    } catch (e: CancellationException) {
+                        state.value = PackUi.Idle
+                        throw e
+                    } catch (e: Exception) {
+                        fail(e, auto)
+                    } finally {
+                        jar.delete()
+                    }
+                }
             }
+            job = created
+            created.invokeOnCompletion { synchronized(lifecycleLock) { if (job === created) job = null } }
+            created
         }
+        newJob.start()
     }
 
     fun importFromFile(uri: Uri) {
-        if (busy) return
-        job = scope.launch {
-            val copy = File(workDir, "import.zip")
-            try {
-                withContext(Dispatchers.IO) {
-                    workDir.mkdirs()
-                    val fileName = resolveFileName(uri)
-                    var total = 0L
-                    val md = MessageDigest.getInstance("SHA-1")
-                    (context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open the file")).use { input ->
-                        copy.outputStream().use { out ->
-                            val buf = ByteArray(64 * 1024)
-                            while (true) {
-                                val n = input.read(buf)
-                                if (n < 0) break
-                                total += n
-                                if (total > MAX_IMPORT_BYTES) throw ImportException("That file is larger than 200 MB")
-                                md.update(buf, 0, n)
-                                out.write(buf, 0, n)
-                                state.value = PackUi.Downloading(total, -1)
+        val newJob = synchronized(lifecycleLock) {
+            if (job?.isActive == true) return
+            val created = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                workMutex.withLock {
+                    val copy = File(workDir, "import.zip")
+                    try {
+                        withContext(Dispatchers.IO) {
+                            workDir.mkdirs()
+                            val fileName = resolveFileName(uri)
+                            var total = 0L
+                            val md = MessageDigest.getInstance("SHA-1")
+                            (context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open the file")).use { input ->
+                                copy.outputStream().use { out ->
+                                    val buf = ByteArray(64 * 1024)
+                                    while (true) {
+                                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                        val n = input.read(buf)
+                                        if (n < 0) break
+                                        total += n
+                                        if (total > MAX_IMPORT_BYTES) throw ImportException("That file is larger than 200 MB")
+                                        md.update(buf, 0, n)
+                                        out.write(buf, 0, n)
+                                        state.value = PackUi.Downloading(total, -1)
+                                    }
+                                }
                             }
+                            val sha = md.digest().joinToString("") { "%02x".format(it) }
+                            val label = fileName?.let { "Resource pack: $it" } ?: "Custom resource pack (sha1 ${sha.take(10)})"
+                            runImport(copy, listOf(label), "custom", sha, select = true, layerOverStored = true)
                         }
+                    } catch (e: CancellationException) {
+                        state.value = PackUi.Idle
+                        throw e
+                    } catch (e: Exception) {
+                        fail(e, false)
+                    } finally {
+                        copy.delete()
                     }
-                    val sha = md.digest().joinToString("") { "%02x".format(it) }
-                    val label = fileName?.let { "Resource pack: $it" } ?: "Custom resource pack (sha1 ${sha.take(10)})"
-                    runImport(copy, listOf(label), "custom", sha, select = true, layerOverStored = true)
                 }
-            } catch (e: CancellationException) {
-                state.value = PackUi.Idle
-                throw e
-            } catch (e: Exception) {
-                fail(e, false)
-            } finally {
-                copy.delete()
             }
+            job = created
+            created.invokeOnCompletion { synchronized(lifecycleLock) { if (job === created) job = null } }
+            created
         }
+        newJob.start()
     }
 
     private fun resolveFileName(uri: Uri): String? = runCatching {
@@ -159,10 +188,19 @@ class TexturePackManager(
     }.getOrNull()
 
     fun cancel() {
-        job?.cancel()
-        job = null
+        val prev = synchronized(lifecycleLock) {
+            val p = job
+            job = null
+            p
+        }
+        prev?.cancel()
         state.value = PackUi.Idle
-        scope.launch(Dispatchers.IO) { workDir.deleteRecursively() }
+        scope.launch(Dispatchers.IO) {
+            prev?.join()
+            workMutex.withLock {
+                if (!busy) workDir.deleteRecursively()
+            }
+        }
     }
 
     fun dismissFailure() {

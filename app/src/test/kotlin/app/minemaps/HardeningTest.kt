@@ -131,4 +131,26 @@ class HardeningTest {
         assertTrue(MineMapsCarAppService.hostValidator(context, debug = true) === HostValidator.ALLOW_ALL_HOSTS_VALIDATOR)
         assertTrue(MineMapsCarAppService.hostValidator(context, debug = false) !== HostValidator.ALLOW_ALL_HOSTS_VALIDATOR)
     }
+
+    @Test
+    fun oversizedPngIsRejectedBeforePixelAllocation() {
+        // Minimal valid PNG signature + 16384x16384 IHDR chunk + IEND chunk
+        val ihdrData = java.nio.ByteBuffer.allocate(13)
+            .putInt(16384).putInt(16384)
+            .put(8).put(6).put(0).put(0).put(0).array()
+        fun chunk(type: String, data: ByteArray): ByteArray {
+            val t = type.toByteArray(Charsets.US_ASCII)
+            val crc = java.util.zip.CRC32().apply { update(t); update(data) }.value.toInt()
+            return java.nio.ByteBuffer.allocate(12 + data.size)
+                .putInt(data.size).put(t).put(data).putInt(crc).array()
+        }
+        val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        val bomb = sig + chunk("IHDR", ihdrData) + chunk("IEND", ByteArray(0))
+        assertFailsWith<IllegalArgumentException> {
+            app.minemaps.map.AndroidPngDecoder.decode(bomb)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            app.minemaps.map.AndroidPngDecoder.decode(byteArrayOf(1, 2, 3))
+        }
+    }
 }

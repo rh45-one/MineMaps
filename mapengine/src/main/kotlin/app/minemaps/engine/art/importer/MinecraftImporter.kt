@@ -60,7 +60,8 @@ class ZipTextureSource(file: File) : TextureSource, AutoCloseable {
         val metaName = (if (base.isNotEmpty()) base.trimEnd('/') + "/pack.mcmeta" else "pack.mcmeta").trimStart('/')
         val entry = zip.getEntry(metaName) ?: zip.getEntry("pack.mcmeta") ?: return null
         if (entry.size > 64 * 1024) return null
-        val raw = String(zip.getInputStream(entry).use { it.readNBytesCompat(64 * 1024) })
+        val bytes = zip.getInputStream(entry).use { it.readNBytesCompat(64 * 1024) } ?: return null
+        val raw = String(bytes)
         val obj = Json.parseToJsonElement(raw).jsonObject["pack"]?.jsonObject ?: return null
         val descEl = obj["description"] ?: return null
         val text = when (descEl) {
@@ -73,15 +74,17 @@ class ZipTextureSource(file: File) : TextureSource, AutoCloseable {
 
     override fun close() = zip.close()
 
-    private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+    private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray? {
         val out = java.io.ByteArrayOutputStream()
         val buf = ByteArray(8192)
-        while (out.size() <= limit) {
-            val n = read(buf)
-            if (n < 0) break
+        var remaining = limit
+        while (remaining > 0) {
+            val n = read(buf, 0, minOf(buf.size, remaining))
+            if (n < 0) return out.toByteArray()
             out.write(buf, 0, n)
+            remaining -= n
         }
-        return out.toByteArray()
+        return if (read() >= 0) null else out.toByteArray()
     }
 
     companion object {

@@ -16,17 +16,40 @@ import java.io.File
 import java.security.MessageDigest
 
 object AndroidPngDecoder : PngDecoder {
+    const val MAX_PNG_DIM = 4096
+    const val MAX_PNG_PIXELS = 16_777_216L
+    private val PNG_SIG = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+
+    private fun checkDimensions(w: Int, h: Int) {
+        if (w <= 0 || h <= 0 || w > MAX_PNG_DIM || h > MAX_PNG_DIM || w.toLong() * h.toLong() > MAX_PNG_PIXELS) {
+            throw IllegalArgumentException("PNG dimensions out of bounds: ${w}x${h}")
+        }
+    }
+
     override fun decode(bytes: ByteArray): Rgba {
+        if (bytes.size < 24 || !PNG_SIG.indices.all { bytes[it] == PNG_SIG[it] } ||
+            bytes[12] != 'I'.code.toByte() || bytes[13] != 'H'.code.toByte() ||
+            bytes[14] != 'D'.code.toByte() || bytes[15] != 'R'.code.toByte()
+        ) {
+            throw IllegalArgumentException("not a PNG")
+        }
+        val ihdr = java.nio.ByteBuffer.wrap(bytes, 16, 8)
+        checkDimensions(ihdr.int, ihdr.int)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        checkDimensions(bounds.outWidth, bounds.outHeight)
         val options = BitmapFactory.Options().apply {
             inPremultiplied = false
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: error("not a PNG")
-        val pixels = IntArray(bmp.width * bmp.height)
-        bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-        val out = Rgba(bmp.width, bmp.height, pixels)
-        bmp.recycle()
-        return out
+        return try {
+            val pixels = IntArray(bmp.width * bmp.height)
+            bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+            Rgba(bmp.width, bmp.height, pixels)
+        } finally {
+            bmp.recycle()
+        }
     }
 }
 
