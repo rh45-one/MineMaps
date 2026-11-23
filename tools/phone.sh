@@ -59,7 +59,7 @@ echo "MineMaps launched on the phone."
 
 if [[ $LOGCAT -eq 1 ]]; then
   PID=""
-  for _ in $(seq 1 20); do PID="$(A shell pidof "$PKG" | tr -d '\r')"; [[ -n "$PID" ]] && break; sleep 0.5; done
+  for _ in $(seq 1 20); do PID="$(A shell pidof "$PKG" 2>/dev/null | tr -d '\r' || true)"; [[ -n "$PID" ]] && break; sleep 0.5; done
   [[ -n "$PID" ]] || die "app process not found for logcat"
   echo "Streaming logs for pid $PID (Ctrl+C to stop)..."
   A logcat --pid="$PID" -v time

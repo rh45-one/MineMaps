@@ -21,7 +21,7 @@ if [ "$name" != "$version" ]; then
 fi
 echo "versionName OK: $name"
 
-if unzip -l "$apk" | grep -q 'minemaps/packs/vanilla'; then
+if unzip -Z1 "$apk" | awk '/minemaps\/packs\/vanilla/{found=1} END{exit !found}'; then
   echo "APK contains the vanilla (Mojang) texture pack" >&2
   exit 1
 fi

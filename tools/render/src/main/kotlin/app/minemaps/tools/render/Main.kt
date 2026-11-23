@@ -19,6 +19,7 @@ import app.minemaps.engine.layout.RenderProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -198,43 +199,55 @@ fun main(args: Array<String>): Unit = runBlocking {
     val atlas = loadAtlas(opt.pack)
     val ready = ConcurrentHashMap<TileKey, IntArray>()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val provider = MapTileProvider(repo, atlas, scope) { key, _, px -> ready[key] = px }
+    try {
+        val provider = MapTileProvider(repo, atlas, scope) { key, _, px -> ready[key] = px }
 
-    val vp = Viewport(Mercator.lonToX(opt.lon), Mercator.latToY(opt.lat), z.toDouble(), opt.width, opt.height, 1f)
-    val tiles = vp.visibleTiles(z)
-    val vtKeys = tiles.map { provider.vectorTileKey(it) }.distinct()
-    println("zoom $z: ${tiles.size} tiles, ${vtKeys.size} vector tiles, night=${opt.night}")
-    val start = System.currentTimeMillis()
-    tiles.forEach { provider.request(it, opt.night) }
-    val labelResults = HashMap<TileKey, TileLabels>()
-    while (System.currentTimeMillis() - start < 180_000) {
-        for (k in vtKeys) if (k !in labelResults) provider.labels(k)?.let { labelResults[k] = it }
-        if (ready.size >= tiles.size && labelResults.size >= vtKeys.size) break
-        delay(50)
-    }
-    if (ready.size < tiles.size) {
-        System.err.println("timed out: ${ready.size}/${tiles.size} tiles ready")
-        exitProcess(1)
-    }
+        val vp = Viewport(Mercator.lonToX(opt.lon), Mercator.latToY(opt.lat), z.toDouble(), opt.width, opt.height, 1f)
+        val slots = vp.visibleTileSlots(z)
+        val tiles = slots.map { it.key }.distinct()
+        val vtKeys = tiles.map { provider.vectorTileKey(it) }.distinct()
+        println("zoom $z: ${tiles.size} tiles (${slots.size} slots), ${vtKeys.size} vector tiles, night=${opt.night}")
+        val start = System.currentTimeMillis()
+        tiles.forEach { provider.request(it, opt.night) }
+        val labelResults = HashMap<TileKey, TileLabels>()
+        while (System.currentTimeMillis() - start < 180_000) {
+            for (k in vtKeys) if (k !in labelResults) provider.labels(k)?.let { labelResults[k] = it }
+            if (ready.size >= tiles.size && labelResults.size >= vtKeys.size) break
+            delay(50)
+        }
+        if (ready.size < tiles.size) {
+            System.err.println("timed out: ${ready.size}/${tiles.size} tiles ready")
+            exitProcess(1)
+        }
 
-    val image = BufferedImage(opt.width, opt.height, BufferedImage.TYPE_INT_RGB)
-    val g = image.createGraphics()
-    g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR)
-    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF)
-    val n = 1 shl z
-    for (t in tiles) {
-        val px = ready.getValue(t)
-        val tileImg = BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB)
-        tileImg.setRGB(0, 0, 256, 256, px, 0, 256)
-        g.drawImage(tileImg, Math.round(vp.worldToScreenX(t.x.toDouble() / n)).toInt(), Math.round(vp.worldToScreenY(t.y.toDouble() / n)).toInt(), null)
+        val image = BufferedImage(opt.width, opt.height, BufferedImage.TYPE_INT_RGB)
+        val g = image.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR)
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF)
+        val n = 1 shl z
+        for (slot in slots) {
+            val px = ready.getValue(slot.key)
+            val tileImg = BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB)
+            tileImg.setRGB(0, 0, 256, 256, px, 0, 256)
+            g.drawImage(
+                tileImg,
+                Math.round(vp.worldToScreenX(slot.rawX.toDouble() / n)).toInt(),
+                Math.round(vp.worldToScreenY(slot.key.y.toDouble() / n)).toInt(),
+                null,
+            )
+        }
+        overlay(g, vp, z, atlas, vtKeys.sortedWith(compareBy({ it.z }, { it.x }, { it.y })).mapNotNull { labelResults[it] }, opt.width, opt.height)
+        iconImage(atlas, "player")?.let { g.drawImage(it, opt.width / 2 - 16, opt.height / 2 - 16, 32, 32, null) }
+        g.dispose()
+        opt.out.absoluteFile.parentFile.mkdirs()
+        ImageIO.write(image, "png", opt.out)
+        println("wrote ${opt.out.absolutePath}")
+        println("timings: ${provider.timings.summary()}")
+        println("wall: ${System.currentTimeMillis() - start} ms")
+        println("done")
+    } finally {
+        scope.cancel()
+        client.dispatcher.executorService.shutdown()
+        client.connectionPool.evictAll()
     }
-    overlay(g, vp, z, atlas, vtKeys.sortedWith(compareBy({ it.z }, { it.x }, { it.y })).mapNotNull { labelResults[it] }, opt.width, opt.height)
-    iconImage(atlas, "player")?.let { g.drawImage(it, opt.width / 2 - 16, opt.height / 2 - 16, 32, 32, null) }
-    g.dispose()
-    opt.out.absoluteFile.parentFile.mkdirs()
-    ImageIO.write(image, "png", opt.out)
-    println("wrote ${opt.out.absolutePath}")
-    println("timings: ${provider.timings.summary()}")
-    println("wall: ${System.currentTimeMillis() - start} ms")
-    println("done")
 }
