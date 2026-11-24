@@ -113,6 +113,8 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
 
     companion object {
         private const val STALE_LOCATION_NS = 15_000_000_000L
+        private const val FUSED_PROVIDER_NAME = "fused"
+        private const val MAX_SAFE_MS_DELTA = Long.MAX_VALUE / 1_000_000L
 
         fun shortestAngleDelta(from: Float, to: Float): Float {
             var d = (to - from) % 360f
@@ -120,18 +122,68 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
             return d
         }
 
+        private fun hasValidCoords(loc: Location): Boolean =
+            loc.latitude.isFinite() && loc.longitude.isFinite() &&
+                loc.latitude in -90.0..90.0 && loc.longitude in -180.0..180.0
+
+        private fun hasValidAccuracy(loc: Location): Boolean =
+            loc.hasAccuracy() && loc.accuracy.isFinite() && loc.accuracy > 0f
+
+        private fun providerRank(provider: String?): Int = when (provider) {
+            LocationManager.GPS_PROVIDER -> 4
+            FUSED_PROVIDER_NAME -> 3
+            LocationManager.NETWORK_PROVIDER -> 2
+            LocationManager.PASSIVE_PROVIDER -> 1
+            else -> 0
+        }
+
+        private fun computeTimeDeltaNs(candidate: Location, current: Location): Long {
+            val candElapsed = candidate.elapsedRealtimeNanos
+            val currElapsed = current.elapsedRealtimeNanos
+            if (candElapsed > 0L && currElapsed > 0L) {
+                return candElapsed - currElapsed
+            }
+            val candTime = candidate.time
+            val currTime = current.time
+            if (candTime > 0L && currTime > 0L) {
+                val diffMs = candTime - currTime
+                return when {
+                    diffMs > MAX_SAFE_MS_DELTA -> Long.MAX_VALUE
+                    diffMs < -MAX_SAFE_MS_DELTA -> Long.MIN_VALUE
+                    else -> diffMs * 1_000_000L
+                }
+            }
+            val candHasTs = candElapsed > 0L || candTime > 0L
+            val currHasTs = currElapsed > 0L || currTime > 0L
+            return when {
+                candHasTs && !currHasTs -> 1L
+                !candHasTs && currHasTs -> -1L
+                else -> 0L
+            }
+        }
+
         internal fun isBetterLocation(candidate: Location, current: Location?): Boolean {
-            if (current == null) return true
-            val timeDeltaNs = candidate.elapsedRealtimeNanos - current.elapsedRealtimeNanos
+            if (!hasValidCoords(candidate)) return false
+            if (current == null || !hasValidCoords(current)) return true
+            val timeDeltaNs = computeTimeDeltaNs(candidate, current)
             if (timeDeltaNs < 0L) return false
             if (timeDeltaNs > STALE_LOCATION_NS) return true
+
             val sameProvider = candidate.provider != null && candidate.provider == current.provider
-            if (sameProvider) return true
-            if (candidate.hasAccuracy() && current.hasAccuracy()) {
-                val accDelta = candidate.accuracy - current.accuracy
-                if (accDelta > 50f && candidate.accuracy > current.accuracy * 2f) return false
+            if (sameProvider) {
+                if (timeDeltaNs > 0L) return true
+                return hasValidAccuracy(candidate) && (!hasValidAccuracy(current) || candidate.accuracy < current.accuracy)
             }
-            return true
+
+            val candAccValid = hasValidAccuracy(candidate)
+            val currAccValid = hasValidAccuracy(current)
+            if (currAccValid) {
+                if (!candAccValid) return false
+                if (candidate.accuracy > current.accuracy) return false
+                if (candidate.accuracy < current.accuracy) return true
+                return timeDeltaNs > 0L || providerRank(candidate.provider) > providerRank(current.provider)
+            }
+            return candAccValid || timeDeltaNs > 0L || providerRank(candidate.provider) > providerRank(current.provider)
         }
     }
 
@@ -144,7 +196,8 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     private fun providers(): List<String> {
-        val all = manager.allProviders
+        val mgr = manager ?: return emptyList()
+        val all = mgr.allProviders
         if (Build.VERSION.SDK_INT >= 31 && LocationManager.FUSED_PROVIDER in all) {
             return listOf(LocationManager.FUSED_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).filter { it in all }
         }
@@ -153,53 +206,82 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
 
     @Suppress("MissingPermission")
     fun lastKnown(): Location? {
+        val mgr = manager ?: return null
         if (!hasPermission()) return null
         return try {
-            val all = manager.allProviders
-            val candidates = (providers() + listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)).distinct().filter { it in all }
-            candidates.mapNotNull { runCatching { manager.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
-        } catch (e: SecurityException) {
+            val all = mgr.allProviders
+            val candidates = (providers() + listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER))
+                .distinct()
+                .filter { it in all }
+            val fixes = candidates
+                .mapNotNull { runCatching { mgr.getLastKnownLocation(it) }.getOrNull() }
+                .filter { hasValidCoords(it) }
+            if (fixes.isEmpty()) return null
+            val useElapsed = fixes.all { it.elapsedRealtimeNanos > 0L }
+            val sorted = fixes.sortedWith(
+                compareBy<Location> { if (useElapsed) it.elapsedRealtimeNanos else it.time }
+                    .thenByDescending { if (hasValidAccuracy(it)) it.accuracy else Float.MAX_VALUE },
+            )
+            var best: Location? = null
+            for (loc in sorted) {
+                if (isBetterLocation(loc, best)) best = loc
+            }
+            best
+        } catch (_: SecurityException) {
             null
         }
     }
 
     @Suppress("MissingPermission", "DEPRECATION")
     private fun locationFlow() = callbackFlow {
+        val mgr = manager
+        if (mgr == null) {
+            trySend(LocationState(null, LocationStatus.DISABLED))
+            awaitClose { }
+            return@callbackFlow
+        }
         if (!hasPermission()) {
             trySend(LocationState(null, LocationStatus.NO_PERMISSION))
             awaitClose { }
             return@callbackFlow
         }
+        val lock = Any()
         var last: Location? = lastKnown()
 
-        fun current(): LocationState {
-            if (last == null) last = lastKnown()
-            val status = when {
-                !LocationManagerCompat.isLocationEnabled(manager) -> LocationStatus.DISABLED
-                last == null -> LocationStatus.SEARCHING
-                else -> LocationStatus.OK
+        fun emitCurrent() {
+            val fallback = if (synchronized(lock) { last == null }) lastKnown() else null
+            synchronized(lock) {
+                if (last == null && fallback != null) last = fallback
+                val status = when {
+                    !LocationManagerCompat.isLocationEnabled(mgr) -> LocationStatus.DISABLED
+                    last == null -> LocationStatus.SEARCHING
+                    else -> LocationStatus.OK
+                }
+                trySend(LocationState(last, status))
             }
-            return LocationState(last, status)
         }
 
         val listener = object : LocationListenerCompat {
             override fun onLocationChanged(location: Location) {
-                if (!isBetterLocation(location, last)) return
-                last = location
-                trySend(current())
+                synchronized(lock) {
+                    if (!isBetterLocation(location, last)) return
+                    last = location
+                    val status = if (LocationManagerCompat.isLocationEnabled(mgr)) LocationStatus.OK else LocationStatus.DISABLED
+                    trySend(LocationState(location, status))
+                }
             }
 
             override fun onProviderEnabled(provider: String) {
-                trySend(current())
+                emitCurrent()
             }
 
             override fun onProviderDisabled(provider: String) {
-                trySend(current())
+                emitCurrent()
             }
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
-                trySend(current())
+                emitCurrent()
             }
         }
         val filter = IntentFilter().apply {
@@ -214,15 +296,20 @@ class LocationRepository(private val context: Context, appScope: CoroutineScope)
                 .setQuality(LocationRequestCompat.QUALITY_HIGH_ACCURACY)
                 .build()
             providers().forEach { provider ->
-                LocationManagerCompat.requestLocationUpdates(manager, provider, req, listener, Looper.getMainLooper())
+                LocationManagerCompat.requestLocationUpdates(mgr, provider, req, listener, Looper.getMainLooper())
             }
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             trySend(LocationState(null, LocationStatus.NO_PERMISSION))
+            awaitClose {
+                runCatching { LocationManagerCompat.removeUpdates(mgr, listener) }
+                runCatching { context.unregisterReceiver(receiver) }
+            }
+            return@callbackFlow
         }
-        trySend(current())
+        emitCurrent()
         awaitClose {
-            LocationManagerCompat.removeUpdates(manager, listener)
-            context.unregisterReceiver(receiver)
+            runCatching { LocationManagerCompat.removeUpdates(mgr, listener) }
+            runCatching { context.unregisterReceiver(receiver) }
         }
     }
 
