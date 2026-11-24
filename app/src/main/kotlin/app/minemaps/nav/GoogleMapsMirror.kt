@@ -1,5 +1,6 @@
 package app.minemaps.nav
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
@@ -7,7 +8,6 @@ import android.content.Intent
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import app.minemaps.engine.routing.RoadAlert
 import app.minemaps.engine.routing.RoadAlertKind
 import app.minemaps.engine.routing.TurnDirection
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,18 +31,22 @@ object GoogleMapsMirror {
     const val GMAPS_PACKAGE = "com.google.android.apps.maps"
     val active = MutableStateFlow<MirroredNavInfo?>(null)
     val latestAlertNotice = MutableStateFlow<MirroredAlertNotice?>(null)
-    @Volatile
+
+    private val lock = Any()
+    private var activeKey: String? = null
     private var dismissedSession = false
-    @Volatile
     private var exitAction: android.app.PendingIntent? = null
 
     /** Dismisses the mirrored Google Maps banner and triggers Google Maps' notification "Exit navigation" action if available. */
     fun dismissAndExitGoogleMaps() {
-        val hadActive = active.value != null || exitAction != null
-        if (hadActive) dismissedSession = true
-        active.value = null
-        val pending = exitAction
-        exitAction = null
+        val pending = synchronized(lock) {
+            val hadActive = active.value != null || exitAction != null
+            if (hadActive) dismissedSession = true
+            active.value = null
+            val p = exitAction
+            exitAction = null
+            p
+        }
         if (pending != null) {
             runCatching { pending.send() }
         }
@@ -50,19 +54,41 @@ object GoogleMapsMirror {
 
     /** Clears the dismissed-session flag when the user explicitly starts a new navigation from MineMaps. */
     fun resetDismissed() {
-        dismissedSession = false
+        synchronized(lock) {
+            dismissedSession = false
+        }
     }
 
-    internal fun onNotificationUpdated(info: MirroredNavInfo?, exit: android.app.PendingIntent?) {
-        exitAction = exit
-        if (dismissedSession) return
-        active.value = info
+    internal fun onNotificationUpdated(
+        info: MirroredNavInfo?,
+        exit: android.app.PendingIntent?,
+        key: String? = null,
+    ) {
+        synchronized(lock) {
+            if (info == null) {
+                if (key == null || key == activeKey) {
+                    dismissedSession = false
+                    activeKey = null
+                    exitAction = null
+                    active.value = null
+                }
+                return
+            }
+            if (dismissedSession) return
+            activeKey = key
+            exitAction = exit
+            active.value = info
+        }
     }
 
-    internal fun onNotificationCleared() {
-        dismissedSession = false
-        exitAction = null
-        active.value = null
+    internal fun onNotificationCleared(key: String? = null) {
+        synchronized(lock) {
+            if (key != null && key != activeKey) return
+            dismissedSession = false
+            activeKey = null
+            exitAction = null
+            active.value = null
+        }
     }
 
     fun isListenerEnabled(context: Context): Boolean = runCatching {
@@ -178,19 +204,34 @@ class GoogleMapsNotificationService : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn?.packageName == GoogleMapsMirror.GMAPS_PACKAGE) {
-            GoogleMapsMirror.onNotificationCleared()
+            GoogleMapsMirror.onNotificationCleared(sbn.key)
         }
     }
 
     private fun refreshFromActive() {
         runCatching {
-            val gmaps = activeNotifications?.firstOrNull { it.packageName == GoogleMapsMirror.GMAPS_PACKAGE }
-            if (gmaps != null) updateFrom(gmaps) else GoogleMapsMirror.onNotificationCleared()
+            refreshFromNotifications(activeNotifications)
         }
     }
 
-    private fun updateFrom(sbn: StatusBarNotification) {
+    internal fun refreshFromNotifications(notifications: Array<StatusBarNotification>?) {
+        val gmaps = notifications?.filter { it.packageName == GoogleMapsMirror.GMAPS_PACKAGE }.orEmpty()
+        var foundActiveNav = false
+        for (sbn in gmaps) {
+            if (!foundActiveNav) {
+                if (updateFrom(sbn)) foundActiveNav = true
+            } else {
+                parseAlertOnly(sbn)
+            }
+        }
+        if (!foundActiveNav) {
+            GoogleMapsMirror.onNotificationCleared()
+        }
+    }
+
+    private fun parseAlertOnly(sbn: StatusBarNotification) {
         val n = sbn.notification ?: return
+        if ((n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
         val ex = n.extras ?: return
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()
@@ -199,12 +240,46 @@ class GoogleMapsNotificationService : NotificationListenerService() {
         GoogleMapsMirror.parseAlertNotice(title, text, sub, big)?.let {
             GoogleMapsMirror.latestAlertNotice.value = it
         }
-        val isNav = n.category == Notification.CATEGORY_NAVIGATION || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
-        if (!isNav) return
-        val exitIntent = n.actions?.firstOrNull { a ->
-            val label = a.title?.toString()?.lowercase().orEmpty()
-            "exit" in label || "stop" in label || "cancel" in label || "close" in label || "salir" in label || "cerrar" in label
-        }?.actionIntent ?: n.actions?.firstOrNull()?.actionIntent
-        GoogleMapsMirror.onNotificationUpdated(GoogleMapsMirror.parseFields(title, text, sub, big), exitIntent)
+    }
+
+    private fun updateFrom(sbn: StatusBarNotification): Boolean {
+        val n = sbn.notification ?: return false
+        if ((n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return false
+        val ex = n.extras ?: return false
+        val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val big = ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+        val sub = ex.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+        GoogleMapsMirror.parseAlertNotice(title, text, sub, big)?.let {
+            GoogleMapsMirror.latestAlertNotice.value = it
+        }
+        if (!isNavigationCategory(n)) {
+            GoogleMapsMirror.onNotificationCleared(sbn.key)
+            return false
+        }
+        val info = GoogleMapsMirror.parseFields(title, text, sub, big)
+        if (info == null) {
+            GoogleMapsMirror.onNotificationCleared(sbn.key)
+            return false
+        }
+        val exitIntent = extractExitIntent(n)
+        GoogleMapsMirror.onNotificationUpdated(info, exitIntent, sbn.key)
+        return true
+    }
+
+    @SuppressLint("InlinedApi")
+    private fun isNavigationCategory(n: Notification): Boolean =
+        n.category == Notification.CATEGORY_NAVIGATION
+
+    private fun extractExitIntent(n: Notification): android.app.PendingIntent? =
+        n.actions?.firstOrNull { a ->
+            val label = a.title?.toString()?.trim()?.lowercase().orEmpty()
+            EXIT_ACTION_REGEX.containsMatchIn(label)
+        }?.actionIntent
+
+    private companion object {
+        private val EXIT_ACTION_REGEX = Regex(
+            """\b(?:exit|cancel|close|salir|cerrar|detener|quitter|arrêter|arreter|fermer|beenden|esci|sair)\b|^stop\b""",
+        )
     }
 }
