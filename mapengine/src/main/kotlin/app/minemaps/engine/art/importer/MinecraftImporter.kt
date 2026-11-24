@@ -1,5 +1,6 @@
 package app.minemaps.engine.art.importer
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -115,8 +116,18 @@ object MinecraftImporter {
 
     private class Missing(val rel: String) : Exception(rel)
 
-    private class Textures(val sources: List<TextureSource>, val decoder: PngDecoder) {
-        fun has(rel: String) = sources.any { it.read(rel) != null }
+    private class Textures(
+        val sources: List<TextureSource>,
+        val decoder: PngDecoder,
+        val checkCancelled: () -> Unit = {},
+    ) {
+        fun has(rel: String): Boolean {
+            checkCancelled()
+            return sources.any {
+                checkCancelled()
+                it.read(rel) != null
+            }
+        }
 
         fun first(vararg rels: String): Rgba {
             for (r in rels) if (has(r)) return img(r)
@@ -124,10 +135,15 @@ object MinecraftImporter {
         }
 
         fun img(rel: String): Rgba {
+            checkCancelled()
             for (s in sources) {
+                checkCancelled()
                 val data = s.read(rel) ?: continue
+                checkCancelled()
                 var im = try {
                     decoder.decode(data)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     throw ImportException("Cannot decode $rel.png")
                 }
@@ -207,8 +223,15 @@ object MinecraftImporter {
         return out
     }
 
-    fun import(sources: List<TextureSource>, original: OriginalAtlas, decoder: PngDecoder, onProgress: (Int) -> Unit = {}): ImportOutput {
-        val tx = Textures(sources, decoder)
+    fun import(
+        sources: List<TextureSource>,
+        original: OriginalAtlas,
+        decoder: PngDecoder,
+        onProgress: (Int) -> Unit = {},
+        checkCancelled: () -> Unit = {},
+    ): ImportOutput {
+        checkCancelled()
+        val tx = Textures(sources, decoder, checkCancelled)
         val item = { n: String -> tx.img("item/$n") }
         val grassC = { if (tx.has("colormap/grass")) biome(tx.img("colormap/grass"), 0.8, 0.4) else DEFAULT_GRASS }
         val parkC = { if (tx.has("colormap/grass")) biome(tx.img("colormap/grass"), 0.7, 0.8) else DEFAULT_PARK }
@@ -304,6 +327,7 @@ object MinecraftImporter {
         var step = 0
         val total = origTextures.size + (orig["icons"]?.jsonObject?.size ?: 0)
         for ((name, origCells) in origTextures) {
+            checkCancelled()
             val variants = try {
                 (textures[name]?.invoke() ?: throw Missing("no recipe")).map { frame(it) }
             } catch (e: Missing) {
@@ -311,6 +335,7 @@ object MinecraftImporter {
                 origCells.jsonArray.map { origCell(it.jsonArray) }
             }
             outTextures[name] = JsonArray(variants.map { add(it) })
+            checkCancelled()
             onProgress(++step * 100 / total)
         }
         while (cells.size % COLS != 0) cells.add(Rgba(T, T))
@@ -318,6 +343,7 @@ object MinecraftImporter {
         val outAnchors = LinkedHashMap<String, JsonElement>()
         val origAnchors = orig["anchors"]?.jsonObject ?: JsonObject(emptyMap())
         for ((name, cell) in orig["icons"]?.jsonObject ?: JsonObject(emptyMap())) {
+            checkCancelled()
             var im: Rgba? = try {
                 icons[name]?.let { scaleIcon(it()) }
             } catch (e: Missing) {
@@ -337,9 +363,11 @@ object MinecraftImporter {
                 im = centerXY(im)
             }
             outIcons[name] = add(im)
+            checkCancelled()
             onProgress(++step * 100 / total)
         }
 
+        checkCancelled()
         val atlas = Rgba(COLS * T, ((cells.size + COLS - 1) / COLS) * T)
         cells.forEachIndexed { i, c -> atlas.paste(c, (i % COLS) * T, (i / COLS) * T) }
         val meta = LinkedHashMap<String, JsonElement>()
@@ -347,6 +375,7 @@ object MinecraftImporter {
         meta["textures"] = JsonObject(outTextures)
         meta["icons"] = JsonObject(outIcons)
         meta["anchors"] = JsonObject(outAnchors)
+        checkCancelled()
         return ImportOutput(PngWriter.encode(atlas), Json { prettyPrint = true; prettyPrintIndent = " " }.encodeToString(JsonObject.serializer(), JsonObject(meta)), kept)
     }
 

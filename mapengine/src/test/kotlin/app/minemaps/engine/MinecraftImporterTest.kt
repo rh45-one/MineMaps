@@ -9,6 +9,7 @@ import app.minemaps.engine.art.importer.PngWriter
 import app.minemaps.engine.art.importer.Rgba
 import app.minemaps.engine.art.importer.TextureSource
 import app.minemaps.engine.art.importer.ZipTextureSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import org.junit.Assume.assumeTrue
 import java.awt.image.BufferedImage
@@ -19,6 +20,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.imageio.ImageIO
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -176,6 +178,129 @@ class MinecraftImporterTest {
             assertTrue(out.kept.none { it.startsWith("dirt_path (") }, "legacy blocks/grass_path_top.png should map to dirt_path")
             assertTrue(out.kept.none { it.startsWith("golden_apple (") }, "legacy items/apple_golden.png should map to golden_apple")
             assertTrue(out.kept.none { it.startsWith("chest (") }, "128x128 HD entity/chest/normal.png should downscale and compose chest icon")
+        }
+    }
+
+    private fun syntheticMinimalPackZip(): File {
+        val p = "assets/minecraft/textures/"
+        return zip(
+            mapOf(
+                "${p}block/grass_block_top.png" to PngWriter.encode(solid(16, 16, 0xFFBBBBBB.toInt())),
+                "${p}block/sand.png" to PngWriter.encode(solid(16, 16, 0xFFD8C280.toInt())),
+                "${p}block/water_still.png" to PngWriter.encode(solid(16, 32, 0xFF88AAFF.toInt())),
+                "${p}colormap/grass.png" to PngWriter.encode(solid(256, 256, 0xFF77BB44.toInt())),
+                "${p}item/apple.png" to PngWriter.encode(solid(16, 16, 0xFFCC2222.toInt())),
+                "${p}map/decorations/red_banner.png" to PngWriter.encode(solid(16, 16, 0xFFEE1111.toInt())),
+                "${p}entity/chest/normal.png" to PngWriter.encode(solid(64, 64, 0xFF996633.toInt())),
+            ),
+        )
+    }
+
+    @Test
+    fun defaultCheckCancelledProducesIdenticalAtlasAndJsonOnSyntheticZip() {
+        val file = syntheticMinimalPackZip()
+        val orig = original()
+        val outDefault = ZipTextureSource(file).use { MinecraftImporter.import(listOf(it), orig, imageIo) }
+        val progress = ArrayList<Int>()
+        var checks = 0
+        val outExplicit = ZipTextureSource(file).use {
+            MinecraftImporter.import(
+                listOf(it),
+                orig,
+                imageIo,
+                onProgress = { progress += it },
+                checkCancelled = { checks++ },
+            )
+        }
+        assertEquals(2, MinecraftImporter.IMPORTER_VERSION)
+        assertContentEquals(outDefault.atlasPng, outExplicit.atlasPng)
+        assertEquals(outDefault.atlasJson, outExplicit.atlasJson)
+        assertEquals(outDefault.kept, outExplicit.kept)
+        assertTrue(progress.isNotEmpty() && progress.last() == 100)
+        assertTrue(checks > 0)
+    }
+
+    @Test
+    fun cooperativeCheckCancelledAbortsTextureAndIconLoopsEarly() {
+        val file = syntheticMinimalPackZip()
+        val orig = original()
+
+        // Measure full read count baseline
+        var fullReads = 0
+        ZipTextureSource(file).use { src ->
+            val counting = object : TextureSource {
+                override fun read(rel: String): ByteArray? {
+                    fullReads++
+                    return src.read(rel)
+                }
+            }
+            MinecraftImporter.import(listOf(counting), orig, imageIo)
+        }
+
+        // Part A: abort mid-texture loop
+        val texProgress = ArrayList<Int>()
+        var texReads = 0
+        ZipTextureSource(file).use { src ->
+            val counting = object : TextureSource {
+                override fun read(rel: String): ByteArray? {
+                    texReads++
+                    return src.read(rel)
+                }
+            }
+            assertFailsWith<CancellationException> {
+                MinecraftImporter.import(
+                    listOf(counting),
+                    orig,
+                    imageIo,
+                    onProgress = { texProgress += it },
+                    checkCancelled = { if (texProgress.size >= 2) throw CancellationException("stop textures") },
+                )
+            }
+        }
+        assertEquals(2, texProgress.size)
+        assertTrue(texReads < fullReads, "expected fewer reads ($texReads < $fullReads) on early texture-loop cancellation")
+
+        // Part B: abort mid-icon loop
+        val iconProgress = ArrayList<Int>()
+        var iconReads = 0
+        ZipTextureSource(file).use { src ->
+            val counting = object : TextureSource {
+                override fun read(rel: String): ByteArray? {
+                    iconReads++
+                    return src.read(rel)
+                }
+            }
+            assertFailsWith<CancellationException> {
+                MinecraftImporter.import(
+                    listOf(counting),
+                    orig,
+                    imageIo,
+                    onProgress = { iconProgress += it },
+                    checkCancelled = { if ((iconProgress.lastOrNull() ?: 0) >= 50) throw CancellationException("stop icons") },
+                )
+            }
+        }
+        assertTrue(iconProgress.isNotEmpty() && iconProgress.last() in 50 until 100)
+        assertTrue(iconReads < fullReads, "expected fewer reads ($iconReads < $fullReads) on early icon-loop cancellation")
+    }
+
+    @Test
+    fun cancellationExceptionFromDecoderOrSourceIsNotWrappedInImportException() {
+        val orig = original()
+        val pngBytes = PngWriter.encode(solid(16, 16, 0xFF11AA22.toInt()))
+        val singleSource = object : TextureSource {
+            override fun read(rel: String): ByteArray? = if (rel == "block/grass_block_top" || rel == "block/sand") pngBytes else null
+        }
+        val cancellingDecoder = PngDecoder { throw CancellationException("decoder cancelled") }
+        assertFailsWith<CancellationException> {
+            MinecraftImporter.import(listOf(singleSource), orig, cancellingDecoder)
+        }
+
+        val cancellingSource = object : TextureSource {
+            override fun read(rel: String): ByteArray? = throw CancellationException("source cancelled")
+        }
+        assertFailsWith<CancellationException> {
+            MinecraftImporter.import(listOf(cancellingSource), orig, imageIo)
         }
     }
 }
