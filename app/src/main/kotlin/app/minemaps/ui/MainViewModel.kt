@@ -26,11 +26,14 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 enum class Screen { MAP, SAVED, SETTINGS, LICENCES }
 
@@ -41,6 +44,8 @@ sealed interface InfoCard {
 }
 
 data class SaveDialog(val lat: Double, val lon: Double, val suggestedName: String)
+
+data class FlyTarget(val camera: Camera, val seq: Long)
 
 @OptIn(FlowPreview::class)
 class MainViewModel(private val container: AppContainer) : ViewModel() {
@@ -96,7 +101,8 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     private fun searchCenter(): Pair<Double, Double>? {
         val loc = locationState.value.location
         if (loc != null && loc.latitude.isFinite() && loc.longitude.isFinite()) return loc.latitude to loc.longitude
-        return camera?.let { it.lat to it.lon }
+        val cam = camera ?: container.mapState.current
+        return cam?.let { it.lat to it.lon }
     }
 
     private fun cacheKey(q: String): String {
@@ -161,8 +167,20 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     @Volatile
-    private var hasIncomingTarget = false
-    val pendingFlyTarget = MutableStateFlow<Camera?>(null)
+    private var hasIncomingPlaceTarget = false
+    private val cameraInitLock = Any()
+    private val flySeq = AtomicLong(0L)
+    private val _pendingFlyTarget = MutableStateFlow<FlyTarget?>(null)
+    val pendingFlyTarget: StateFlow<FlyTarget?> = _pendingFlyTarget.asStateFlow()
+
+    fun requestFlyTo(camera: Camera) {
+        val safe = Camera.sanitized(camera.lat, camera.lon, camera.zoom, camera.bearing) ?: return
+        _pendingFlyTarget.value = FlyTarget(safe, flySeq.incrementAndGet())
+    }
+
+    fun consumeFlyTarget(seq: Long) {
+        _pendingFlyTarget.update { cur -> if (cur?.seq == seq) null else cur }
+    }
 
     init {
         viewModelScope.launch {
@@ -177,23 +195,31 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             container.navigation.messages.collect { messages.tryEmit(it) }
         }
         viewModelScope.launch(Dispatchers.IO) {
+            if (hasIncomingPlaceTarget) return@launch
             val persisted = container.mapState.load()
-            if (hasIncomingTarget) return@launch
-            if (persisted != null) {
-                camera = persisted
-                container.mapState.update(persisted)
-                initialCamera.value = persisted
-                if (container.location.hasPermission()) {
-                    following.value = true
-                    if (persisted.zoom < 14.0) pendingFlyZoom.value = 16.0
+            if (hasIncomingPlaceTarget) return@launch
+            val last = if (persisted == null) container.location.lastKnown() else null
+            synchronized(cameraInitLock) {
+                if (hasIncomingPlaceTarget) return@launch
+                if (persisted != null) {
+                    if (camera == null) {
+                        camera = persisted
+                        container.mapState.update(persisted)
+                    }
+                    if (initialCamera.value == null) initialCamera.value = persisted
+                    if (container.location.hasPermission()) {
+                        following.value = true
+                        if (persisted.zoom < 14.0) pendingFlyZoom.value = 16.0
+                    }
+                } else {
+                    val cam = if (last != null) Camera(last.latitude, last.longitude, 16.0) else Camera.WORLD
+                    if (camera == null) {
+                        camera = cam
+                        container.mapState.update(cam)
+                    }
+                    if (initialCamera.value == null) initialCamera.value = cam
+                    if (last != null) following.value = true
                 }
-            } else {
-                val last = container.location.lastKnown()
-                val cam = if (last != null) Camera(last.latitude, last.longitude, 16.0) else Camera.WORLD
-                camera = cam
-                container.mapState.update(cam)
-                initialCamera.value = cam
-                if (last != null) following.value = true
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -261,6 +287,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun showSaved(place: SavedPlace) {
+        resultsVisible.value = false
         card.value = InfoCard.Saved(place)
     }
 
@@ -360,21 +387,28 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun setAppLanguage(v: app.minemaps.data.AppLanguage) = viewModelScope.launch { container.settings.setAppLanguage(v) }
 
     fun handleIncomingTarget(target: app.minemaps.car.GeoTarget, onFlyTo: (Double, Double, Double) -> Unit) {
-        hasIncomingTarget = true
         screen.value = Screen.MAP
         when (target) {
             is app.minemaps.car.GeoTarget.Place -> {
                 val title = target.label ?: "Shared place"
-                val cam = Camera(target.lat, target.lon, 17.0)
-                searchPin.value = LatLng(target.lat, target.lon)
-                card.value = InfoCard.Inspect(title, "Shared location", target.lat, target.lon)
-                following.value = false
-                camera = cam
-                container.mapState.update(cam)
-                pendingFlyTarget.value = cam
-                onFlyTo(target.lat, target.lon, 17.0)
+                val cam = Camera.sanitized(target.lat, target.lon, 17.0)
+                    ?: Camera(target.lat.coerceIn(-Camera.MAX_LAT, Camera.MAX_LAT), target.lon, 17.0)
+                synchronized(cameraInitLock) {
+                    hasIncomingPlaceTarget = true
+                    searchPin.value = LatLng(cam.lat, cam.lon)
+                    card.value = InfoCard.Inspect(title, "Shared location", cam.lat, cam.lon)
+                    following.value = false
+                    pendingFlyZoom.value = null
+                    resultsVisible.value = false
+                    typed.value = ""
+                    camera = cam
+                    container.mapState.update(cam)
+                    if (initialCamera.value == null) initialCamera.value = cam
+                    requestFlyTo(cam)
+                }
+                onFlyTo(cam.lat, cam.lon, cam.zoom)
                 if (navMode != app.minemaps.data.NavigationMode.OFF) {
-                    container.navigation.startNavigation(target.lat, target.lon, title)
+                    container.navigation.startNavigation(cam.lat, cam.lon, title)
                 }
             }
             is app.minemaps.car.GeoTarget.Query -> {

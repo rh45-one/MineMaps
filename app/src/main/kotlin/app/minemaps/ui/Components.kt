@@ -42,10 +42,12 @@ import app.minemaps.ui.theme.PixelGlyph
 import app.minemaps.ui.theme.TrafficLightGlyph
 import app.minemaps.ui.theme.mcPanel
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.style.TextOverflow
 
 class MapController {
-    var view: MapView? = null
+    var view: MapView? by mutableStateOf(null)
     var renderer: MapRenderer? = null
 
     fun zoomIn() = view?.zoomBy(1.0)

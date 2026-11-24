@@ -260,7 +260,7 @@ private fun MainContent(vm: MainViewModel, container: AppContainer, engine: MapE
                     vm.screen.value = Screen.MAP
                     vm.following.value = false
                     vm.showSaved(p)
-                    mapController.view?.animateTo(p.lat, p.lon, 17.0)
+                    vm.requestFlyTo(Camera(p.lat, p.lon, 17.0))
                 },
                 onDelete = { vm.delete(it) },
             )
@@ -468,9 +468,10 @@ private fun MapScreen(
     var detectedRoadClass by remember { mutableStateOf<String?>(null) }
     var lastRoadProbeMs by remember { mutableStateOf(0L) }
     var lastManualRecenterMs by remember { mutableStateOf(0L) }
-    LaunchedEffect(player, following, pending, settings.dynamicDrivingZoom, inNavView, effectiveHeading) {
+    val mapView = controller.view
+    LaunchedEffect(player, following, pending, settings.dynamicDrivingZoom, inNavView, effectiveHeading, mapView) {
         val l = player ?: return@LaunchedEffect
-        val view = controller.view ?: return@LaunchedEffect
+        val view = mapView ?: return@LaunchedEffect
         if (!following) return@LaunchedEffect
         val z = pending
         if (z != null) {
@@ -523,12 +524,13 @@ private fun MapScreen(
         }
     }
 
-    val flyTarget by vm.pendingFlyTarget.collectAsState()
-    LaunchedEffect(flyTarget) {
+    val flyTarget by vm.pendingFlyTarget.collectAsStateWithLifecycle()
+    LaunchedEffect(flyTarget, mapView) {
         val t = flyTarget ?: return@LaunchedEffect
-        val view = controller.view ?: return@LaunchedEffect
-        vm.pendingFlyTarget.value = null
-        view.animateTo(t.lat, t.lon, t.zoom)
+        val view = mapView ?: return@LaunchedEffect
+        vm.consumeFlyTarget(t.seq)
+        focus.clearFocus()
+        view.animateTo(t.camera.lat, t.camera.lon, t.camera.zoom)
     }
 
     LaunchedEffect(Unit) {
@@ -545,6 +547,7 @@ private fun MapScreen(
                     controller.view = it
                 }
             },
+            onRelease = { if (controller.view === it) controller.view = null },
             update = { v ->
                 v.night = dark
                 v.overlays = overlays

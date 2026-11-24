@@ -26,6 +26,8 @@ class MapStateRepository(private val store: DataStore<Preferences>) {
     private val zoomKey = doublePreferencesKey("zoom")
     private val bearingKey = doublePreferencesKey("bearing")
 
+    private val lock = Any()
+
     @Volatile
     var current: Camera? = null
         private set
@@ -35,21 +37,26 @@ class MapStateRepository(private val store: DataStore<Preferences>) {
         val lat = p[latKey] ?: return null
         val lon = p[lonKey] ?: return null
         val zoom = p[zoomKey] ?: return null
-        return Camera.sanitized(lat, lon, zoom, p[bearingKey] ?: 0.0)?.also { current = it }
+        val loaded = Camera.sanitized(lat, lon, zoom, p[bearingKey] ?: 0.0) ?: return null
+        synchronized(lock) {
+            if (current == null) current = loaded
+        }
+        return loaded
     }
 
     fun update(camera: Camera) {
-        if (Camera.sanitized(camera.lat, camera.lon, camera.zoom, camera.bearing) != null) current = camera
+        val safe = Camera.sanitized(camera.lat, camera.lon, camera.zoom, camera.bearing) ?: return
+        synchronized(lock) { current = safe }
     }
 
     suspend fun persist(camera: Camera) {
-        if (Camera.sanitized(camera.lat, camera.lon, camera.zoom, camera.bearing) == null) return
-        current = camera
+        val safe = Camera.sanitized(camera.lat, camera.lon, camera.zoom, camera.bearing) ?: return
+        synchronized(lock) { current = safe }
         store.edit {
-            it[latKey] = camera.lat
-            it[lonKey] = camera.lon
-            it[zoomKey] = camera.zoom
-            it[bearingKey] = camera.bearing
+            it[latKey] = safe.lat
+            it[lonKey] = safe.lon
+            it[zoomKey] = safe.zoom
+            it[bearingKey] = safe.bearing
         }
     }
 }
