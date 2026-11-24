@@ -37,6 +37,15 @@ if [ "${1:-}" != "verify" ] || [ "${2:-}" != "--print-certs" ] || [ -z "${3:-}" 
   echo "mock apksigner: invalid args: $*" >&2
   exit 2
 fi
+eff_loc="${LC_ALL:-${LC_CTYPE:-${LANG:-C}}}"
+case "$eff_loc" in
+  C|POSIX)
+    if [[ "${3:-}" == *[![:print:]]* ]] || [[ "$PWD" == *[![:print:]]* ]]; then
+      echo "mock apksigner: non-ASCII path or CWD under $eff_loc locale: '$3' (PWD='$PWD')" >&2
+      exit 1
+    fi
+    ;;
+esac
 rc="${MOCK_APKSIGNER_RC:-0}"
 if [ "$rc" -ne 0 ]; then
   echo "mock apksigner: failing with rc=$rc" >&2
@@ -121,7 +130,7 @@ build_filtered_bin() {
   shift
   local skip_list=" $* "
   mkdir -p "$dest"
-  local cmds=(bash sh env sed tr sort awk grep printf cat head tail cut wc dirname basename readlink realpath mktemp rm mkdir cp mv ls unzip)
+  local cmds=(bash sh env sed tr sort awk grep printf cat head tail cut wc dirname basename readlink realpath mktemp rm mkdir cp mv ls ln unzip)
   for cmd in "${cmds[@]}"; do
     if [[ "$skip_list" == *" $cmd "* ]]; then
       continue
@@ -148,7 +157,7 @@ fi
 
 # Generate deterministic ZIP/APK fixtures
 FIXTURES="$WORK_DIR/fixtures"
-mkdir -p "$FIXTURES" "$FIXTURES/dir with spaces" "$FIXTURES/dash_dir"
+mkdir -p "$FIXTURES" "$FIXTURES/dir with spaces" "$FIXTURES/dash_dir" "$FIXTURES/utf8_path_dir" "$FIXTURES/utf8_dir_café_🗺️" "$FIXTURES/glob_dir"
 python3 - "$FIXTURES" <<'PY'
 import os
 import sys
@@ -161,13 +170,15 @@ def write_zip(path, entries):
         for name in entries:
             zf.writestr(name, b"data")
 
-# 1. Clean APK
-write_zip(os.path.join(root, "clean.apk"), [
+clean_entries = [
     "AndroidManifest.xml",
     "minemaps/atlas.png",
     "minemaps/atlas.json",
     "assets/minemaps/packs/original/atlas.png",
-])
+]
+
+# 1. Clean APK
+write_zip(os.path.join(root, "clean.apk"), clean_entries)
 
 # 2. Clean APK in directory with spaces + 2,500 entries (>64 KiB pipe buffer)
 many_clean = ["AndroidManifest.xml"] + [f"res/raw/entry_{i:04d}_padding_name.bin" for i in range(2500)]
@@ -227,13 +238,50 @@ write_zip(os.path.join(root, "empty.apk"), [])
 # 12. Corrupt non-zip file
 with open(os.path.join(root, "corrupt.apk"), "wb") as dst:
     dst.write(b"not a zip file at all")
+
+# 13. Uppercase 'I' vanilla fixtures for Turkic / non-C locale tests + UTF-8 path fixtures
+write_zip(os.path.join(root, "vanilla_upper_i.apk"), [
+    "AndroidManifest.xml",
+    "MINEMAPS/PACKS/VANILLA/ATLAS.PNG",
+])
+write_zip(os.path.join(root, "vanilla_utf8_upper_i.apk"), [
+    "AndroidManifest.xml",
+    "assets/café_🗺️/MINEMAPS/PACKS/VANILLA/ATLAS.PNG",
+])
+write_zip(os.path.join(root, "utf8_path_dir", "clean café_🗺️.apk"), clean_entries)
+write_zip(os.path.join(root, "utf8_dir_café_🗺️", "ascii_in_utf8_dir.apk"), clean_entries)
+
+# 14. Info-ZIP globbing fixtures with neighboring clean/vanilla archives
+write_zip(os.path.join(root, "glob_dir", "my1.apk"), clean_entries)
+write_zip(os.path.join(root, "glob_dir", "my[1].apk"), [
+    "AndroidManifest.xml",
+    "assets/minemaps/packs/vanilla/atlas.png",
+])
+write_zip(os.path.join(root, "glob_dir", "-my[1].apk"), [
+    "AndroidManifest.xml",
+    "assets/minemaps/packs/vanilla/atlas.png",
+])
+write_zip(os.path.join(root, "glob_dir", "app1v.apk"), [
+    "AndroidManifest.xml",
+    "assets/minemaps/packs/vanilla/atlas.png",
+])
+write_zip(os.path.join(root, "glob_dir", "app*v.apk"), clean_entries)
+write_zip(os.path.join(root, "glob_dir", "appXv.apk"), [
+    "AndroidManifest.xml",
+    "assets/minemaps/packs/vanilla/atlas.png",
+])
+write_zip(os.path.join(root, "glob_dir", "app?v.apk"), clean_entries)
 PY
 
 PASS_COUNT=0
 FAIL_COUNT=0
 
 run_case() {
-  local mode="$1"      # pass | fail
+  if [ "$#" -lt 4 ]; then
+    echo "run_case: expected at least 4 args, got $#" >&2
+    return 1
+  fi
+  local mode="$1"        # pass | fail
   local expected_rc="$2" # "" for any non-zero, or specific integer
   local name="$3"
   local work_cwd="$4"
@@ -241,45 +289,44 @@ run_case() {
 
   local out=""
   local rc=0
-  set +e
   if [ -n "$work_cwd" ]; then
-    out=$(cd "$work_cwd" && env -i "$@" 2>&1)
-    rc=$?
+    [ -d "$work_cwd" ] || { echo "run_case: missing work_cwd '$work_cwd' for $name" >&2; return 1; }
+    out=$(cd "$work_cwd" && env -i "$@" 2>&1) || rc=$?
   else
-    out=$(env -i "$@" 2>&1)
-    rc=$?
+    out=$(env -i "$@" 2>&1) || rc=$?
   fi
-  set -e
 
-  if [ "$mode" = "pass" ]; then
-    if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -Fq "no vanilla pack entries OK"; then
-      PASS_COUNT=$((PASS_COUNT + 1))
-      printf '[PASS] %s\n' "$name"
-      return 0
-    fi
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-    printf '[FAIL] %s (expected rc=0 + OK marker, got rc=%d)\n%s\n' "$name" "$rc" "$out" >&2
-    return 1
-  else
-    local rc_ok=0
-    if [ -n "$expected_rc" ]; then
-      [ "$rc" -eq "$expected_rc" ] && rc_ok=1
-    else
-      [ "$rc" -ne 0 ] && rc_ok=1
-    fi
-    if [ "$rc_ok" -eq 1 ] && ! printf '%s\n' "$out" | grep -Fq "no vanilla pack entries OK"; then
-      PASS_COUNT=$((PASS_COUNT + 1))
-      printf '[PASS] %s (rc=%d)\n' "$name" "$rc"
-      return 0
-    fi
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-    printf '[FAIL] %s (expected rc=%s without OK marker, got rc=%d)\n%s\n' "$name" "${expected_rc:-!=0}" "$rc" "$out" >&2
-    return 1
-  fi
+  case "$mode" in
+    pass)
+      if [ "$rc" -eq 0 ] && [[ "$out" == *"no vanilla pack entries OK"* ]]; then
+        PASS_COUNT=$((PASS_COUNT + 1))
+        printf '[PASS] %s\n' "$name"
+      else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        printf '[FAIL] %s (expected rc=0 + OK marker, got rc=%d)\n%s\n' "$name" "$rc" "$out" >&2
+      fi
+      ;;
+    fail)
+      local rc_ok=0
+      if [ -n "$expected_rc" ]; then
+        [ "$rc" -eq "$expected_rc" ] && rc_ok=1
+      else
+        [ "$rc" -ne 0 ] && rc_ok=1
+      fi
+      if [ "$rc_ok" -eq 1 ] && [[ "$out" != *"no vanilla pack entries OK"* ]]; then
+        PASS_COUNT=$((PASS_COUNT + 1))
+        printf '[PASS] %s (rc=%d)\n' "$name" "$rc"
+      else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        printf '[FAIL] %s (expected rc=%s without OK marker, got rc=%d)\n%s\n' "$name" "${expected_rc:-!=0}" "$rc" "$out" >&2
+      fi
+      ;;
+    *)
+      echo "run_case: invalid mode '$mode' for $name" >&2
+      return 1
+      ;;
+  esac
 }
-
-# Keep running all cases even if one fails so the full matrix is reported
-set +e
 
 # --- Passing Cases ---
 run_case pass 0 "pass_clean_apk_lowercase_cert" "" \
@@ -344,6 +391,10 @@ run_case fail 127 "fail_missing_unzip_clean_apk" "" \
 run_case fail 127 "fail_missing_unzip_vanilla_apk" "" \
   LC_ALL=C PATH="$NO_UNZIP_BIN" ANDROID_HOME="$MOCK_SDK" \
   "$VERIFY_APK" "$FIXTURES/vanilla_assets.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case fail 127 "fail_missing_unzip_glob_apk" "" \
+  LC_ALL=C PATH="$NO_UNZIP_BIN" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "$FIXTURES/glob_dir/my[1].apk" "$DEFAULT_VER" "$DEFAULT_CERT"
 
 run_case fail 127 "fail_missing_awk_clean_apk" "" \
   LC_ALL=C PATH="$NO_AWK_BIN" ANDROID_HOME="$MOCK_SDK" \
@@ -419,7 +470,79 @@ run_case fail "" "fail_aapt2_nonzero" "" \
   LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" MOCK_AAPT2_RC=1 \
   "$VERIFY_APK" "$FIXTURES/clean.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
 
-set -e
+# --- Non-C & Turkish/Kurdish Locale Bypass + UTF-8 Path/CWD Regression Cases ---
+NON_C_UTF8_LOCALE=""
+TURKIC_LOCALE=""
+if command -v locale >/dev/null 2>&1; then
+  TURKIC_LOCALE=$(locale -a 2>/dev/null | grep -im1 -E '^(tr_TR|ku_TR|az_AZ)\.utf-?8$' || true)
+  if [ -z "$TURKIC_LOCALE" ]; then
+    TURKIC_LOCALE=$(locale -a 2>/dev/null | grep -im1 -E '^(tr_TR|ku_TR|az_AZ)$' || true)
+  fi
+  NON_C_UTF8_LOCALE=$(locale -a 2>/dev/null | grep -im1 -E '^(en_US|C)\.utf-?8$' || true)
+fi
+
+if [ -n "$TURKIC_LOCALE" ]; then
+  test_loc="$TURKIC_LOCALE"
+  case "$TURKIC_LOCALE" in
+    tr_TR.utf8|tr_TR.UTF-8) test_loc="tr_TR.UTF-8" ;;
+  esac
+  run_case fail 1 "fail_vanilla_uppercase_turkic_locale" "" \
+    LC_ALL="$test_loc" LANG="$test_loc" LC_CTYPE="$test_loc" LC_COLLATE="$test_loc" LANGUAGE=tr_TR \
+    PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+    "$VERIFY_APK" "$FIXTURES/vanilla_upper_i.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+  run_case fail 1 "fail_vanilla_utf8_uppercase_turkic_locale" "" \
+    LC_ALL="$test_loc" LANG="$test_loc" LC_CTYPE="$test_loc" LC_COLLATE="$test_loc" LANGUAGE=tr_TR \
+    PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+    "$VERIFY_APK" "$FIXTURES/vanilla_utf8_upper_i.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+  run_case pass 0 "pass_clean_special_and_utf8_path_turkic_locale" "" \
+    LC_ALL="$test_loc" LANG="$test_loc" LC_CTYPE="$test_loc" LC_COLLATE="$test_loc" LANGUAGE=tr_TR \
+    PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+    "$VERIFY_APK" "$FIXTURES/utf8_path_dir/clean café_🗺️.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+else
+  echo "[WARN] No Turkic locale (tr_TR.utf8/ku_TR.utf8/az_AZ) installed; skipping Turkic tolower bypass check" >&2
+fi
+
+fallback_loc="${NON_C_UTF8_LOCALE:-C.UTF-8}"
+run_case fail 1 "fail_vanilla_uppercase_non_c_locale" "" \
+  LC_ALL="$fallback_loc" LANG="$fallback_loc" LC_CTYPE="$fallback_loc" LC_COLLATE="$fallback_loc" \
+  PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "$FIXTURES/vanilla_upper_i.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case pass 0 "pass_clean_special_entries_non_c_locale" "" \
+  LC_ALL="$fallback_loc" LANG="$fallback_loc" LC_CTYPE="$fallback_loc" LC_COLLATE="$fallback_loc" \
+  PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "$FIXTURES/special_clean.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case pass 0 "pass_clean_utf8_path_c_locale" "" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "$FIXTURES/utf8_path_dir/clean café_🗺️.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case pass 0 "pass_clean_ascii_in_utf8_cwd_c_locale" "$FIXTURES/utf8_dir_café_🗺️" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "ascii_in_utf8_dir.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+# --- Info-ZIP Filename Globbing Regression Cases ---
+run_case fail 1 "fail_vanilla_bracket_glob_with_clean_neighbor" "" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "$FIXTURES/glob_dir/my[1].apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case fail 1 "fail_vanilla_bracket_glob_relative" "$FIXTURES/glob_dir" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "my[1].apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case fail 1 "fail_vanilla_leading_dash_bracket_glob" "$FIXTURES/glob_dir" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "-my[1].apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case pass 0 "pass_clean_star_glob_with_vanilla_neighbor" "" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "$FIXTURES/glob_dir/app*v.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
+
+run_case pass 0 "pass_clean_question_glob_with_vanilla_neighbor" "$FIXTURES/glob_dir" \
+  LC_ALL=C PATH="$SYS_PATH" ANDROID_HOME="$MOCK_SDK" \
+  "$VERIFY_APK" "app?v.apk" "$DEFAULT_VER" "$DEFAULT_CERT"
 
 echo "Summary: $PASS_COUNT passed, $FAIL_COUNT failed"
 if [ "$FAIL_COUNT" -ne 0 ]; then
