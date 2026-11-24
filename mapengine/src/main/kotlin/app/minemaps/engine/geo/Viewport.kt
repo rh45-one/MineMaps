@@ -26,11 +26,13 @@ class Viewport(
     val visTop: Double = 0.0,
     val visRight: Double = widthPx.toDouble(),
     val visBottom: Double = heightPx.toDouble(),
+    val tiltDensity: Float = pixelRatio,
 ) {
     init {
         require(centerX.isFinite() && centerY.isFinite() && zoom.isFinite() && bearingDeg.isFinite()) { "viewport centre/zoom/bearing must be finite" }
         require(widthPx > 0 && heightPx > 0 && pixelRatio.isFinite() && pixelRatio > 0f) { "viewport size/ratio must be positive" }
         require(focalX.isFinite() && focalY.isFinite()) { "viewport focal point must be finite" }
+        require(pitchDeg.isFinite() && tiltDensity.isFinite() && tiltDensity > 0f) { "viewport pitch/tiltDensity must be finite and positive" }
     }
 
     private val cosB = cos(Math.toRadians(bearingDeg))
@@ -38,7 +40,12 @@ class Viewport(
 
     val worldSizePx: Double get() = 256.0 * pixelRatio * 2.0.pow(zoom)
 
-    fun withBearing(deg: Double) = Viewport(centerX, centerY, zoom, widthPx, heightPx, pixelRatio, deg, pitchDeg, focalX, focalY, visLeft, visTop, visRight, visBottom)
+    val tiltPivotY: Double get() = visTop + maxOf(1.0, visBottom - visTop) * TILT_PIVOT_FRACTION
+
+    fun withBearing(deg: Double) = Viewport(
+        centerX, centerY, zoom, widthPx, heightPx, pixelRatio, deg, pitchDeg,
+        focalX, focalY, visLeft, visTop, visRight, visBottom, tiltDensity,
+    )
 
     /** Screen position of a world point: the offset from the centre is rotated by -bearing (the screen's up points to compass bearing [bearingDeg]) around ([focalX], [focalY]). */
     fun worldToScreen(wx: Double, wy: Double): PointD {
@@ -53,6 +60,38 @@ class Viewport(
         return PointD(centerX + (dx * cosB - dy * sinB) / worldSizePx, centerY + (dx * sinB + dy * cosB) / worldSizePx)
     }
 
+    /**
+     * Forward perspective tilt matching `android.graphics.Camera` (`setLocation(0, 0, -20 * tiltDensity)`,
+     * `rotateX(pitchDeg)`) around pivot `([focalX], [tiltPivotY])`.
+     */
+    fun projectTilt(x: Double, y: Double): PointD {
+        if (pitchDeg <= TILT_THRESHOLD_DEG) return PointD(x, y)
+        val rad = Math.toRadians(pitchDeg.toDouble())
+        val cosP = cos(rad)
+        val sinP = sin(rad)
+        val zc = TILT_CAMERA_DISTANCE_PX * tiltDensity
+        val py = tiltPivotY
+        val dx = x - focalX
+        val dy = y - py
+        val denom = maxOf(zc - dy * sinP, zc * MIN_TILT_DENOM_RATIO)
+        val scale = zc / denom
+        return PointD(focalX + dx * scale, py + dy * cosP * scale)
+    }
+
+    /** Exact inverse of [projectTilt] with a positive horizon denominator guard. */
+    fun inverseTilt(sx: Double, sy: Double): PointD {
+        if (pitchDeg <= TILT_THRESHOLD_DEG) return PointD(sx, sy)
+        val rad = Math.toRadians(pitchDeg.toDouble())
+        val cosP = cos(rad)
+        val sinP = sin(rad)
+        val zc = TILT_CAMERA_DISTANCE_PX * tiltDensity
+        val py = tiltPivotY
+        val dxp = sx - focalX
+        val dyp = sy - py
+        val denom = maxOf(zc * cosP + dyp * sinP, zc * MIN_TILT_DENOM_RATIO)
+        return PointD(focalX + dxp * (zc * cosP) / denom, py + dyp * zc / denom)
+    }
+
     fun worldToScreenX(wx: Double): Double = worldToScreen(wx, centerY).x
 
     fun worldToScreenY(wy: Double): Double = worldToScreen(centerX, wy).y
@@ -63,16 +102,26 @@ class Viewport(
     @Deprecated("Use screenToWorld(sx, sy); 1D helpers drop bearing cross-terms when bearingDeg != 0.")
     fun screenToWorldY(sy: Double): Double = screenToWorld(focalX, sy).y
 
-    /** Axis-aligned world bounds (minX, minY, maxX, maxY) of the four screen corners (expanded toward the horizon when tilted). */
+    /** Axis-aligned world bounds (minX, minY, maxX, maxY) of the four surface corners (inverse-tilted when tilted). */
     fun worldBounds(): DoubleArray {
-        val topY = if (pitchDeg > 1f) -heightPx * 0.55 else 0.0
-        val sidePad = if (pitchDeg > 1f) widthPx * 0.22 else 0.0
-        val c = listOf(
-            screenToWorld(-sidePad, topY),
-            screenToWorld(widthPx + sidePad, topY),
-            screenToWorld(-sidePad, heightPx.toDouble()),
-            screenToWorld(widthPx + sidePad, heightPx.toDouble()),
-        )
+        val w = widthPx.toDouble()
+        val h = heightPx.toDouble()
+        val corners = if (pitchDeg > TILT_THRESHOLD_DEG) {
+            listOf(
+                inverseTilt(0.0, 0.0),
+                inverseTilt(w, 0.0),
+                inverseTilt(0.0, h),
+                inverseTilt(w, h),
+            )
+        } else {
+            listOf(
+                PointD(0.0, 0.0),
+                PointD(w, 0.0),
+                PointD(0.0, h),
+                PointD(w, h),
+            )
+        }
+        val c = corners.map { screenToWorld(it.x, it.y) }
         return doubleArrayOf(c.minOf { it.x }, c.minOf { it.y }, c.maxOf { it.x }, c.maxOf { it.y })
     }
 
@@ -112,6 +161,11 @@ class Viewport(
     }
 
     companion object {
+        private const val TILT_CAMERA_DISTANCE_PX = 1440.0
+        private const val TILT_PIVOT_FRACTION = 0.68
+        private const val MIN_TILT_DENOM_RATIO = 0.05
+        private const val TILT_THRESHOLD_DEG = 0.5f
+
         /**
          * Computes the camera world centre `(cx, cy)` so that the player at `(playerWx, playerWy)` sits in the
          * lower third of the screen (`0.5 + forwardFraction` down from the top) with the road ahead extending upward

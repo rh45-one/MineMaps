@@ -48,17 +48,23 @@ object LabelLayout {
     const val TEXT_PAD = 6f
     const val ICON_PAD = 8f
     const val POI_NAME_MIN_ZOOM = 18
-    private const val NAME_GAP = 2f
+    const val NAME_GAP = 2f
 
     private class Boxes {
         var data = FloatArray(5 * 64)
         var n = 0
 
-        fun collides(x0: Float, y0: Float, x1: Float, y1: Float, pad: Float): Boolean {
+        fun collides(x0: Float, y0: Float, x1: Float, y1: Float, pad: Float, ignoreNegative: Boolean = false): Boolean {
             var i = 0
             while (i < n) {
                 val o = i * 5
-                val g = if (pad > data[o + 4]) pad else data[o + 4]
+                val stored = data[o + 4]
+                if (ignoreNegative && stored < 0f) {
+                    i++
+                    continue
+                }
+                val op = if (stored < 0f) -stored else stored
+                val g = if (pad > op) pad else op
                 if (x0 < data[o + 2] + g && x1 > data[o] - g && y0 < data[o + 3] + g && y1 > data[o + 1] - g) return true
                 i++
             }
@@ -86,12 +92,18 @@ object LabelLayout {
         iconSizePx: Float = 32f,
         obstacles: List<Obstacle> = emptyList(),
         priorityObstacles: List<Obstacle> = emptyList(),
+        panMarginPx: Float = 0f,
     ): PlacedLayout {
         val zoom = floor(viewport.zoom).toInt()
         val vLeft = viewport.visLeft.toFloat()
         val vTop = viewport.visTop.toFloat()
         val vRight = viewport.visRight.toFloat()
         val vBottom = viewport.visBottom.toFloat()
+        val margin = panMarginPx.coerceAtLeast(0f)
+        val mLeft = vLeft - margin
+        val mTop = vTop - margin
+        val mRight = vRight + margin
+        val mBottom = vBottom + margin
         val boxes = Boxes()
         val placedLabels = ArrayList<PlacedLabel>()
         val placedIcons = ArrayList<PlacedIcon>()
@@ -102,70 +114,110 @@ object LabelLayout {
         val water = labels.filter { it.minZoom <= zoom && it.kind == LabelKind.WATER }
         val roads = labels.filter { it.minZoom <= zoom && isLine(it) }.sortedBy { it.rank }
 
-        fun placeLabel(l: Label) {
-            if (placedLabels.size >= profile.maxLabels) return
+        var inPaneLabels = 0
+        var marginLabels = 0
+        var inPaneIcons = 0
+        var marginIcons = 0
+
+        fun placeLabel(l: Label, wantMargin: Boolean) {
+            val count = if (wantMargin) marginLabels else inPaneLabels
+            if (count >= profile.maxLabels) return
             val (w0, h0) = measure(l.text, l.kind)
             val w = w0 + 0f
             val h = h0 + 0f
             val pt = viewport.worldToScreen(l.wx, l.wy)
             val cx = pt.x.toFloat()
             val cy = pt.y.toFloat()
+            val tpt = viewport.projectTilt(cx.toDouble(), cy.toDouble())
+            val tx = tpt.x.toFloat()
+            val ty = tpt.y.toFloat()
             val angle = if (l.oriented) normalizeAngle(l.angleDeg - viewport.bearingDeg) else l.angleDeg
             val rad = Math.toRadians(angle)
             val c = abs(cos(rad)).toFloat()
             val s = abs(sin(rad)).toFloat()
             val bw = w * c + h * s
             val bh = w * s + h * c
-            val x0 = cx - bw / 2
-            val y0 = cy - bh / 2
-            val x1 = cx + bw / 2
-            val y1 = cy + bh / 2
-            if (x1 < vLeft || x0 > vRight || y1 < vTop || y0 > vBottom) return
-            if (boxes.collides(x0, y0, x1, y1, TEXT_PAD)) return
+            val x0 = tx - bw / 2
+            val y0 = ty - bh / 2
+            val x1 = tx + bw / 2
+            val y1 = ty + bh / 2
+            val inPane = x1 >= vLeft && x0 <= vRight && y1 >= vTop && y0 <= vBottom
+            if (wantMargin) {
+                if (inPane || x1 < mLeft || x0 > mRight || y1 < mTop || y0 > mBottom) return
+            } else {
+                if (!inPane) return
+            }
+            val ignoreBookmarks = l.kind != LabelKind.WATER && !isLine(l)
+            if (boxes.collides(x0, y0, x1, y1, TEXT_PAD, ignoreBookmarks)) return
             boxes.add(x0, y0, x1, y1, TEXT_PAD)
             placedLabels.add(PlacedLabel(l, cx, cy, w, h, angle.toFloat()))
+            if (wantMargin) marginLabels++ else inPaneLabels++
         }
 
-        for (o in priorityObstacles) boxes.add(o.x0, o.y0, o.x1, o.y1, TEXT_PAD)
+        val poiCandidates = if (zoom >= profile.minIconZoom) {
+            pois.filter { it.minZoom <= zoom }.sortedBy { it.rank }
+        } else {
+            emptyList()
+        }
 
-        places.forEach(::placeLabel)
-
-        for (o in obstacles) boxes.add(o.x0, o.y0, o.x1, o.y1, ICON_PAD)
-
-        if (zoom >= profile.minIconZoom) {
+        fun placePois(wantMargin: Boolean) {
+            if (poiCandidates.isEmpty()) return
             val half = iconSizePx / 2
-            val candidates = pois.filter { it.minZoom <= zoom }.sortedBy { it.rank }
-            for (p in candidates) {
-                if (placedIcons.size >= profile.maxIcons) break
+            for (p in poiCandidates) {
+                val count = if (wantMargin) marginIcons else inPaneIcons
+                if (count >= profile.maxIcons) break
                 val pt = viewport.worldToScreen(p.wx, p.wy)
                 val cx = pt.x.toFloat()
                 val cy = pt.y.toFloat()
-                val x0 = cx - half
-                val y0 = cy - half
-                val x1 = cx + half
-                val y1 = cy + half
-                if (x1 < vLeft || x0 > vRight || y1 < vTop || y0 > vBottom) continue
+                val tpt = viewport.projectTilt(cx.toDouble(), cy.toDouble())
+                val tx = tpt.x.toFloat()
+                val ty = tpt.y.toFloat()
+                val x0 = tx - half
+                val y0 = ty - half
+                val x1 = tx + half
+                val y1 = ty + half
+                val inPane = x1 >= vLeft && x0 <= vRight && y1 >= vTop && y0 <= vBottom
+                if (wantMargin) {
+                    if (inPane || x1 < mLeft || x0 > mRight || y1 < mTop || y0 > mBottom) continue
+                } else {
+                    if (!inPane) continue
+                }
                 if (boxes.collides(x0, y0, x1, y1, ICON_PAD)) continue
                 var name: PlacedText? = null
                 if (profile.poiNames && zoom >= POI_NAME_MIN_ZOOM && p.name.isNotBlank()) {
                     val (w, h) = measure(p.name, LabelKind.POI_NAME)
                     val ncy = y1 + NAME_GAP + h / 2
-                    val nx0 = cx - w / 2
-                    val nx1 = cx + w / 2
+                    val nx0 = tx - w / 2
+                    val nx1 = tx + w / 2
                     val ny0 = ncy - h / 2
                     val ny1 = ncy + h / 2
                     if (!boxes.collides(nx0, ny0, nx1, ny1, TEXT_PAD)) {
                         boxes.add(nx0, ny0, nx1, ny1, TEXT_PAD)
-                        name = PlacedText(p.name, cx, ncy, w, h)
+                        name = PlacedText(p.name, cx, cy + half + NAME_GAP + h / 2, w, h)
                     }
                 }
                 boxes.add(x0, y0, x1, y1, ICON_PAD)
                 placedIcons.add(PlacedIcon(p, cx, cy, iconSizePx, name))
+                if (wantMargin) marginIcons++ else inPaneIcons++
             }
         }
 
-        water.forEach(::placeLabel)
-        roads.forEach(::placeLabel)
+        for (o in priorityObstacles) boxes.add(o.x0, o.y0, o.x1, o.y1, TEXT_PAD)
+        for (o in obstacles) boxes.add(o.x0, o.y0, o.x1, o.y1, -ICON_PAD)
+
+        // Pass 1: visible in-pane items (protected from off-pane margin items stealing profile budgets).
+        places.forEach { placeLabel(it, wantMargin = false) }
+        placePois(wantMargin = false)
+        water.forEach { placeLabel(it, wantMargin = false) }
+        roads.forEach { placeLabel(it, wantMargin = false) }
+
+        // Pass 2: pan-buffer items outside the visible pane for smooth pan reuse.
+        if (margin > 0f) {
+            places.forEach { placeLabel(it, wantMargin = true) }
+            placePois(wantMargin = true)
+            water.forEach { placeLabel(it, wantMargin = true) }
+            roads.forEach { placeLabel(it, wantMargin = true) }
+        }
         return PlacedLayout(placedLabels, placedIcons)
     }
 }

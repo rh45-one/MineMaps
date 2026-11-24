@@ -222,4 +222,104 @@ class LabelLayoutTest {
         val out = LabelLayout.layout(obscuredLabels + visibleLabel, emptyList(), splitNorth, measure, RenderProfile.CAR)
         assertEquals(listOf("VisibleCity"), out.labels.map { it.label.text })
     }
+
+    @Test
+    fun tiltedViewportRetainsTopHorizonLabelsAndClipsPostTiltSplitScreen() {
+        val splitTilted = Viewport(
+            centerX = 0.5, centerY = 0.5, zoom = 18.0,
+            widthPx = 1280, heightPx = 720, pixelRatio = 1f,
+            bearingDeg = 0.0, pitchDeg = 38f,
+            focalX = 388.0, focalY = 388.0,
+            visLeft = 16.0, visTop = 96.0, visRight = 760.0, visBottom = 680.0,
+            tiltDensity = 1f,
+        )
+        fun labelAt(text: String, sx: Double, sy: Double, rank: Int = 1): Label {
+            val w = splitTilted.screenToWorld(sx, sy)
+            return Label(text, LabelKind.CITY, rank, w.x, w.y, 0.0, 0)
+        }
+        fun poiAt(name: String, sx: Double, sy: Double, rank: Int = 1): Poi {
+            val w = splitTilted.screenToWorld(sx, sy)
+            return Poi("apple", name, w.x, w.y, 16, rank)
+        }
+
+        // Top-horizon label has pre-tilt y = -100 (< visTop 96) but post-tilt y ~= 120.3 (>= visTop 96)
+        val horizon = labelAt("HorizonCity", 388.0, -100.0, rank = 1)
+        // Second label 32 px below pre-tilt (-68.0) does NOT collide pre-tilt (32 > 20+6),
+        // but compresses to ~20 px post-tilt (< 20+6) and must collide with HorizonCity.
+        val horizonCompressed = labelAt("HorizonDup", 388.0, -68.0, rank = 2)
+
+        // Bottom-right labels/POIs inside pre-tilt visRight=760 (at x=745/750, y=670) project post-tilt to x > 760
+        // and must be clipped instead of consuming RenderProfile.CAR budgets.
+        val spilledLabels = (0 until 30).map { i -> labelAt("S$i", 755.0, 670.0, rank = i + 3) }
+        val spilledPois = (0 until 10).map { i -> poiAt("Spilled$i", 758.0, 670.0, rank = i + 1) }
+
+        val visibleCity = labelAt("VisibleCity", 388.0, 388.0, rank = 100)
+        val visiblePoi = poiAt("VisiblePoi", 388.0, 450.0, rank = 100)
+
+        val out = LabelLayout.layout(
+            listOf(horizon, horizonCompressed, visibleCity) + spilledLabels,
+            spilledPois + visiblePoi,
+            splitTilted,
+            measure,
+            RenderProfile.CAR,
+        )
+
+        val placedTexts = out.labels.map { it.label.text }
+        assertTrue("HorizonCity" in placedTexts, "expected top-horizon label to survive post-tilt clipping, got $placedTexts")
+        assertTrue("HorizonDup" !in placedTexts, "expected foreshortened top-horizon label to collide post-tilt, got $placedTexts")
+        assertTrue("VisibleCity" in placedTexts, "expected VisibleCity not to be evicted by post-tilt clipped labels, got $placedTexts")
+        assertEquals(listOf("HorizonCity", "VisibleCity"), placedTexts)
+        // Stored label coordinates remain pre-tilt for exact pan-reuse translation
+        val placedHorizon = out.labels.first { it.label.text == "HorizonCity" }
+        assertEquals(-100.0f, placedHorizon.cy, 1e-2f)
+
+        assertEquals(1, out.icons.size)
+        assertEquals("VisiblePoi", out.icons.single().poi.name)
+    }
+
+    @Test
+    fun panMarginRetainsEnteringLabelsWithoutStealingCarBudget() {
+        val split = Viewport(
+            centerX = 0.5, centerY = 0.5, zoom = 18.0,
+            widthPx = 1280, heightPx = 720, pixelRatio = 1f,
+            bearingDeg = 0.0, pitchDeg = 0f,
+            focalX = 388.0, focalY = 388.0,
+            visLeft = 16.0, visTop = 96.0, visRight = 760.0, visBottom = 680.0,
+        )
+        fun labelAt(text: String, sx: Double, sy: Double, rank: Int): Label {
+            val w = split.screenToWorld(sx, sy)
+            return Label(text, LabelKind.CITY, rank, w.x, w.y, 0.0, 0)
+        }
+        fun poiAt(name: String, sx: Double, sy: Double, rank: Int): Poi {
+            val w = split.screenToWorld(sx, sy)
+            return Poi("apple", name, w.x, w.y, 16, rank)
+        }
+
+        // 30 high-priority labels in the obscured pan margin [790..910] (within 160 px of visRight=760)
+        val marginObscured = (0 until 30).map { i ->
+            labelAt("M$i", 810.0 + (i % 3) * 40.0, 120.0 + (i / 3) * 40.0, rank = i)
+        }
+        val inside = labelAt("InsideCity", 388.0, 388.0, rank = 200)
+        val enteringLeft = labelAt("EnteringLeft", -30.0, 388.0, rank = 1)
+
+        // Bookmark obstacle in the margin should suppress margin POIs, NOT margin places
+        val bookmarkInMargin = app.minemaps.engine.layout.Obstacle(-46f, 372f, -14f, 404f)
+        val blockedMarginPoi = poiAt("BlockedPoi", -30.0, 388.0, rank = 1)
+        val visiblePoi = poiAt("VisiblePoi", 388.0, 480.0, rank = 200)
+
+        val out = LabelLayout.layout(
+            marginObscured + inside + enteringLeft,
+            listOf(blockedMarginPoi, visiblePoi),
+            split,
+            measure,
+            RenderProfile.CAR,
+            obstacles = listOf(bookmarkInMargin),
+            panMarginPx = 160f,
+        )
+
+        val texts = out.labels.map { it.label.text }
+        assertTrue("InsideCity" in texts, "in-pane label must not be crowded out by margin labels: $texts")
+        assertTrue("EnteringLeft" in texts, "pan-margin entering label must be retained: $texts")
+        assertEquals(listOf("VisiblePoi"), out.icons.map { it.poi.name })
+    }
 }
