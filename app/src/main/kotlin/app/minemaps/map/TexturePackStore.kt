@@ -61,60 +61,91 @@ class StoredPack(val atlasPng: ByteArray, val atlasJson: String, val source: Str
 
 /** The imported Minecraft pack in `filesDir/packs/vanilla/`, written atomically (temp dir, then rename). */
 class TexturePackStore(filesDir: File) {
+    private val lock = Any()
     private val parent = File(filesDir, "packs")
     private val dir = File(parent, "vanilla")
+    private val tmpDir = File(parent, "vanilla.tmp")
+    private val oldDir = File(parent, "vanilla.old")
 
-    val exists: Boolean get() = dir.exists()
+    private fun recoverOldIfNeeded() {
+        if (!dir.exists() && oldDir.exists()) {
+            oldDir.renameTo(dir)
+        } else if (dir.exists() && oldDir.exists()) {
+            oldDir.deleteRecursively()
+        }
+    }
+
+    val exists: Boolean
+        get() = synchronized(lock) {
+            recoverOldIfNeeded()
+            dir.exists()
+        }
 
     /** The pack, or null when absent or invalid (missing/corrupt files, or lacking a name of [required]). */
-    fun load(required: Set<String>): StoredPack? = try {
-        val json = File(dir, "atlas.json").readText()
-        val png = File(dir, "atlas.png").readBytes()
-        val root = Json.parseToJsonElement(json).jsonObject
-        val names = (root["textures"]?.jsonObject?.keys.orEmpty().map { "t:$it" } + root["icons"]?.jsonObject?.keys.orEmpty().map { "i:$it" }).toSet()
-        if (!names.containsAll(required)) null else {
-            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(png, 0, png.size, opts)
-            if (opts.outWidth != 256 || opts.outHeight < 16 || opts.outHeight % 16 != 0) null else {
-                val m = Json.parseToJsonElement(File(dir, "meta.json").readText()).jsonObject
-                if (m["filesSha256"]!!.jsonPrimitive.content != sha256(png, json.toByteArray())) return null
-                val meta = PackMeta(m["mcVersion"]!!.jsonPrimitive.content, m["sourceSha1"]!!.jsonPrimitive.content, m["importerVersion"]!!.jsonPrimitive.int, m["importedAt"]!!.jsonPrimitive.content.toLong())
-                StoredPack(png, json, runCatching { File(dir, "SOURCE.txt").readText() }.getOrDefault(""), meta)
+    fun load(required: Set<String>): StoredPack? = synchronized(lock) {
+        recoverOldIfNeeded()
+        try {
+            val json = File(dir, "atlas.json").readText()
+            val png = File(dir, "atlas.png").readBytes()
+            val root = Json.parseToJsonElement(json).jsonObject
+            val names = (root["textures"]?.jsonObject?.keys.orEmpty().map { "t:$it" } + root["icons"]?.jsonObject?.keys.orEmpty().map { "i:$it" }).toSet()
+            if (!names.containsAll(required)) null else {
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(png, 0, png.size, opts)
+                if (opts.outWidth != 256 || opts.outHeight < 16 || opts.outHeight % 16 != 0) null else {
+                    val m = Json.parseToJsonElement(File(dir, "meta.json").readText()).jsonObject
+                    if (m["filesSha256"]!!.jsonPrimitive.content != sha256(png, json.toByteArray())) return@synchronized null
+                    val meta = PackMeta(m["mcVersion"]!!.jsonPrimitive.content, m["sourceSha1"]!!.jsonPrimitive.content, m["importerVersion"]!!.jsonPrimitive.int, m["importedAt"]!!.jsonPrimitive.content.toLong())
+                    StoredPack(png, json, runCatching { File(dir, "SOURCE.txt").readText() }.getOrDefault(""), meta)
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun install(out: ImportOutput, source: String, meta: PackMeta, checkCancelled: () -> Unit = {}) {
+        checkCancelled()
+        synchronized(lock) {
+            recoverOldIfNeeded()
+            checkCancelled()
+            parent.mkdirs()
+            tmpDir.deleteRecursively()
+            tmpDir.mkdirs()
+            try {
+                checkCancelled()
+                File(tmpDir, "atlas.png").writeBytes(out.atlasPng)
+                checkCancelled()
+                File(tmpDir, "atlas.json").writeText(out.atlasJson)
+                checkCancelled()
+                File(tmpDir, "SOURCE.txt").writeText(source)
+                checkCancelled()
+                File(tmpDir, "meta.json").writeText(
+                    buildJsonObject {
+                        put("mcVersion", meta.mcVersion)
+                        put("sourceSha1", meta.sourceSha1)
+                        put("importerVersion", meta.importerVersion)
+                        put("importedAt", meta.importedAt.toString())
+                        put("filesSha256", sha256(out.atlasPng, out.atlasJson.toByteArray()))
+                    }.toString(),
+                )
+                checkCancelled()
+                oldDir.deleteRecursively()
+                if (dir.exists() && !dir.renameTo(oldDir)) dir.deleteRecursively()
+                if (!tmpDir.renameTo(dir)) {
+                    if (!dir.exists() && oldDir.exists()) oldDir.renameTo(dir)
+                    error("Could not store the texture pack")
+                }
+                oldDir.deleteRecursively()
+            } finally {
+                tmpDir.deleteRecursively()
             }
         }
-    } catch (e: Exception) {
-        null
     }
 
-    fun install(out: ImportOutput, source: String, meta: PackMeta) {
-        parent.mkdirs()
-        val tmp = File(parent, "vanilla.tmp")
-        tmp.deleteRecursively()
-        tmp.mkdirs()
-        File(tmp, "atlas.png").writeBytes(out.atlasPng)
-        File(tmp, "atlas.json").writeText(out.atlasJson)
-        File(tmp, "SOURCE.txt").writeText(source)
-        File(tmp, "meta.json").writeText(
-            buildJsonObject {
-                put("mcVersion", meta.mcVersion)
-                put("sourceSha1", meta.sourceSha1)
-                put("importerVersion", meta.importerVersion)
-                put("importedAt", meta.importedAt.toString())
-                put("filesSha256", sha256(out.atlasPng, out.atlasJson.toByteArray()))
-            }.toString(),
-        )
-        val old = File(parent, "vanilla.old")
-        old.deleteRecursively()
-        if (dir.exists() && !dir.renameTo(old)) dir.deleteRecursively()
-        if (!tmp.renameTo(dir)) {
-            old.renameTo(dir)
-            error("Could not store the texture pack")
-        }
-        old.deleteRecursively()
-    }
-
-    fun remove() {
+    fun remove() = synchronized(lock) {
         dir.deleteRecursively()
-        File(parent, "vanilla.tmp").deleteRecursively()
+        tmpDir.deleteRecursively()
+        oldDir.deleteRecursively()
     }
 }
