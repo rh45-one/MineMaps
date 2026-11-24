@@ -26,6 +26,8 @@ import app.minemaps.nav.NavigationController
 import app.minemaps.search.GooglePlacesClient
 import app.minemaps.search.PhotonClient
 import app.minemaps.update.UpdateManager
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +40,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
-class AppContainer(app: Application) {
+class AppContainer(
+    app: Application,
+    private val httpClientFactory: () -> OkHttpClient = { OkHttpClient() },
+    cameraStore: DataStore<Preferences> = app.cameraStore,
+    settingsStore: DataStore<Preferences> = app.settingsStore,
+    savedPlacesStore: DataStore<Preferences> = app.savedPlacesStore,
+) {
     private val renderers = java.util.Collections.newSetFromMap(java.util.WeakHashMap<app.minemaps.map.MapRenderer, Boolean>())
 
     fun register(renderer: app.minemaps.map.MapRenderer) {
@@ -52,13 +60,13 @@ class AppContainer(app: Application) {
     }
 
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val httpClient: Deferred<OkHttpClient> = appScope.async(Dispatchers.IO) { OkHttpClient() }
+    val httpClient: Deferred<OkHttpClient> = appScope.async(Dispatchers.IO) { httpClientFactory() }
     val placeIndex = PlaceIndex()
     val engine: Deferred<MapEngine> = appScope.async(Dispatchers.IO) { MapEngine(app, httpClient.await(), placeIndex) }
     val location = LocationRepository(app, appScope)
-    val savedPlaces = SavedPlacesRepository(app.savedPlacesStore)
-    val settings = SettingsRepository(app.settingsStore)
-    val mapState = MapStateRepository(app.cameraStore)
+    val savedPlaces = SavedPlacesRepository(savedPlacesStore)
+    val settings = SettingsRepository(settingsStore)
+    val mapState = MapStateRepository(cameraStore)
     val updates = UpdateManager(app, appScope, settings, client = { httpClient.await() })
     val textures = TexturePackManager(app, appScope, settings, engine = { engine.await() }, client = { httpClient.await() })
     val photon = PhotonClient({ httpClient.await() }, BuildConfig.PHOTON_URL, BuildConfig.USER_AGENT)
@@ -159,7 +167,7 @@ class AppContainer(app: Application) {
 
 class MineMapsApp : Application() {
     lateinit var container: AppContainer
-        private set
+        internal set
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
