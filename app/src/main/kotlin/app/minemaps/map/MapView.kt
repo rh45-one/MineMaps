@@ -136,7 +136,10 @@ class MapView(context: Context, val renderer: MapRenderer) : View(context) {
         },
     ).apply { isQuickScaleEnabled = false }
 
-    fun viewport(): Viewport = Viewport(centerX, centerY, zoom, max(width, 1), max(height, 1), renderer.pixelRatio, bearing, pitch)
+    fun viewport(): Viewport = Viewport(
+        centerX, centerY, zoom, max(width, 1), max(height, 1),
+        renderer.pixelRatio, bearing, pitch, tiltDensity = renderer.density,
+    )
 
     private fun finite(vararg v: Double) = v.all { it.isFinite() }
 

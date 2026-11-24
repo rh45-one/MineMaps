@@ -473,7 +473,9 @@ class CarMapController(
         val w = s.width
         val h = s.height
         if (w <= 0 || h <= 0) return null
-        val pr = max(1f, s.dpi / 160f)
+        val dpi = s.dpi.takeIf { it > 0 } ?: DEFAULT_DPI
+        val density = dpi / 160f
+        val pr = max(1f, density)
         val area = activeArea()
         val fx = area?.exactCenterX()?.toDouble() ?: (w / 2.0)
         val fy = area?.exactCenterY()?.toDouble() ?: (h / 2.0)
@@ -493,6 +495,7 @@ class CarMapController(
             visTop = (vis?.top ?: 0).toDouble(),
             visRight = (vis?.right ?: w).toDouble(),
             visBottom = (vis?.bottom ?: h).toDouble(),
+            tiltDensity = density,
         )
     }
 

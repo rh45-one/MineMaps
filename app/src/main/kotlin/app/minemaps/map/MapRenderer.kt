@@ -41,14 +41,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.EnumMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 class MapRenderer(
     private val engine: MapEngine,
     val profile: RenderProfile,
-    private val density: Float,
+    val density: Float,
     pixelRatioOverride: Float? = null,
     initialPack: TexturePack = TexturePack.ORIGINAL,
     private val onInvalidate: () -> Unit,
@@ -184,6 +187,7 @@ class MapRenderer(
         val visTop: Double,
         val visRight: Double,
         val visBottom: Double,
+        val pitchDeg: Float,
         val version: Int,
         val icons: Boolean,
         val vts: List<TileKey>,
@@ -226,12 +230,11 @@ class MapRenderer(
     private val routePath = Path()
     private val cam3d = android.graphics.Camera()
     private val tiltMatrix = android.graphics.Matrix()
-    private val tmpPt = FloatArray(2)
 
     private fun configureTilt(viewport: Viewport): Boolean {
         if (viewport.pitchDeg <= 0.5f) return false
         cam3d.save()
-        cam3d.setLocation(0f, 0f, -20f * density)
+        cam3d.setLocation(0f, 0f, -20f * viewport.tiltDensity)
         cam3d.rotateX(viewport.pitchDeg)
         cam3d.getMatrix(tiltMatrix)
         cam3d.restore()
@@ -243,12 +246,10 @@ class MapRenderer(
         return true
     }
 
-    private fun projectScreen(tilted: Boolean, x: Float, y: Float): Pair<Float, Float> {
-        if (!tilted) return x to y
-        tmpPt[0] = x
-        tmpPt[1] = y
-        tiltMatrix.mapPoints(tmpPt)
-        return tmpPt[0] to tmpPt[1]
+    private fun projectScreen(viewport: Viewport, x: Float, y: Float): Pair<Float, Float> {
+        if (viewport.pitchDeg <= 0.5f) return x to y
+        val p = viewport.projectTilt(x.toDouble(), y.toDouble())
+        return p.x.toFloat() to p.y.toFloat()
     }
 
     private fun onTile(key: TileKey, night: Boolean, argb: IntArray, gen: Int) {
@@ -307,7 +308,12 @@ class MapRenderer(
 
     suspend fun inspect(wx: Double, wy: Double, zoom: Double): InspectResult? = provider.inspect(wx, wy, zoom, pixelRatio)
 
+    @Volatile
     private var cameraFlashJob: Job? = null
+
+    internal fun pendingTileCount(): Int = provider.pendingCount()
+
+    internal fun isCameraFlashActive(): Boolean = cameraFlashJob?.isActive == true
 
     fun close() {
         cameraFlashJob?.cancel()
@@ -354,9 +360,9 @@ class MapRenderer(
             retainRing(viewport, z, size)
         }
         val t1 = System.nanoTime()
-        drawLabels(canvas, viewport, slots.map { it.key }, overlays, tilted)
+        drawLabels(canvas, viewport, slots.map { it.key }, overlays)
         val t2 = System.nanoTime()
-        drawOverlays(canvas, viewport, overlays, tilted)
+        drawOverlays(canvas, viewport, overlays)
         drawNs += System.nanoTime() - t0
         labelNs += t2 - t1
         tileNs += t1 - t0
@@ -396,15 +402,21 @@ class MapRenderer(
         dst.set(l, t, r, b)
     }
 
-    private fun retainRing(viewport: Viewport, z: Int, size: Double) {
+    internal fun paddedRetainViewport(viewport: Viewport, size: Double): Viewport {
         val pad = Math.ceil(size).toInt()
-        val padded = Viewport(
+        return Viewport(
             viewport.centerX, viewport.centerY, viewport.zoom,
             viewport.widthPx + 2 * pad, viewport.heightPx + 2 * pad,
-            viewport.pixelRatio, viewport.bearingDeg,
+            viewport.pixelRatio, viewport.bearingDeg, viewport.pitchDeg,
             focalX = viewport.focalX + pad, focalY = viewport.focalY + pad,
+            visLeft = viewport.visLeft + pad, visTop = viewport.visTop + pad,
+            visRight = viewport.visRight + pad, visBottom = viewport.visBottom + pad,
+            tiltDensity = viewport.tiltDensity,
         )
-        provider.retainOnly(padded.visibleTiles(z))
+    }
+
+    private fun retainRing(viewport: Viewport, z: Int, size: Double) {
+        provider.retainOnly(paddedRetainViewport(viewport, size).visibleTiles(z))
     }
 
     private fun fillPaint(kind: LabelKind): Paint = fillPaints.getOrPut(kind) {
@@ -454,7 +466,7 @@ class MapRenderer(
     private var layoutOriginX = 0.0
     private var layoutOriginY = 0.0
 
-    private fun drawLabels(canvas: Canvas, viewport: Viewport, tiles: List<TileKey>, overlays: MapOverlays, tilted: Boolean) {
+    private fun drawLabels(canvas: Canvas, viewport: Viewport, tiles: List<TileKey>, overlays: MapOverlays) {
         val bookmarks = overlays.bookmarks
         val markers = markerKey(overlays)
         val vts = tiles.map { provider.vectorTileKey(it) }.distinct().sortedWith(compareBy({ it.z }, { it.x }, { it.y }))
@@ -464,7 +476,7 @@ class MapRenderer(
         val key = LayoutKey(
             viewport.bearingDeg, 0.0, viewport.zoom, viewport.widthPx, viewport.heightPx,
             viewport.focalX, viewport.focalY, viewport.visLeft, viewport.visTop, viewport.visRight, viewport.visBottom,
-            labelVersion.get(), showIcons, vts, bookmarks, activePack, markers,
+            viewport.pitchDeg, labelVersion.get(), showIcons, vts, bookmarks, activePack, markers,
         )
         var layout = lastLayout
         if (key != lastLayoutKey || layout == null || Math.abs(shiftX) > LAYOUT_MARGIN_PX / 2 || Math.abs(shiftY) > LAYOUT_MARGIN_PX / 2) {
@@ -479,12 +491,18 @@ class MapRenderer(
             val expanded = Viewport(
                 viewport.centerX, viewport.centerY, viewport.zoom,
                 viewport.widthPx + 2 * m, viewport.heightPx + 2 * m,
-                viewport.pixelRatio, viewport.bearingDeg,
+                viewport.pixelRatio, viewport.bearingDeg, viewport.pitchDeg,
                 focalX = viewport.focalX + m, focalY = viewport.focalY + m,
                 visLeft = viewport.visLeft + m, visTop = viewport.visTop + m,
                 visRight = viewport.visRight + m, visBottom = viewport.visBottom + m,
+                tiltDensity = viewport.tiltDensity,
             )
-            layout = LabelLayout.layout(labels, pois, expanded, measure, profile, 16f * iconFactor, bookmarkObstacles(expanded, bookmarks, viewport.zoom), markerObstacles(expanded, overlays))
+            layout = LabelLayout.layout(
+                labels, pois, expanded, measure, profile, 16f * iconFactor,
+                bookmarkObstacles(expanded, bookmarks, viewport.zoom),
+                markerObstacles(expanded, overlays),
+                panMarginPx = m.toFloat(),
+            )
             lastLayout = layout
             lastLayoutKey = key
             layoutOriginX = viewport.centerX
@@ -494,17 +512,44 @@ class MapRenderer(
         }
         val dx = (shiftX - LAYOUT_MARGIN_PX).toFloat()
         val dy = (shiftY - LAYOUT_MARGIN_PX).toFloat()
+        val vLeft = viewport.visLeft.toFloat()
+        val vTop = viewport.visTop.toFloat()
+        val vRight = viewport.visRight.toFloat()
+        val vBottom = viewport.visBottom.toFloat()
+        val r = FloatArray(4)
         for (icon in layout.icons) {
-            val (ix, iy) = projectScreen(tilted, icon.cx + dx, icon.cy + dy)
-            drawIcon(canvas, icon.poi.icon, ix, iy, icon.size)
+            val (ix, iy) = projectScreen(viewport, icon.cx + dx, icon.cy + dy)
+            val half = icon.size / 2f
+            bookmarkRect(icon.poi.icon, ix, iy, icon.size, r)
+            if (r[2] >= vLeft && r[0] <= vRight && r[3] >= vTop && r[1] <= vBottom) {
+                drawIcon(canvas, icon.poi.icon, ix, iy, icon.size)
+            }
             icon.name?.let {
-                val (nx, ny) = projectScreen(tilted, it.cx + dx, it.cy + dy)
-                drawText(canvas, it.text, nx, ny, 0f, LabelKind.POI_NAME)
+                val nx = ix
+                val ny = iy + half + LabelLayout.NAME_GAP + it.height / 2f
+                val nx0 = nx - it.width / 2f
+                val nx1 = nx + it.width / 2f
+                val ny0 = ny - it.height / 2f
+                val ny1 = ny + it.height / 2f
+                if (nx1 >= vLeft && nx0 <= vRight && ny1 >= vTop && ny0 <= vBottom) {
+                    drawText(canvas, it.text, nx, ny, 0f, LabelKind.POI_NAME)
+                }
             }
         }
         for (l in layout.labels) {
-            val (lx, ly) = projectScreen(tilted, l.cx + dx, l.cy + dy)
-            drawText(canvas, l.label.text, lx, ly, l.angleDeg, l.label.kind)
+            val (lx, ly) = projectScreen(viewport, l.cx + dx, l.cy + dy)
+            val rad = Math.toRadians(l.angleDeg.toDouble())
+            val c = abs(cos(rad)).toFloat()
+            val s = abs(sin(rad)).toFloat()
+            val bw = l.width * c + l.height * s
+            val bh = l.width * s + l.height * c
+            val x0 = lx - bw / 2f
+            val y0 = ly - bh / 2f
+            val x1 = lx + bw / 2f
+            val y1 = ly + bh / 2f
+            if (x1 >= vLeft && x0 <= vRight && y1 >= vTop && y0 <= vBottom) {
+                drawText(canvas, l.label.text, lx, ly, l.angleDeg, l.label.kind)
+            }
         }
     }
 
@@ -599,12 +644,14 @@ class MapRenderer(
         val pad = 4f * density
         val out = ArrayList<Obstacle>(2)
         o.player?.let { p ->
-            val pt = expanded.worldToScreen(Mercator.lonToX(p.lon), Mercator.latToY(p.lat))
+            val raw = expanded.worldToScreen(Mercator.lonToX(p.lon), Mercator.latToY(p.lat))
+            val pt = expanded.projectTilt(raw.x, raw.y)
             val half = size / 2 + pad
             out.add(Obstacle(pt.x.toFloat() - half, pt.y.toFloat() - half, pt.x.toFloat() + half, pt.y.toFloat() + half))
         }
         o.searchPin?.let { p ->
-            val pt = expanded.worldToScreen(Mercator.lonToX(p.lng), Mercator.latToY(p.lat))
+            val raw = expanded.worldToScreen(Mercator.lonToX(p.lng), Mercator.latToY(p.lat))
+            val pt = expanded.projectTilt(raw.x, raw.y)
             val r = FloatArray(4)
             bookmarkRect("pin", pt.x.toFloat(), pt.y.toFloat(), size, r)
             out.add(Obstacle(r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad))
@@ -617,45 +664,60 @@ class MapRenderer(
         val out = ArrayList<Obstacle>(bookmarks.size * 2)
         val r = FloatArray(4)
         for (b in bookmarks) {
-            val pt = expanded.worldToScreen(Mercator.lonToX(b.lon), Mercator.latToY(b.lat))
+            val raw = expanded.worldToScreen(Mercator.lonToX(b.lon), Mercator.latToY(b.lat))
+            val pt = expanded.projectTilt(raw.x, raw.y)
             val x = pt.x.toFloat()
             val y = pt.y.toFloat()
             bookmarkRect(b.icon, x, y, size, r)
             out.add(Obstacle(r[0], r[1], r[2], r[3]))
             if (zoom >= nameMinZoom && b.name.isNotBlank()) {
                 val (w, h) = measure(b.name, LabelKind.POI_NAME)
-                out.add(Obstacle(x - w / 2, r[3] + 2f, x + w / 2, r[3] + 2f + h))
+                out.add(Obstacle(x - w / 2, r[3] + LabelLayout.NAME_GAP, x + w / 2, r[3] + LabelLayout.NAME_GAP + h))
             }
         }
         return out
     }
 
-    private fun drawBookmarks(canvas: Canvas, viewport: Viewport, bookmarks: List<Bookmark>, tilted: Boolean) {
+    private fun drawBookmarks(canvas: Canvas, viewport: Viewport, bookmarks: List<Bookmark>) {
         val size = 16f * iconFactor
         val r = FloatArray(4)
         for (b in bookmarks) {
             val pt = viewport.worldToScreen(Mercator.lonToX(b.lon), Mercator.latToY(b.lat))
-            val (x, y) = projectScreen(tilted, pt.x.toFloat(), pt.y.toFloat())
-            if (x < -size * 3 || y < -size * 3 || x > viewport.widthPx + size * 3 || y > viewport.heightPx + size * 3) continue
-            val bmp = iconBitmap(resolveIcon(b.icon)) ?: continue
+            val (x, y) = projectScreen(viewport, pt.x.toFloat(), pt.y.toFloat())
             bookmarkRect(b.icon, x, y, size, r)
+            val hasName = viewport.zoom >= nameMinZoom && b.name.isNotBlank()
+            val left: Float
+            val right: Float
+            val bottom: Float
+            if (hasName) {
+                val (tw, th) = measure(b.name, LabelKind.POI_NAME)
+                left = min(r[0], x - tw / 2f - LABEL_PAD)
+                right = max(r[2], x + tw / 2f + LABEL_PAD)
+                bottom = r[3] + LabelLayout.NAME_GAP + th + LABEL_PAD
+            } else {
+                left = r[0]
+                right = r[2]
+                bottom = max(r[3], y + size * 0.09f)
+            }
+            if (right < viewport.visLeft || left > viewport.visRight || bottom < viewport.visTop || r[1] > viewport.visBottom) continue
+            val bmp = iconBitmap(resolveIcon(b.icon)) ?: continue
             val baseY = if (atlas.anchor(resolveIcon(b.icon)) != Anchor(8, 8)) y else r[3] - size * 0.12f
             oval.set(x - size * 0.34f, baseY - size * 0.07f, x + size * 0.34f, baseY + size * 0.09f)
             canvas.drawOval(oval, shadowPaint)
             dst.set(r[0].roundToInt(), r[1].roundToInt(), r[2].roundToInt(), r[3].roundToInt())
             canvas.drawBitmap(bmp, null, dst, iconPaint)
-            if (viewport.zoom >= nameMinZoom && b.name.isNotBlank()) {
+            if (hasName) {
                 val bm = labelBitmap(b.name, LabelKind.POI_NAME)
-                canvas.drawBitmap(bm, x - bm.width / 2f, r[3] + 2f - LABEL_PAD, labelPaint.apply { isFilterBitmap = false })
+                canvas.drawBitmap(bm, x - bm.width / 2f, r[3] + LabelLayout.NAME_GAP - LABEL_PAD, labelPaint.apply { isFilterBitmap = false })
             }
         }
     }
 
-    private fun drawOverlays(canvas: Canvas, viewport: Viewport, overlays: MapOverlays, tilted: Boolean) {
+    private fun drawOverlays(canvas: Canvas, viewport: Viewport, overlays: MapOverlays) {
         val size = 16f * iconFactor
         overlays.player?.let { p ->
             val pt = viewport.worldToScreen(Mercator.lonToX(p.lon), Mercator.latToY(p.lat))
-            val (px, py) = projectScreen(tilted, pt.x.toFloat(), pt.y.toFloat())
+            val (px, py) = projectScreen(viewport, pt.x.toFloat(), pt.y.toFloat())
             val mpp = Mercator.EARTH_CIRCUMFERENCE_M * cos(Math.toRadians(p.lat)) / viewport.worldSizePx
             val radius = (p.accuracyM / mpp).toFloat()
             if (radius > 6f * density) {
@@ -663,14 +725,17 @@ class MapRenderer(
                 canvas.drawCircle(px, py, radius, accuracyStroke)
             }
         }
-        drawBookmarks(canvas, viewport, overlays.bookmarks, tilted)
+        drawBookmarks(canvas, viewport, overlays.bookmarks)
         if (overlays.roadAlerts.isNotEmpty() && viewport.zoom >= 10.5) {
-            drawRoadAlerts(canvas, viewport, overlays.roadAlerts, tilted)
+            drawRoadAlerts(canvas, viewport, overlays.roadAlerts)
+        } else {
+            cameraFlashJob?.cancel()
+            cameraFlashJob = null
         }
-        overlays.searchPin?.let { drawPin(canvas, viewport, it.lat, it.lng, size, tilted) }
+        overlays.searchPin?.let { drawPin(canvas, viewport, it.lat, it.lng, size) }
         overlays.player?.let { p ->
             val pt = viewport.worldToScreen(Mercator.lonToX(p.lon), Mercator.latToY(p.lat))
-            val (px, py) = projectScreen(tilted, pt.x.toFloat(), pt.y.toFloat())
+            val (px, py) = projectScreen(viewport, pt.x.toFloat(), pt.y.toFloat())
             iconBitmap("player")?.let { bmp ->
                 canvas.save()
                 val deg = (if (p.bearingDeg.isFinite()) p.bearingDeg else 0f) - viewport.bearingDeg.toFloat()
@@ -691,10 +756,12 @@ class MapRenderer(
         canvas.drawBitmap(bmp, null, dst, iconPaint)
     }
 
-    private fun drawPin(canvas: Canvas, viewport: Viewport, lat: Double, lon: Double, size: Float, tilted: Boolean) {
+    private fun drawPin(canvas: Canvas, viewport: Viewport, lat: Double, lon: Double, size: Float) {
         val pt = viewport.worldToScreen(Mercator.lonToX(lon), Mercator.latToY(lat))
-        val (x, y) = projectScreen(tilted, pt.x.toFloat(), pt.y.toFloat())
-        if (x < -size || y < -size || x > viewport.widthPx + size || y > viewport.heightPx + size) return
+        val (x, y) = projectScreen(viewport, pt.x.toFloat(), pt.y.toFloat())
+        val r = FloatArray(4)
+        bookmarkRect("pin", x, y, size, r)
+        if (r[2] < viewport.visLeft || r[0] > viewport.visRight || r[3] < viewport.visTop || r[1] > viewport.visBottom) return
         drawIcon(canvas, "pin", x, y, size)
     }
 
@@ -980,15 +1047,15 @@ class MapRenderer(
         }
     }
 
-    private fun drawRoadAlerts(canvas: Canvas, viewport: Viewport, alerts: List<RoadAlert>, tilted: Boolean) {
+    private fun drawRoadAlerts(canvas: Canvas, viewport: Viewport, alerts: List<RoadAlert>) {
         val size = 16f * iconFactor
         val half = size / 2f
         val flashOn = ((System.currentTimeMillis() / 450L) % 2L) == 0L
         var anyCameraVisible = false
         for (a in alerts) {
             val pt = viewport.worldToScreen(Mercator.lonToX(a.lon), Mercator.latToY(a.lat))
-            val (x, y) = projectScreen(tilted, pt.x.toFloat(), pt.y.toFloat())
-            if (x < -size || y < -size || x > viewport.widthPx + size || y > viewport.heightPx + size) continue
+            val (x, y) = projectScreen(viewport, pt.x.toFloat(), pt.y.toFloat())
+            if (x < viewport.visLeft - half || y < viewport.visTop - half || x > viewport.visRight + half || y > viewport.visBottom + half) continue
             if (a.kind == RoadAlertKind.SPEED_CAMERA) anyCameraVisible = true
             val bmp = alertBitmap(a.kind, if (a.kind == RoadAlertKind.SPEED_CAMERA) flashOn else true)
             dst.set((x - half).roundToInt(), (y - half).roundToInt(), (x + half).roundToInt(), (y + half).roundToInt())
