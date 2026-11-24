@@ -14,10 +14,15 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -243,6 +248,212 @@ class SourceHardeningTest {
             now += OpenMapTilesSource.TILEJSON_RETRY_COOLDOWN_MS + 1
             assertNotNull(runBlocking { source.fetch(k1) })
             assertEquals(3, tjCalls)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun cachedKeysDoesNotOverwriteFreshTileJsonResolvedConcurrently() {
+        val dir = Files.createTempDirectory("tj-race-fresh").toFile()
+        try {
+            var now = 1_000L
+            val staleTileJson = """{"tiles":["https://tiles.test/stale/{z}/{x}/{y}.pbf"],"minzoom":0,"maxzoom":12}"""
+            val freshTileJson = """{"tiles":["https://tiles.test/fresh/{z}/{x}/{y}.pbf"],"minzoom":0,"maxzoom":16}"""
+
+            val seedCache = DiskTileCache(dir, clock = { now })
+            val seedClient = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                val body = if (req.url.toString() == tileJsonUrl) staleTileJson.toByteArray() else byteArrayOf(1, 2)
+                resp(req, 200, body)
+            }).build()
+            val warmSource = OpenMapTilesSource(tileJsonUrl, seedClient, "ua", seedCache, clock = { now })
+            assertNotNull(runBlocking { warmSource.fetch(TileKey(12, 1, 1)) })
+
+            now += 25L * 3600 * 1000
+            val staleReadInFlight = CountDownLatch(1)
+            val freshResolveDone = CountDownLatch(1)
+            val pausedOnce = AtomicBoolean(false)
+            val cache = DiskTileCache(dir, clock = {
+                if (Thread.currentThread().name == "cached-keys" && pausedOnce.compareAndSet(false, true)) {
+                    staleReadInFlight.countDown()
+                    assertTrue(freshResolveDone.await(5, TimeUnit.SECONDS))
+                }
+                now
+            })
+
+            val tjCalls = AtomicInteger(0)
+            val client = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                if (req.url.toString() == tileJsonUrl) {
+                    tjCalls.incrementAndGet()
+                    resp(req, 200, freshTileJson.toByteArray())
+                } else {
+                    resp(req, 200, byteArrayOf(9, 8, 7))
+                }
+            }).build()
+            val coldSource = OpenMapTilesSource(
+                tileJsonUrl,
+                client,
+                "ua",
+                cache,
+                tileJsonTtlMillis = 24L * 3600 * 1000,
+                clock = { now },
+            )
+
+            var keys: List<TileKey> = emptyList()
+            var workerError: Throwable? = null
+            val worker = Thread({
+                try {
+                    keys = coldSource.cachedKeys(12)
+                } catch (t: Throwable) {
+                    workerError = t
+                }
+            }, "cached-keys").apply { start() }
+
+            assertTrue(staleReadInFlight.await(5, TimeUnit.SECONDS))
+            assertContentEquals(byteArrayOf(9, 8, 7), runBlocking { coldSource.fetch(TileKey(16, 2, 3)) })
+            assertEquals(1, tjCalls.get())
+            assertEquals(16, coldSource.maxZoom)
+
+            freshResolveDone.countDown()
+            worker.join(5000)
+            assertFalse(worker.isAlive)
+            assertNull(workerError)
+            // loadCachedTileJson() adopts the concurrently resolved fresh template (empty for z=12) instead of stale
+            assertEquals(emptyList(), keys)
+
+            // Fresh TileJSON and its fetchedAt timestamp must NOT have been reverted by cachedKeys()
+            assertEquals(16, coldSource.maxZoom)
+            assertContentEquals(byteArrayOf(9, 8, 7), runBlocking { coldSource.fetch(TileKey(16, 2, 4)) })
+            assertEquals(1, tjCalls.get())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun cachedKeysDoesNotClobberOfflineRetryCooldown() {
+        val dir = Files.createTempDirectory("tj-race-cooldown").toFile()
+        try {
+            var now = 1_000L
+            val staleTileJson = """{"tiles":["https://tiles.test/stale/{z}/{x}/{y}.pbf"],"minzoom":0,"maxzoom":12}"""
+            val k1 = TileKey(12, 1, 1)
+            val k2 = TileKey(12, 1, 2)
+
+            val seedCache = DiskTileCache(dir, clock = { now })
+            val seedClient = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                val body = when {
+                    req.url.toString() == tileJsonUrl -> staleTileJson.toByteArray()
+                    req.url.toString().endsWith("/1/1.pbf") -> byteArrayOf(1, 2)
+                    else -> byteArrayOf(3, 4)
+                }
+                resp(req, 200, body)
+            }).build()
+            val warmSource = OpenMapTilesSource(tileJsonUrl, seedClient, "ua", seedCache, clock = { now })
+            assertContentEquals(byteArrayOf(1, 2), runBlocking { warmSource.fetch(k1) })
+            assertContentEquals(byteArrayOf(3, 4), runBlocking { warmSource.fetch(k2) })
+
+            now += 25L * 3600 * 1000
+            val staleReadInFlight = CountDownLatch(1)
+            val freshResolveDone = CountDownLatch(1)
+            val pausedOnce = AtomicBoolean(false)
+            val cache = DiskTileCache(dir, clock = {
+                if (Thread.currentThread().name == "cached-keys" && pausedOnce.compareAndSet(false, true)) {
+                    staleReadInFlight.countDown()
+                    assertTrue(freshResolveDone.await(5, TimeUnit.SECONDS))
+                }
+                now
+            })
+
+            val tjCalls = AtomicInteger(0)
+            val offlineClient = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                if (req.url.toString() == tileJsonUrl) tjCalls.incrementAndGet()
+                throw IOException("offline")
+            }).build()
+            val coldSource = OpenMapTilesSource(
+                tileJsonUrl,
+                offlineClient,
+                "ua",
+                cache,
+                tileJsonTtlMillis = 24L * 3600 * 1000,
+                clock = { now },
+            )
+
+            var workerError: Throwable? = null
+            val worker = Thread({
+                try {
+                    coldSource.cachedKeys(12)
+                } catch (t: Throwable) {
+                    workerError = t
+                }
+            }, "cached-keys").apply { start() }
+
+            assertTrue(staleReadInFlight.await(5, TimeUnit.SECONDS))
+            assertContentEquals(byteArrayOf(1, 2), runBlocking { coldSource.fetch(k1) })
+            assertEquals(1, tjCalls.get())
+
+            freshResolveDone.countDown()
+            worker.join(5000)
+            assertFalse(worker.isAlive)
+            assertNull(workerError)
+
+            // Cooldown must remain intact after loadCachedTileJson() finishes
+            assertContentEquals(byteArrayOf(3, 4), runBlocking { coldSource.fetch(k2) })
+            assertEquals(1, tjCalls.get())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun coldStartCachedKeysLoadsStaleTileJsonWithoutSuppressingRefresh() {
+        val dir = Files.createTempDirectory("tj-cold-stale").toFile()
+        try {
+            var now = 1_000L
+            val staleTileJson = """{"tiles":["https://tiles.test/stale/{z}/{x}/{y}.pbf"],"minzoom":0,"maxzoom":12}"""
+            val freshTileJson = """{"tiles":["https://tiles.test/fresh/{z}/{x}/{y}.pbf"],"minzoom":0,"maxzoom":16}"""
+
+            val seedCache = DiskTileCache(dir, clock = { now })
+            val seedClient = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                val body = if (req.url.toString() == tileJsonUrl) staleTileJson.toByteArray() else byteArrayOf(1, 2)
+                resp(req, 200, body)
+            }).build()
+            val warmSource = OpenMapTilesSource(tileJsonUrl, seedClient, "ua", seedCache, clock = { now })
+            val k1 = TileKey(12, 1, 1)
+            assertNotNull(runBlocking { warmSource.fetch(k1) })
+
+            now += 25L * 3600 * 1000
+            val cache = DiskTileCache(dir, clock = { now })
+            val tjCalls = AtomicInteger(0)
+            val client = OkHttpClient.Builder().addInterceptor(Interceptor { chain ->
+                val req = chain.request()
+                if (req.url.toString() == tileJsonUrl) {
+                    tjCalls.incrementAndGet()
+                    resp(req, 200, freshTileJson.toByteArray())
+                } else {
+                    resp(req, 200, byteArrayOf(9, 8, 7))
+                }
+            }).build()
+            val coldSource = OpenMapTilesSource(
+                tileJsonUrl,
+                client,
+                "ua",
+                cache,
+                tileJsonTtlMillis = 24L * 3600 * 1000,
+                clock = { now },
+            )
+
+            assertEquals(listOf(k1), coldSource.cachedKeys(12))
+            assertEquals(12, coldSource.maxZoom)
+            assertEquals(0, tjCalls.get())
+
+            assertContentEquals(byteArrayOf(9, 8, 7), runBlocking { coldSource.fetch(TileKey(16, 2, 3)) })
+            assertEquals(1, tjCalls.get())
+            assertEquals(16, coldSource.maxZoom)
         } finally {
             dir.deleteRecursively()
         }

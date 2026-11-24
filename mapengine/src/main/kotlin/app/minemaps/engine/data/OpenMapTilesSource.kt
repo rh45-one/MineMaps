@@ -33,27 +33,23 @@ class OpenMapTilesSource(
     private val clock: () -> Long = System::currentTimeMillis,
 ) : TileSource {
     private class TileJson(val template: String, val minZoom: Int, val maxZoom: Int)
+    private class TileJsonState(val tileJson: TileJson, val fetchedAt: Long, val retryAt: Long = 0L)
 
     private val tileClient: OkHttpClient by lazy { client.newBuilder().callTimeout(TILE_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS).build() }
 
     private val permits = Semaphore(maxConcurrent)
     private val tileJsonMutex = Mutex()
+    private val tileJsonStateLock = Any()
 
     @Volatile
-    private var tileJson: TileJson? = null
-
-    @Volatile
-    private var tileJsonFetchedAt = 0L
-
-    @Volatile
-    private var tileJsonRetryAt = 0L
+    private var tileJsonState: TileJsonState? = null
 
     override val reportsNetworkSuccess: Boolean = true
 
     @Volatile
     override var onNetworkSuccess: (() -> Unit)? = null
 
-    override val maxZoom: Int get() = tileJson?.maxZoom ?: 14
+    override val maxZoom: Int get() = tileJsonState?.tileJson?.maxZoom ?: 14
 
     override suspend fun fetch(key: TileKey): ByteArray? {
         val tj = resolveTileJson()
@@ -82,7 +78,7 @@ class OpenMapTilesSource(
     }
 
     override fun cachedKeys(z: Int): List<TileKey> {
-        val tj = tileJson ?: loadCachedTileJson() ?: return emptyList()
+        val tj = tileJsonState?.tileJson ?: loadCachedTileJson() ?: return emptyList()
         val prefix = "t_${tj.template.hashCode().toUInt().toString(16)}_${z}_"
         return cache.names().mapNotNull { n ->
             if (!n.startsWith(prefix)) return@mapNotNull null
@@ -92,9 +88,21 @@ class OpenMapTilesSource(
     }
 
     private fun loadCachedTileJson(): TileJson? {
-        tileJson?.let { return it }
+        tileJsonState?.let { return it.tileJson }
         val cached = cache.get(TILEJSON_NAME) ?: return null
-        return runCatching { parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis) }.getOrNull()
+        val parsed = runCatching { parse(String(cached.bytes, Charsets.UTF_8)) }.getOrNull() ?: return null
+        return synchronized(tileJsonStateLock) {
+            tileJsonState?.let { return@synchronized it.tileJson }
+            tileJsonState = TileJsonState(parsed, cached.fetchedAtMillis)
+            parsed
+        }
+    }
+
+    private fun publishState(tileJson: TileJson, fetchedAt: Long, retryAt: Long = 0L): TileJson {
+        synchronized(tileJsonStateLock) {
+            tileJsonState = TileJsonState(tileJson, fetchedAt, retryAt)
+        }
+        return tileJson
     }
 
     private class Result(val code: Int, val body: ByteArray)
@@ -131,51 +139,49 @@ class OpenMapTilesSource(
 
     private suspend fun resolveTileJson(): TileJson {
         val now = clock()
-        tileJson?.let { if (now - tileJsonFetchedAt < tileJsonTtlMillis || now < tileJsonRetryAt) return it }
+        tileJsonState?.let { if (now - it.fetchedAt < tileJsonTtlMillis || now < it.retryAt) return it.tileJson }
         return tileJsonMutex.withLock {
             val t = clock()
-            tileJson?.let { if (t - tileJsonFetchedAt < tileJsonTtlMillis || t < tileJsonRetryAt) return it }
+            tileJsonState?.let { if (t - it.fetchedAt < tileJsonTtlMillis || t < it.retryAt) return@withLock it.tileJson }
             val cached = cache.get(TILEJSON_NAME)
             if (cached != null && cache.isFresh(cached, tileJsonTtlMillis)) {
-                runCatching { parse(String(cached.bytes, Charsets.UTF_8), cached.fetchedAtMillis) }.getOrNull()?.let { return it }
+                runCatching { parse(String(cached.bytes, Charsets.UTF_8)) }.getOrNull()?.let { parsed ->
+                    return@withLock publishState(parsed, cached.fetchedAtMillis)
+                }
             }
             try {
                 val r = permits.withPermit { execute(tileJsonUrl, MAX_TILEJSON_BYTES) }
                 if (r.code != 200) throw IOException("HTTP ${r.code} for $tileJsonUrl")
                 val text = String(r.body, Charsets.UTF_8)
-                val parsed = parse(text, clock())
-                tileJsonRetryAt = 0L
+                val parsed = parse(text)
+                publishState(parsed, clock())
                 onNetworkSuccess?.invoke()
                 cache.put(TILEJSON_NAME, r.body)
                 parsed
             } catch (e: IOException) {
-                val stale = cached?.let { runCatching { parse(String(it.bytes, Charsets.UTF_8), it.fetchedAtMillis) }.getOrNull() }
-                if (stale != null) {
-                    tileJsonRetryAt = clock() + TILEJSON_RETRY_COOLDOWN_MS
-                    return@withLock stale
+                if (cached != null) {
+                    val stale = runCatching { parse(String(cached.bytes, Charsets.UTF_8)) }.getOrNull()
+                    if (stale != null) {
+                        return@withLock publishState(stale, cached.fetchedAtMillis, retryAt = clock() + TILEJSON_RETRY_COOLDOWN_MS)
+                    }
                 }
                 throw e
             }
         }
     }
 
-    private fun parse(text: String, fetchedAt: Long): TileJson {
-        val tj = try {
-            val o = Json.parseToJsonElement(text).jsonObject
-            val template = o["tiles"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.takeIf { it.isString }?.content
-            if (template.isNullOrBlank()) throw IOException("invalid TileJSON")
-            validateTemplate(template)
-            val maxZoom = (o["maxzoom"]?.jsonPrimitive?.intOrNull ?: 14).coerceIn(0, MAX_ZOOM_LIMIT)
-            val minZoom = (o["minzoom"]?.jsonPrimitive?.intOrNull ?: 0).coerceIn(0, maxZoom)
-            TileJson(template, minZoom, maxZoom)
-        } catch (e: IOException) {
-            throw e
-        } catch (e: Exception) {
-            throw IOException("invalid TileJSON", e)
-        }
-        tileJson = tj
-        tileJsonFetchedAt = fetchedAt
-        return tj
+    private fun parse(text: String): TileJson = try {
+        val o = Json.parseToJsonElement(text).jsonObject
+        val template = o["tiles"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.takeIf { it.isString }?.content
+        if (template.isNullOrBlank()) throw IOException("invalid TileJSON")
+        validateTemplate(template)
+        val maxZoom = (o["maxzoom"]?.jsonPrimitive?.intOrNull ?: 14).coerceIn(0, MAX_ZOOM_LIMIT)
+        val minZoom = (o["minzoom"]?.jsonPrimitive?.intOrNull ?: 0).coerceIn(0, maxZoom)
+        TileJson(template, minZoom, maxZoom)
+    } catch (e: IOException) {
+        throw e
+    } catch (e: Exception) {
+        throw IOException("invalid TileJSON", e)
     }
 
     companion object {
