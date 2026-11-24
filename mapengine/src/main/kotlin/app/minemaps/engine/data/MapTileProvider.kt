@@ -125,19 +125,23 @@ class MapTileProvider(
     private val failedLabels = HashMap<TileKey, Long>()
     private val labelCache = LruMap<TileKey, TileLabels>(LABEL_CAPACITY)
     private var resolverGen = 0L
-    @Volatile
     private var offlineAtSuccessCount = -1L
 
-    private fun markOffline() {
-        offlineAtSuccessCount = repo.networkSuccessCount()
-        _networkState.value = NetState.OFFLINE
+    private fun markOffline(startSuccessCount: Long) {
+        synchronized(lock) {
+            if (repo.networkSuccessCount() > startSuccessCount) return
+            offlineAtSuccessCount = startSuccessCount
+            _networkState.value = NetState.OFFLINE
+        }
     }
 
     private fun maybeMarkOnline() {
-        val mark = offlineAtSuccessCount
-        if (mark < 0L || repo.networkSuccessCount() > mark) {
-            offlineAtSuccessCount = -1L
-            _networkState.value = NetState.OK
+        synchronized(lock) {
+            val mark = offlineAtSuccessCount
+            if (mark >= 0L && repo.networkSuccessCount() > mark) {
+                offlineAtSuccessCount = -1L
+                _networkState.value = NetState.OK
+            }
         }
     }
 
@@ -212,6 +216,7 @@ class MapTileProvider(
             job = scope.launch(start = CoroutineStart.LAZY) {
                 var attempt = 0
                 while (true) {
+                    val startSuccessCount = repo.networkSuccessCount()
                     try {
                         val (extractor, gen) = synchronized(lock) { labelExtractor to resolverGen }
                         val tile = repo.get(vtKey)
@@ -231,7 +236,7 @@ class MapTileProvider(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: IOException) {
-                        markOffline()
+                        markOffline(startSuccessCount)
                         if (attempt >= maxAttempts) {
                             synchronized(lock) { failedLabels[vtKey] = clock() + IO_FAILURE_WINDOW_MS }
                             return@launch
@@ -257,6 +262,7 @@ class MapTileProvider(
     private suspend fun render(rk: RenderKey) {
         var attempt = 0
         while (true) {
+            val startSuccessCount = repo.networkSuccessCount()
             try {
                 val grid = grids.get(rk.tile.ancestor(minOf(rk.tile.z, GRID_ZOOM)))
                 val pixels = withContext(cpu) {
@@ -271,7 +277,7 @@ class MapTileProvider(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
-                markOffline()
+                markOffline(startSuccessCount)
                 if (attempt >= maxAttempts) {
                     synchronized(lock) { failedTiles[rk] = clock() + IO_FAILURE_WINDOW_MS }
                     return

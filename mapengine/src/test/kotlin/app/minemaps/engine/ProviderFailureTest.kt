@@ -1,6 +1,7 @@
 package app.minemaps.engine
 
 import app.minemaps.engine.data.MapTileProvider
+import app.minemaps.engine.data.NetState
 import app.minemaps.engine.data.TileRepository
 import app.minemaps.engine.data.TileSource
 import app.minemaps.engine.geo.TileKey
@@ -9,10 +10,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.LockSupport
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ProviderFailureTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -169,5 +174,230 @@ class ProviderFailureTest {
         p.retainOnly(emptyList())
         waitFor { p.pendingLabelCount() == 0 }
         assertEquals(0, p.pendingLabelCount())
+    }
+
+    private fun awaitCondition(cond: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (!cond()) {
+            assertTrue(System.nanoTime() < deadline, "Timed out waiting for condition")
+            LockSupport.parkNanos(500_000L)
+        }
+    }
+
+    @Test
+    fun liveNetworkSuccessWithConcurrentIoFailureDoesNotStickOffline() {
+        val tileFail = TileKey(14, 10, 10)
+        val tileSuccess = TileKey(14, 11, 11)
+        val failFetchEntered = CountDownLatch(1)
+        val allowFailToThrow = CountDownLatch(1)
+        val composeReached = CountDownLatch(1)
+        val allowSuccessToFinish = CountDownLatch(1)
+
+        val source = object : TileSource {
+            override val reportsNetworkSuccess: Boolean = true
+            override var onNetworkSuccess: (() -> Unit)? = null
+            override suspend fun fetch(key: TileKey): ByteArray? = when (key) {
+                tileFail -> {
+                    failFetchEntered.countDown()
+                    assertTrue(allowFailToThrow.await(5, TimeUnit.SECONDS))
+                    throw IOException("offline")
+                }
+                tileSuccess -> {
+                    onNetworkSuccess?.invoke()
+                    ByteArray(0)
+                }
+                else -> null
+            }
+        }
+
+        val p = provider(source) { 0L }
+        p.timings.compose.listener = {
+            composeReached.countDown()
+            assertTrue(allowSuccessToFinish.await(5, TimeUnit.SECONDS))
+        }
+
+        p.request(tileFail, false)
+        assertTrue(failFetchEntered.await(5, TimeUnit.SECONDS))
+
+        p.request(tileSuccess, false)
+        assertTrue(composeReached.await(5, TimeUnit.SECONDS))
+
+        allowFailToThrow.countDown()
+        awaitCondition { p.pendingCount() == 1 }
+        assertEquals(NetState.OK, p.networkState.value)
+
+        allowSuccessToFinish.countDown()
+        awaitCondition { p.pendingCount() == 0 }
+        assertEquals(NetState.OK, p.networkState.value)
+    }
+
+    @Test
+    fun newerIoFailureAfterNetworkSuccessKeepsOfflineState() {
+        val tileFail1 = TileKey(14, 20, 20)
+        val tileSuccess = TileKey(14, 21, 21)
+        val tileFail2 = TileKey(14, 22, 22)
+        val composeReached = CountDownLatch(1)
+        val allowSuccessToFinish = CountDownLatch(1)
+
+        val source = object : TileSource {
+            override val reportsNetworkSuccess: Boolean = true
+            override var onNetworkSuccess: (() -> Unit)? = null
+            override suspend fun fetch(key: TileKey): ByteArray? = when (key) {
+                tileFail1, tileFail2 -> throw IOException("offline")
+                tileSuccess -> {
+                    onNetworkSuccess?.invoke()
+                    ByteArray(0)
+                }
+                else -> null
+            }
+        }
+
+        val p = provider(source) { 0L }
+        p.request(tileFail1, false)
+        awaitCondition { p.pendingCount() == 0 && p.networkState.value == NetState.OFFLINE }
+        assertEquals(NetState.OFFLINE, p.networkState.value)
+
+        p.timings.compose.listener = {
+            composeReached.countDown()
+            assertTrue(allowSuccessToFinish.await(5, TimeUnit.SECONDS))
+        }
+        p.request(tileSuccess, false)
+        assertTrue(composeReached.await(5, TimeUnit.SECONDS))
+
+        p.request(tileFail2, false)
+        awaitCondition { p.pendingCount() == 1 }
+
+        allowSuccessToFinish.countDown()
+        awaitCondition { p.pendingCount() == 0 }
+        assertEquals(NetState.OFFLINE, p.networkState.value)
+    }
+
+    @Test
+    fun concurrentCacheHitAndIoFailureNeverClearsOffline() {
+        // Part A: deterministic latched interleaving
+        val tileFail = TileKey(14, 30, 30)
+        val tileCacheHit = TileKey(14, 31, 31)
+        val failFetchEntered = CountDownLatch(1)
+        val allowFailToThrow = CountDownLatch(1)
+        val composeReached = CountDownLatch(1)
+        val allowCacheHitToFinish = CountDownLatch(1)
+
+        val latchedSource = object : TileSource {
+            override val reportsNetworkSuccess: Boolean = true
+            override var onNetworkSuccess: (() -> Unit)? = null
+            override suspend fun fetch(key: TileKey): ByteArray? = when (key) {
+                tileFail -> {
+                    failFetchEntered.countDown()
+                    assertTrue(allowFailToThrow.await(5, TimeUnit.SECONDS))
+                    throw IOException("offline")
+                }
+                tileCacheHit -> ByteArray(0) // cache hit: no onNetworkSuccess
+                else -> null
+            }
+        }
+
+        val p = provider(latchedSource) { 0L }
+        p.timings.compose.listener = {
+            composeReached.countDown()
+            assertTrue(allowCacheHitToFinish.await(5, TimeUnit.SECONDS))
+        }
+
+        p.request(tileFail, false)
+        assertTrue(failFetchEntered.await(5, TimeUnit.SECONDS))
+
+        p.request(tileCacheHit, false)
+        assertTrue(composeReached.await(5, TimeUnit.SECONDS))
+
+        allowFailToThrow.countDown()
+        awaitCondition { p.pendingCount() == 1 }
+        assertEquals(NetState.OFFLINE, p.networkState.value)
+
+        allowCacheHitToFinish.countDown()
+        awaitCondition { p.pendingCount() == 0 }
+        assertEquals(NetState.OFFLINE, p.networkState.value)
+
+        // Part B: 100 concurrent iterations with zero network successes
+        val tileCacheLabel = TileKey(14, 32, 32)
+        val stressSource = object : TileSource {
+            override val reportsNetworkSuccess: Boolean = true
+            override var onNetworkSuccess: (() -> Unit)? = null
+            override suspend fun fetch(key: TileKey): ByteArray? = when (key) {
+                tileFail -> throw IOException("offline")
+                tileCacheHit, tileCacheLabel -> ByteArray(0)
+                else -> null
+            }
+        }
+
+        repeat(100) {
+            val sp = provider(stressSource) { 0L }
+            sp.request(tileCacheHit, false)
+            sp.labels(tileCacheLabel)
+            sp.request(tileFail, false)
+            awaitCondition { sp.pendingCount() == 0 && sp.pendingLabelCount() == 0 }
+            assertEquals(NetState.OFFLINE, sp.networkState.value)
+        }
+    }
+
+    @Test
+    fun labelsLiveNetworkSuccessWithConcurrentFailureDoesNotStickOffline() {
+        val tileFail = TileKey(14, 40, 40)
+        val tileSuccess = TileKey(14, 41, 41)
+        val tileFail2 = TileKey(14, 42, 42)
+        val tileCacheHit = TileKey(14, 43, 43)
+        val tileSuccess2 = TileKey(14, 44, 44)
+        val failFetchEntered = CountDownLatch(1)
+        val allowFailToThrow = CountDownLatch(1)
+
+        val source = object : TileSource {
+            override val reportsNetworkSuccess: Boolean = true
+            override var onNetworkSuccess: (() -> Unit)? = null
+            override suspend fun fetch(key: TileKey): ByteArray? = when (key) {
+                tileFail -> {
+                    failFetchEntered.countDown()
+                    assertTrue(allowFailToThrow.await(5, TimeUnit.SECONDS))
+                    throw IOException("offline")
+                }
+                tileFail2 -> throw IOException("offline")
+                tileSuccess, tileSuccess2 -> {
+                    onNetworkSuccess?.invoke()
+                    ByteArray(0)
+                }
+                tileCacheHit -> ByteArray(0)
+                else -> null
+            }
+        }
+
+        val p = provider(source) { 0L }
+        val labelsDone = CountDownLatch(1)
+        p.onLabelsReady = { if (it == tileSuccess) labelsDone.countDown() }
+
+        p.request(tileFail, false)
+        assertTrue(failFetchEntered.await(5, TimeUnit.SECONDS))
+
+        p.labels(tileSuccess)
+        assertTrue(labelsDone.await(5, TimeUnit.SECONDS))
+
+        allowFailToThrow.countDown()
+        awaitCondition { p.pendingCount() == 0 && p.pendingLabelCount() == 0 }
+        assertEquals(NetState.OK, p.networkState.value)
+
+        // Transition offline via labels(), confirm cache-hit labels preserve OFFLINE, then recover via live labels()
+        p.labels(tileFail2)
+        awaitCondition { p.pendingLabelCount() == 0 }
+        assertEquals(NetState.OFFLINE, p.networkState.value)
+
+        val cacheHitDone = CountDownLatch(1)
+        p.onLabelsReady = { if (it == tileCacheHit) cacheHitDone.countDown() }
+        p.labels(tileCacheHit)
+        assertTrue(cacheHitDone.await(5, TimeUnit.SECONDS))
+        awaitCondition { p.pendingLabelCount() == 0 }
+        assertEquals(NetState.OFFLINE, p.networkState.value)
+
+        val success2Done = CountDownLatch(1)
+        p.onLabelsReady = { if (it == tileSuccess2) success2Done.countDown() }
+        p.labels(tileSuccess2)
+        assertTrue(success2Done.await(5, TimeUnit.SECONDS))
+        awaitCondition { p.pendingLabelCount() == 0 }
+        assertEquals(NetState.OK, p.networkState.value)
     }
 }
