@@ -18,6 +18,9 @@ class DiskTileCache(
     private val lock = Any()
     private var totalBytes = -1L
 
+    @Volatile
+    internal var beforeCorruptLock: (() -> Unit)? = null
+
     init {
         dir.mkdirs()
     }
@@ -28,25 +31,21 @@ class DiskTileCache(
         val file = fileFor(name)
         return try {
             val raw = file.readBytes()
-            if (raw.size < HEADER) {
+            val entry = parseEntry(raw) ?: run {
+                beforeCorruptLock?.invoke()
                 synchronized(lock) {
-                    if (file.delete() && totalBytes >= 0) totalBytes = maxOf(0L, totalBytes - raw.size)
+                    if (!file.exists()) return null
+                    val current = file.readBytes()
+                    val recovered = parseEntry(current)
+                    if (recovered == null) {
+                        val len = file.length()
+                        if (file.delete() && totalBytes >= 0) totalBytes = maxOf(0L, totalBytes - len)
+                    }
+                    recovered
                 }
-                return null
-            }
-            val buf = ByteBuffer.wrap(raw, 0, HEADER)
-            val ts = buf.getLong()
-            val len = buf.getInt()
-            if (len < 0 || len != raw.size - HEADER) {
-                synchronized(lock) {
-                    if (file.delete() && totalBytes >= 0) totalBytes = maxOf(0L, totalBytes - raw.size)
-                }
-                return null
-            }
-            synchronized(lock) {
-                file.setLastModified(clock())
-            }
-            Entry(raw.copyOfRange(HEADER, raw.size), ts)
+            } ?: return null
+            touch(file)
+            entry
         } catch (e: IOException) {
             null
         } catch (e: RuntimeException) {
@@ -54,20 +53,46 @@ class DiskTileCache(
         }
     }
 
+    private fun parseEntry(raw: ByteArray): Entry? {
+        if (raw.size < HEADER) return null
+        val buf = ByteBuffer.wrap(raw, 0, HEADER)
+        val ts = buf.getLong()
+        val len = buf.getInt()
+        if (len < 0 || len != raw.size - HEADER) return null
+        return Entry(raw.copyOfRange(HEADER, raw.size), ts)
+    }
+
+    private fun touch(file: File) {
+        val now = clock()
+        if (now >= 0L) file.setLastModified(now)
+    }
+
     /** Best effort: any failure (disk full, read-only dir, ...) is swallowed and leaves no temp file behind. */
     fun put(name: String, bytes: ByteArray) {
         val file = fileFor(name)
         val tmp = File(dir, "${file.name}.${System.nanoTime()}.tmp")
         try {
-            val payload = ByteBuffer.allocate(HEADER + bytes.size).putLong(clock()).putInt(bytes.size).put(bytes).array()
+            if (bytes.size.toLong() + HEADER > maxBytes) {
+                synchronized(lock) {
+                    if (file.exists()) {
+                        ensureTotal()
+                        val len = file.length()
+                        if (file.delete()) totalBytes = maxOf(0L, totalBytes - len)
+                    }
+                }
+                return
+            }
             synchronized(lock) {
+                val now = clock()
+                val payload = ByteBuffer.allocate(HEADER + bytes.size).putLong(now).putInt(bytes.size).put(bytes).array()
                 ensureTotal()
                 dir.mkdirs()
                 val previous = if (file.exists()) file.length() else 0L
                 Files.write(tmp.toPath(), payload, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
                 Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                if (now >= 0L) file.setLastModified(now)
                 totalBytes += payload.size - previous
-                if (totalBytes > maxBytes) evict()
+                if (totalBytes > maxBytes) evict(protectedFile = file)
             }
         } catch (e: IOException) {
             tmp.delete()
@@ -78,8 +103,8 @@ class DiskTileCache(
 
     fun clear() {
         synchronized(lock) {
-            dir.listFiles { f -> f.name.endsWith(EXT) }?.forEach { it.delete() }
-            totalBytes = 0L
+            totalBytes = dir.listFiles { f -> f.name.endsWith(EXT) }
+                ?.sumOf { if (it.delete()) 0L else it.length() } ?: 0L
         }
     }
 
@@ -97,15 +122,20 @@ class DiskTileCache(
         }
     }
 
-    private fun evict() {
-        val target = (maxBytes * 9L) / 10L
+    private fun evict(protectedFile: File? = null) {
+        val target = maxBytes - maxBytes / 10L
         val entries = dir.listFiles { f -> f.name.endsWith(EXT) }
             ?.map { Triple(it, it.lastModified(), it.length()) }
-            ?.sortedBy { it.second }
+            ?.sortedWith(compareBy({ it.first == protectedFile }, { it.second }))
             ?: return
+        totalBytes = entries.sumOf { it.third }
+        var remaining = entries.size
         for ((f, _, len) in entries) {
-            if (totalBytes <= target) break
-            if (f.delete()) totalBytes = maxOf(0L, totalBytes - len)
+            if (totalBytes <= maxBytes && (totalBytes <= target || remaining <= 1)) break
+            if (f.delete()) {
+                totalBytes = maxOf(0L, totalBytes - len)
+                remaining--
+            }
         }
     }
 
