@@ -365,4 +365,87 @@ class RoutingTest {
             client.connectionPool.evictAll()
         }
     }
+
+    @Test
+    fun routeTrackerHandlesSingleStepLoopingAndBackwardsProgress() {
+        val p0 = LatLng(41.8900, 12.4900)
+        val p1 = LatLng(41.8900, 12.4950)
+        val p2 = LatLng(41.8950, 12.4950)
+        val p3 = LatLng(41.8950, 12.4900)
+
+        // Single-step plan (only DEPART) does not skip the sole step
+        val single = RoutePlan(
+            points = listOf(p0, p1),
+            steps = listOf(RouteStep("Head east", "Via A", 400.0, 40.0, TurnDirection.DEPART, p0)),
+            distanceMeters = 400.0,
+            durationSeconds = 40.0,
+        )
+        val singleMid = RouteTracker.evaluate(single, 41.8900, 12.4925)
+        assertEquals(false, singleMid.arrived)
+        assertNotNull(singleMid.currentStep)
+
+        // Looping route back to p0: steps stay monotonic past the shared start/end coordinate
+        val loopPlan = RoutePlan(
+            points = listOf(p0, p1, p2, p3, p0),
+            steps = listOf(
+                RouteStep("Depart", "Via A", 400.0, 40.0, TurnDirection.DEPART, p0),
+                RouteStep("Turn left", "Via B", 550.0, 60.0, TurnDirection.LEFT, p1),
+                RouteStep("Turn left", "Via C", 400.0, 40.0, TurnDirection.LEFT, p2),
+                RouteStep("Turn left", "Via D", 550.0, 60.0, TurnDirection.LEFT, p3),
+                RouteStep("Arrive", "", 0.0, 0.0, TurnDirection.ARRIVE, p0),
+            ),
+            distanceMeters = 1900.0,
+            durationSeconds = 200.0,
+        )
+        val onLeg3 = RouteTracker.evaluate(loopPlan, 41.8950, 12.4925)
+        assertEquals(TurnDirection.LEFT, onLeg3.currentStep?.direction)
+        assertEquals("Via D", onLeg3.currentStep?.roadName)
+
+        // Jumping backwards toward p0 still produces valid finite progress and non-null step
+        val backToStart = RouteTracker.evaluate(loopPlan, 41.8900, 12.4910)
+        assertTrue(backToStart.remainingDistanceMeters.isFinite() && backToStart.remainingDistanceMeters >= 0.0)
+        assertNotNull(backToStart.currentStep)
+    }
+
+    @Test
+    fun parseOsrmAndParseNominatimTolerateJsonNullFields() {
+        val osrmNullManeuver = """
+            {
+              "code": "Ok",
+              "routes": [
+                {
+                  "geometry": "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+                  "distance": 1200.0,
+                  "duration": 180.0,
+                  "legs": [
+                    {
+                      "steps": [
+                        { "distance": 500.0, "duration": 60.0, "name": null, "maneuver": null },
+                        { "distance": 300.0, "duration": 40.0, "name": "Bad Loc", "maneuver": { "type": "turn", "modifier": "left", "location": null } },
+                        { "distance": 700.0, "duration": 120.0, "name": "Main St", "maneuver": { "type": "turn", "modifier": "left", "location": [-120.95, 40.7] } }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+        val osrmPlan = RouteParsers.parseOsrm(osrmNullManeuver)
+        assertNotNull(osrmPlan)
+        assertEquals(1, osrmPlan.steps.size)
+        assertEquals("Main St", osrmPlan.steps[0].roadName)
+
+        val nominatimNullExtras = """
+            [
+              {"osm_id": 1, "lat": "40.41", "lon": "-3.65", "category": "highway", "type": "speed_camera", "extratags": null, "name": null},
+              {"osm_id": 2, "lat": null, "lon": "-3.65", "category": "highway", "type": "speed_camera", "extratags": null}
+            ]
+        """.trimIndent()
+        val nom = app.minemaps.engine.routing.RoadAlertsParser.parseNominatim(
+            nominatimNullExtras,
+            app.minemaps.engine.routing.RoadAlertKind.SPEED_CAMERA,
+        )
+        assertEquals(1, nom.size)
+        assertEquals("cam_1", nom[0].id)
+    }
 }

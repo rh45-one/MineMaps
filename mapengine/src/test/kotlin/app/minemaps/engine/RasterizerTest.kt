@@ -161,5 +161,11 @@ class RasterizerTest {
         val g = GridRasterizer.rasterize(tile("water", weird), vt, vt)
         // Far bottom-right cell must remain untouched (GRASS, not corrupted by Int.MIN_VALUE - 1 wraparound)
         assertEquals(Block.GRASS.id, g.clsAt(200, 200))
+
+        // Overzoomed child grid (dz = 4 -> scale = 1.0, oy = 256): Int.MIN_VALUE / 1.0 - 256 hits Int.MIN_VALUE
+        // without clamping, which used to wrap (Int.MIN_VALUE - 1) into Int.MAX_VALUE and flood the tile.
+        val child = TileKey(vt.z + 4, vt.x shl 4, (vt.y shl 4) + 1)
+        val gChild = GridRasterizer.rasterize(tile("water", weird), vt, child)
+        assertEquals(Block.GRASS.id, gChild.clsAt(200, 200))
     }
 }

@@ -42,28 +42,31 @@ class DiskTileCacheTest {
     fun concurrentGetAndEvictEnforcesMaxBytesWithoutTimSortFailure() {
         val dir = Files.createTempDirectory("tilecache-race").toFile()
         try {
-            var tick = 1_000_000L
-            val cache = DiskTileCache(dir, maxBytes = 4_000, ttlMillis = 60_000, clock = { tick += 1000; tick })
-            val payload = ByteArray(150) { 7 }
-            for (i in 0 until 20) cache.put("k$i", payload)
-            val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+            val tick = java.util.concurrent.atomic.AtomicLong(1_000_000L)
+            // Keep >= 48 files on disk (> OpenJDK TimSort.MIN_MERGE = 32) so merge-sort comparator invariants run.
+            val cache = DiskTileCache(dir, maxBytes = 10_000, ttlMillis = 60_000, clock = { tick.addAndGet(1000L) })
+            val payload = ByteArray(150) { 7 } // 162 B framed -> ~61 files fit in 10_000 B
+            for (i in 0 until 55) cache.put("k$i", payload)
+            val stop = AtomicBoolean(false)
             val readers = List(4) { r ->
                 Thread {
                     var i = r
                     while (!stop.get()) {
-                        cache.get("k${i % 60}")
+                        cache.get("k${i % 120}")
                         i++
                     }
                 }.apply { start() }
             }
-            for (i in 20 until 120) {
+            for (i in 55 until 180) {
                 cache.put("k$i", payload)
             }
             stop.set(true)
             readers.forEach { it.join(5000) }
-            assertTrue(cache.sizeBytes() <= 4_000, "cache exceeded maxBytes: ${cache.sizeBytes()}")
+            assertTrue(cache.sizeBytes() <= 10_000, "cache exceeded maxBytes: ${cache.sizeBytes()}")
             val actualOnDisk = dir.listFiles { f -> f.name.endsWith(".tile") }?.sumOf { it.length() } ?: 0L
-            assertTrue(actualOnDisk <= 4_000, "actual bytes on disk exceeded maxBytes: $actualOnDisk")
+            assertTrue(actualOnDisk <= 10_000, "actual bytes on disk exceeded maxBytes: $actualOnDisk")
+            val fileCount = dir.listFiles { f -> f.name.endsWith(".tile") }?.size ?: 0
+            assertTrue(fileCount >= 40, "expected >= 40 files to exercise TimSort merge path, got $fileCount")
         } finally {
             dir.deleteRecursively()
         }
