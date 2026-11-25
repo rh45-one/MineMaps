@@ -139,7 +139,7 @@ Look v2 (verified with renders under `/tmp/mm/v2/render/` and screenshots): deco
 | criterion | state | evidence |
 |---|---|---|
 | Pure-JVM engine with unit tests; Android modules build | Verified | 157 + 124 tests, `assembleDebug`, `assembleRelease` |
-| Release build with R8 runs | Verified | release APK ~1.9 MB; phone map, search and car map smoke-tested (`/tmp/mm/release_*.png`) |
+| Release build with R8 runs | Verified | release APK ~2.1 MB; phone map, search and car map smoke-tested (`/tmp/mm/release_*.png`) |
 | No crashes/ANRs in the test sessions | Verified for the final builds | logcat scans; earlier hardware-canvas crashes were fixed by the software canvas |
 | Network etiquette (User-Agent, <= 4 concurrent, caching, negative-cache of failing tiles) | Verified | `ProviderFailureTest`, `OpenMapTilesSource` |
 | Lint | Verified | 0 errors, 21 warnings |
