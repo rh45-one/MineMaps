@@ -23,12 +23,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -178,9 +182,7 @@ class RoadAlertsFeedTest {
         extraScopes += scope
         val location = LocationRepository(app, scope)
         val alertsFlow = MutableStateFlow<List<RoadAlert>>(emptyList())
-        val notices = MutableStateFlow<MirroredAlertNotice?>(
-            MirroredAlertNotice(RoadAlertKind.SPEED_CAMERA, "Camera", "Ahead", reportedAtMs = 1_000L),
-        )
+        val notices = Channel<MirroredAlertNotice?>(Channel.RENDEZVOUS)
         val client = RoadAlertsClient({ fakeAlertsClient() }, "TestAgent")
         val feed = RoadAlertsFeed(
             scope = scope,
@@ -191,19 +193,24 @@ class RoadAlertsFeedTest {
             roadAlerts = alertsFlow,
             online = { false },
             clockMs = { 1_000L },
-            alertNotices = notices,
+            alertNotices = notices.receiveAsFlow(),
             idleDelayMs = 20L,
             pollDelayMs = 20L,
             failureDelayMs = 20L,
         )
         feed.start()
         loadStarted.await()
-        // Notice is already emitted, settings haven't loaded yet -> must not publish prematurely
-        Thread.sleep(30)
+        // Notice is emitted while settings haven't loaded yet -> must not publish prematurely
+        val preLoadSend = scope.launch {
+            notices.send(MirroredAlertNotice(RoadAlertKind.SPEED_CAMERA, "Camera", "Ahead", reportedAtMs = 1_000L))
+        }
         assertEquals(emptyList(), alertsFlow.value)
 
         gate.complete(preferencesOf(booleanPreferencesKey("show_road_alerts") to false))
-        Thread.sleep(60)
+        withTimeout(5_000L) {
+            preLoadSend.join()
+            notices.send(null)
+        }
         assertEquals(emptyList(), alertsFlow.value, "Alert notice emitted while showRoadAlerts=false must be ignored")
 
         // Case B: Toggle true -> false -> true; notice emitted while disabled must never leak
@@ -211,18 +218,23 @@ class RoadAlertsFeedTest {
         var noticeTs = 2_000L
         pumpUntil {
             // Confirm settings switched to true by pushing a fresh notice
-            notices.value = MirroredAlertNotice(RoadAlertKind.HAZARD, "Hazard 1", "Lane closed", reportedAtMs = noticeTs++)
+            notices.trySend(MirroredAlertNotice(RoadAlertKind.HAZARD, "Hazard 1", "Lane closed", reportedAtMs = noticeTs++))
             alertsFlow.value.any { it.label == "Hazard 1" }
         }
         settingsRepo.setShowRoadAlerts(false)
         pumpUntil { alertsFlow.value.isEmpty() }
 
-        notices.value = MirroredAlertNotice(RoadAlertKind.SPEED_CAMERA, "Disabled Camera", "Should ignore", reportedAtMs = 3_000L)
-        Thread.sleep(50)
+        withTimeout(5_000L) {
+            notices.send(MirroredAlertNotice(RoadAlertKind.SPEED_CAMERA, "Disabled Camera", "Should ignore", reportedAtMs = 3_000L))
+            notices.send(null)
+        }
         assertEquals(emptyList(), alertsFlow.value)
 
         settingsRepo.setShowRoadAlerts(true)
-        Thread.sleep(50)
+        pumpUntil {
+            notices.trySend(MirroredAlertNotice(RoadAlertKind.HAZARD, "Hazard 2", "Clear check", reportedAtMs = noticeTs++))
+            alertsFlow.value.any { it.label == "Hazard 2" }
+        }
         assertTrue(alertsFlow.value.none { it.label == "Disabled Camera" }, "Disabled notice must not resurrect on re-enable")
     }
 
@@ -396,6 +408,8 @@ class RoadAlertsFeedTest {
         mapStateB.update(Camera(48.8566, 2.3522, 15.0))
         val locationB = LocationRepository(app, scopeB)
         val alertsFlowB = MutableStateFlow<List<RoadAlert>>(emptyList())
+        val noticesB = MutableStateFlow<MirroredAlertNotice?>(null)
+        val clockTicksB = AtomicInteger(0)
         val fetchStartedB = CompletableDeferred<Unit>()
         val fetchGateB = CompletableDeferred<Unit>()
         val httpB = fakeAlertsClient(
@@ -410,19 +424,27 @@ class RoadAlertsFeedTest {
             roadAlertsClient = RoadAlertsClient({ httpB }, "TestAgent"),
             roadAlerts = alertsFlowB,
             online = { true },
-            clockMs = { 10_000L },
-            alertNotices = MutableStateFlow(null),
+            clockMs = {
+                clockTicksB.incrementAndGet()
+                10_000L
+            },
+            alertNotices = noticesB,
             idleDelayMs = 10L,
-            pollDelayMs = 5_000L,
+            pollDelayMs = 10L,
             failureDelayMs = 10L,
         )
         feedB.start()
         fetchStartedB.await()
 
+        noticesB.value = MirroredAlertNotice(RoadAlertKind.HAZARD, "Active Pin B", "Detail", reportedAtMs = 10_000L)
+        pumpUntil { alertsFlowB.value.isNotEmpty() }
+
         settingsRepoB.setShowRoadAlerts(false)
         pumpUntil { alertsFlowB.value.isEmpty() }
+
+        val ticksBefore = clockTicksB.get()
         fetchGateB.complete(Unit)
-        Thread.sleep(80)
+        pumpUntil { clockTicksB.get() >= ticksBefore + 2 }
         assertEquals(emptyList(), alertsFlowB.value, "In-flight fetch completing after disable must not publish alerts")
     }
 

@@ -614,14 +614,15 @@ class TexturePackManagerTest {
                     if (callNum == 1) {
                         val src = object : Source {
                             private var sentFirst = false
+                            private val heldOnce = AtomicBoolean(false)
                             override fun read(sink: Buffer, byteCount: Long): Long {
                                 if (!sentFirst) {
                                     sentFirst = true
                                     val n = minOf(64, pack2Bytes.size)
                                     sink.write(pack2Bytes, 0, n)
-                                    job1Streaming.countDown()
                                     return n.toLong()
                                 }
+                                job1Streaming.countDown()
                                 awaitLatch(readGate1, "job1 readGate1")
                                 if (aborted1.get()) throw IOException("canceled")
                                 return -1L
@@ -629,8 +630,10 @@ class TexturePackManagerTest {
 
                             override fun timeout(): Timeout = Timeout.NONE
                             override fun close() {
-                                job1InCloseHoldingMutex.countDown()
-                                awaitLatch(allowJob1Unwind, "job1 unwind gate while holding workMutex")
+                                if (heldOnce.compareAndSet(false, true)) {
+                                    job1InCloseHoldingMutex.countDown()
+                                    awaitLatch(allowJob1Unwind, "job1 unwind gate while holding workMutex")
+                                }
                             }
                         }
                         okHttpResponse(chain.request(), pack2Bytes.size.toLong(), src)
@@ -736,20 +739,20 @@ class TexturePackManagerTest {
                             firstDone = true
                             val n = minOf(64, len, pack2Bytes.size)
                             System.arraycopy(pack2Bytes, 0, b, off, n)
-                            job1Streaming.countDown()
                             return n
                         }
+                        job1Streaming.countDown()
                         awaitLatch(readGate1, "uri1 readGate1")
                         if (closed1.get()) throw IOException("closed")
                         return -1
                     }
 
-                    private val closeCalls = AtomicInteger(0)
+                    private val heldOnce = AtomicBoolean(false)
 
                     override fun close() {
                         closed1.set(true)
                         readGate1.countDown()
-                        if (closeCalls.incrementAndGet() == 2) {
+                        if (heldOnce.compareAndSet(false, true)) {
                             job1InCloseHoldingMutex.countDown()
                             awaitLatch(allowJob1Unwind, "uri1 unwind gate while holding workMutex")
                         }
