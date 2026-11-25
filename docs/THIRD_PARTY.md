@@ -11,9 +11,9 @@
 | OSRM (`router.project-osrm.org`) | Public demo server, fair-use policy, OSM data (ODbL) | Contacted when the user taps *Navigate* in Standalone mode (or in Google Assisted mode when no Google API key is configured). |
 | Google Places API v1 & Google Routes API v2 (`places.googleapis.com`, `routes.googleapis.com`) | Google Maps Platform Terms of Service | Contacted **only** when the user selects *Google Assisted* mode and enters their own personal Google API key in Settings. |
 | GitHub Releases API (`api.github.com`) | Public REST API, rate-limited | Contacted only by release builds when checking for updates (configurable: every launch / daily / weekly / manual only). |
-| Mojang Launcher Servers (`piston-data.mojang.com`) | Official Minecraft client distribution; assets © Mojang Studios ([Minecraft EULA](https://www.minecraft.net/en-us/eula)) | Contacted only when the user explicitly chooses *Include Minecraft textures* in Settings; the client jar is SHA-1 verified, converted to an atlas in app-private storage, and deleted. Never bundled in releases. |
+| Mojang Launcher Servers (`piston-data.mojang.com`) | Official Minecraft client distribution; assets © Mojang Studios ([Minecraft EULA](https://www.minecraft.net/en-us/eula)) | Contacted only when the user explicitly chooses *Minecraft textures* in **Settings → Textures & Appearance → Textures**; the client jar is SHA-1 verified, converted to an atlas in app-private storage, and deleted. Never bundled in releases. |
 
-Both URLs are configurable in `local.properties` so self-hosted or commercial sources can be used instead.
+The OpenFreeMap and Photon URLs (and the update repository) are configurable in `local.properties` so self-hosted or commercial sources can be used instead.
 
 ## Font and artwork
 

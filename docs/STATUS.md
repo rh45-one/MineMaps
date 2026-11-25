@@ -112,7 +112,7 @@ Look v2 (verified with renders under `/tmp/mm/v2/render/` and screenshots): deco
 
 | criterion | state | evidence |
 |---|---|---|
-| NAVIGATION category (no routing), `NavigationTemplate` root, `MapWithContentTemplate` places | Verified on the DHU | merged manifest, host accepted templates, MineMaps takes the map slot (`~/mm-qa/u3/`) |
+| NAVIGATION category (no NavigationManager guidance session), `NavigationTemplate` root, `MapWithContentTemplate` places | Verified on the DHU | merged manifest, host accepted templates, MineMaps takes the map slot (`~/mm-qa/u3/`) |
 | Appears in DHU launcher and launches with map + list | Verified | `/tmp/mm/car/12_dhu_launcher.png`, `16_relaunch.png`, release build `/tmp/mm/release_car_map.png` |
 | Following keeps target at stable-area centre across sizes | Verified | logs + shots for default, 720p, wide, 6in (`/tmp/mm/car/25_*`, `26_*`, `27_*`) |
 | Zoom in/out, recenter, flyTo | Verified | `/tmp/mm/car/18_*`, `23_*`, `24_*` |
@@ -138,11 +138,11 @@ Look v2 (verified with renders under `/tmp/mm/v2/render/` and screenshots): deco
 
 | criterion | state | evidence |
 |---|---|---|
-| Pure-JVM engine with unit tests; Android modules build | Verified | 124 + 76 tests, `assembleDebug`, `assembleRelease` |
+| Pure-JVM engine with unit tests; Android modules build | Verified | 157 + 124 tests, `assembleDebug`, `assembleRelease` |
 | Release build with R8 runs | Verified | release APK ~1.9 MB; phone map, search and car map smoke-tested (`/tmp/mm/release_*.png`) |
 | No crashes/ANRs in the test sessions | Verified for the final builds | logcat scans; earlier hardware-canvas crashes were fixed by the software canvas |
 | Network etiquette (User-Agent, <= 4 concurrent, caching, negative-cache of failing tiles) | Verified | `ProviderFailureTest`, `OpenMapTilesSource` |
-| Lint | Verified | 0 errors, 17 warnings |
+| Lint | Verified | 0 errors, 21 warnings |
 | Release signing | Verified | permanent release keystore in `~/.config/minemaps/release.jks` + GitHub Actions secrets; verified by `tools/ci/verify-apk.sh` |
 
 ## Performance (emulator only)

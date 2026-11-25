@@ -29,7 +29,7 @@ Roads, buildings, parks, forests, rivers, and landmarks from around the world ar
 
 - **Explore the real world in blocks** — Pan, pinch to zoom from a world overview down to individual street blocks, and twist with two fingers to rotate the map (tap the compass to face north again).
 - **Use it in your car with Android Auto** — MineMaps sits in Android Auto's main map slot just like Google Maps or Waze: use it **full screen** or **side-by-side** with your music and media apps.
-- **Three navigation modes (Settings → Navigation):**
+- **Three navigation modes (Settings → Navigation & Driving):**
   1. **Standalone (OpenStreetMap / OSRM):** Tap **Navigate** on any place to draw a pixel-art route line across the block map with live turn banners, distance, and ETA — completely free with no API keys.
   2. **Google Maps Assisted:** Mirror live turn-by-turn notifications from the Google Maps app running on your phone, share places directly from Google Maps into MineMaps, or optionally paste your own Google Maps API key to enable Google Places business search and live traffic-coloured routes (green / amber / red).
   3. **Off (Map only):** Pure block-world exploration without route lines or navigation banners.
@@ -50,12 +50,12 @@ Roads, buildings, parks, forests, rivers, and landmarks from around the world ar
 ### Keeping MineMaps Updated
 
 MineMaps checks GitHub Releases for updates automatically (once a day by default) and lets you download and install new versions right inside the app.
-- You can change how often it checks (**Every launch**, **Daily**, **Weekly**, or **Manual only**) or tap **Check now** in **Settings → Updates**.
+- You can change how often it checks (**Every launch**, **Daily**, **Weekly**, or **Manual only**) or tap **Check now** in **Settings → Updates & About**.
 - Every update is verified against its SHA-256 checksum and signing key before Android installs it.
 
 ### Moving Your Saved Places Between Installs
 
-You can back up or move your bookmarks at any time in **Settings → Saved places → Export / Import** (for example, when switching phones or moving from a self-built copy to an official release).
+You can back up or move your bookmarks at any time in **Settings → Saved Places & Storage → Saved places → Export / Import** (for example, when switching phones or moving from a self-built copy to an official release).
 
 ---
 
@@ -133,7 +133,7 @@ Your imported textures are stored privately on your phone and **stay intact acro
 
 - **No accounts, no ads, no analytics, no tracking.**
 - Your location is read directly from your phone's GPS/location service (`LocationManager` — Google Play Services is not required) and is only used on your device to draw your position on the map and bias nearby search results.
-- Map tiles are fetched from [OpenFreeMap](https://openfreemap.org/) (OpenStreetMap data) and place searches use [Photon](https://photon.komoot.io/). Automatic update checks contact GitHub (and can be turned off by setting **Settings → Updates** to **Manual only**).
+- Map tiles are fetched from [OpenFreeMap](https://openfreemap.org/) (OpenStreetMap data) and place searches use [Photon](https://photon.komoot.io/). Automatic update checks contact GitHub (and can be turned off by setting **Settings → Updates & About** to **Manual only**).
 
 ---
 
