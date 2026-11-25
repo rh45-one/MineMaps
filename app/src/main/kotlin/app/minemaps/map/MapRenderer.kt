@@ -313,6 +313,8 @@ class MapRenderer(
 
     internal fun pendingTileCount(): Int = provider.pendingCount()
 
+    internal fun pendingLabelCount(): Int = provider.pendingLabelCount()
+
     internal fun isCameraFlashActive(): Boolean = cameraFlashJob?.isActive == true
 
     fun close() {

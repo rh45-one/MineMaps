@@ -199,13 +199,19 @@ class MapRendererLabelTest {
         try {
             val deadline = System.currentTimeMillis() + 5_000L
             var lastSeen = -1
+            var drewAtZeroPending = false
             while (System.currentTimeMillis() < deadline) {
                 val cur = invalidations.get()
-                if (cur != lastSeen) {
+                val pending = renderer.pendingLabelCount()
+                if (cur != lastSeen || (pending == 0 && !drewAtZeroPending)) {
                     lastSeen = cur
                     val canvas = RecordingCanvas(bmp)
                     renderer.draw(canvas, vp, MapOverlays.EMPTY, night = false)
-                    if (condition(canvas.drawnLabels)) return canvas.drawnLabels
+                    val stillPending = renderer.pendingLabelCount()
+                    drewAtZeroPending = stillPending == 0
+                    if (stillPending == 0 && condition(canvas.drawnLabels)) return canvas.drawnLabels
+                } else if (pending > 0) {
+                    drewAtZeroPending = false
                 }
                 Thread.sleep(15)
             }

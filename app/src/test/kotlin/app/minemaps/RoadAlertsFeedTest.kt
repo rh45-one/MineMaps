@@ -208,9 +208,10 @@ class RoadAlertsFeedTest {
 
         // Case B: Toggle true -> false -> true; notice emitted while disabled must never leak
         settingsRepo.setShowRoadAlerts(true)
+        var noticeTs = 2_000L
         pumpUntil {
             // Confirm settings switched to true by pushing a fresh notice
-            notices.value = MirroredAlertNotice(RoadAlertKind.HAZARD, "Hazard 1", "Lane closed", reportedAtMs = 2_000L)
+            notices.value = MirroredAlertNotice(RoadAlertKind.HAZARD, "Hazard 1", "Lane closed", reportedAtMs = noticeTs++)
             alertsFlow.value.any { it.label == "Hazard 1" }
         }
         settingsRepo.setShowRoadAlerts(false)
