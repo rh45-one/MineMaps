@@ -20,8 +20,8 @@ Release candidate: `git tag -a v1.2.0-rc.1 -m "rc 1" && git push origin v1.2.0-r
 ## What `.github/workflows/release.yml` does
 1. Validates the tag (`vX.Y.Z` or `vX.Y.Z-rc.N`).
 2. Decodes the keystore secret into `$RUNNER_TEMP` and exports the signing env vars.
-3. Runs the engine and app unit tests and builds the R8 release APK with `MINEMAPS_VERSION` set from the tag.
-4. `tools/ci/verify-apk.sh`: the signing certificate SHA-256 must equal `32:72:0A:0B:...:86:65` (hard-coded in the workflow), `versionName` must equal the tag, and the APK must not contain `minemaps/packs/vanilla` (Mojang textures).
+3. Runs the engine and app unit tests and builds the R8 release APK with `MINEMAPS_VERSION` set from the tag without the `v` (`${TAG#v}`).
+4. `tools/ci/verify-apk.sh`: the signing certificate SHA-256 must equal `32:72:0A:0B:...:86:65` (hard-coded as `EXPECTED_CERT_SHA256` in the workflow), `versionName` must equal the tag without the `v` (`${TAG#v}`), and the APK must not contain `minemaps/packs/vanilla` (Mojang textures).
 5. Publishes `MineMaps-vX.Y.Z.apk` and `MineMaps-vX.Y.Z.apk.sha256` with `gh release create --generate-notes` (`--prerelease` for `-rc`).
 6. Always deletes the decoded keystore.
 

@@ -47,6 +47,13 @@
 - `:app:testDebugUnitTest`: 76 tests, 0 failures (Photon & Google Places parsing and name latinising, search flow and merge rules, rotation gesture and camera bearing, label-name settings, saved-place codec and backup import/export, update semver/JSON/policy/checksum parsing, `geo:` & shared Google Maps URL/text parsing, Google Maps notification mirror parsing, stable-area math, car `NavScreen`/`MapScreen` with Robolectric, car host allowlist).
 - `:app:lintRelease`: 0 errors, 17 warnings, none in the Security category.
 
+### Current verified test counts (Linux, 2026-11-25)
+
+- `:mapengine:test`: 157 tests (19 suites), 0 failures, 2 skipped (`MinecraftImporterTest` golden test and `TexturePackTest` bundled-vanilla test when local `client-26.3.jar` / bundled vanilla pack are absent).
+- `:app:testDebugUnitTest`: 124 tests (20 suites), 0 failures, 0 skipped.
+- `:app:lintRelease`: 0 errors, 21 warnings (plus 2 `AutoboxingStateCreation` notes), none in the Security category.
+- `tools/ci/test-verify-apk.sh`: 45 passed, 0 failed.
+
 ## Stability campaign (emulator + DHU)
 
 Evidence outside the repo in `~/mm-qa/SUMMARY.md`. On the final build, with 0 app crashes and 0 ANRs:
@@ -153,7 +160,7 @@ Phone, 10-swipe scripted pan, debug build, `dumpsys gfxinfo`:
 Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 
 ## Features since the first release
-- Two-finger map rotation with a compass button (phone only; the car stays north-up, the Car API has no rotate gesture).
+- Two-finger map rotation with a compass button (manual rotation is phone-only as the Car API has no rotate gesture; both phone and car switch to heading-up with 38° tilt while navigating or driving).
 - English / Latin label names (ICU transliteration), street-name toggle, credit chip with (i) button.
 - On-device place index (visited and cached tiles, z12 places within 20 km) merged with Photon results; Photon query uses zoom and `location_bias_scale=0.2`.
 - Minecraft-style UI (Monocraft titles, bevelled panels and buttons, pixel glyphs) with phone/tablet, portrait/landscape layouts.
@@ -181,13 +188,13 @@ Car draw (software canvas, 800x400 surface): about 2.5 ms per frame.
 - The updater was verified end to end on the emulator only (local fake GitHub API); the first real update will be the first run against api.github.com. Play Protect can block self-updates from an unknown developer (INSTALL_FAILED_VERIFICATION_FAILURE is shown in the dialog).
 - Map overlays use system bars + display cutout insets (safeDrawing minus the keyboard). Swipe-to-delete in the saved list was dropped in favour of a confirm dialog.
 
-- Map rotation is phone only (car north-up); there is no heading-up mode. Two-finger rotation was not exercised with real touch input on the emulator (bearing was driven by a temporary debug hook).
+- Manual two-finger map rotation is phone-only (the Car API has no rotate gesture); both phone and car use automatic heading-up with 38° tilt while navigating or driving. Two-finger rotation was not exercised with real touch input on the emulator (bearing was driven by a temporary debug hook).
 - The local place index only knows streets and POIs from z14 tiles already visited or cached, plus places from the z12 prefetch; an unvisited neighbourhood is found only through the network search.
 
 - English label mode transliterates names that have no Latin-script tag with ICU, which needs Android 10+ (API 29); on Android 8-9 such names stay in their local script. ICU output is phonetic (e.g. Arabic without vowels), not an official romanisation.
 - The car screen shows no OpenStreetMap/OpenMapTiles attribution; the phone shows it at start, behind an (i) button, in Settings and on the Licences screen.
 
-- No routing or turn-by-turn, by design: the car app declares the NAVIGATION category only to get the map slot and layouts, never starts guidance, and is therefore sideload-only (not Play-compliant).
+- No Android Auto `NavigationManager` guidance session, by design: while MineMaps calculates routes and shows turn-by-turn banners (Stage 13), the car app declares the `NAVIGATION` category only to get the map slot and layouts, never calls `NavigationManager.navigationStarted` (so other apps' guidance is not suppressed), and is therefore sideload-only (not Play-compliant).
 - The `androidx.car.app.action.NAVIGATE` handling is covered by JVM tests; the host-to-service delivery was not reproduced on the DHU (no adb entry point; voice assistant not available on the emulator).
 - Vector data is z14 and is overzoomed to the block grid, so building footprints are simplified; tunnels and trams are hidden.
 - The public OpenFreeMap and Photon instances have no SLA; Photon latency of about 14 s was observed.

@@ -22,7 +22,7 @@ not a smooth vector map with a pixel filter.
   only be a pan/zoom shell; we would still write the whole rasterizer and carry a big GL dependency
   in both the phone and car paths.
 - **Why custom works:** the same `MapRenderer.draw(canvas, viewport)` serves the phone `View` and the
-  car `Surface` (`lockHardwareCanvas`). The engine core has no Android deps, so it is unit-tested on
+  car `Surface` (`lockCanvas`; `lockHardwareCanvas` crashed on host surface teardown). The engine core has no Android deps, so it is unit-tested on
   the JVM and can render real areas to PNG on the desktop for visual review.
 
 ### 2. Block grid and levels of detail
@@ -55,7 +55,7 @@ not a smooth vector map with a pixel filter.
      - **Companion notification mirroring (`GoogleMapsNotificationService`):** Reads ongoing turn-by-turn notifications from `com.google.android.apps.maps` (when the user grants Notification Access) so Google Maps' live turn instructions and traffic ETA appear in MineMaps' banner alongside the block-map route; also accepts shared Google Maps links/places via `ACTION_SEND` and `geo:` intents and offers a one-tap *Google Maps* handoff button.
      - **Bring-your-own Google API key:** When a user supplies their own Google Maps Platform API key in Settings, search queries Google Places API v1 (`places:searchText`) and routing queries Google Routes API v2 (`computeRoutes` with `TRAFFIC_AWARE` and `TRAFFIC_ON_POLYLINE`), colouring slow/jammed route segments amber and red.
 
-### 5. Android Auto: NAVIGATION category (no routing) + `NavigationTemplate` + `ACCESS_SURFACE`
+### 5. Android Auto: NAVIGATION category (no `NavigationManager` session) + `NavigationTemplate` + `ACCESS_SURFACE`
 - Android Auto gives the host's **map slot** (full screen, or the map pane of the split dashboard next to media apps)
   only to apps in `androidx.car.app.category.NAVIGATION`. A POI-category app is always second to Google Maps and can't take
   that slot, so MineMaps declares `NAVIGATION` with `androidx.car.app.NAVIGATION_TEMPLATES` (plus `MAP_TEMPLATES`, kept for
@@ -63,12 +63,12 @@ not a smooth vector map with a pixel filter.
   The root uses API-1-compatible zoom/recenter actions in the main strip on legacy hosts; API 2+
   adds the separate map action strip and PAN. Places/results use plain lists below API 7, and
   `MapWithContentTemplate` at API 7+. Unknown handshake capabilities are treated conservatively as API 1.
-- There is still **no routing or turn-by-turn**: the app never calls `NavigationManager.navigationStarted`, so other apps'
+- The car app never calls `NavigationManager.navigationStarted`, so even when MineMaps displays its own route line and `MessageInfo` turn banner (Section 4), other apps'
   guidance is never suppressed. This is deliberate and means the app does not meet the Play quality rules for navigation
   apps (e.g. NF-1/4/7); it is sideload-only ("Unknown sources" in Android Auto developer settings), not Play-compliant.
-- Root screen: a map-first `NavigationTemplate` (no navigation info or travel estimate; `MessageInfo` only for status such
-  as missing permission, offline, location off). Action strip: Places (pushes a `MapWithContentTemplate` list of saved
-  places), street-names toggle. Map action strip: PAN, zoom in/out, recenter.
+- Root screen: a map-first `NavigationTemplate` (`MessageInfo` shows active turn/ETA banners or status such as missing
+  permission, offline, location off). Action strip: Places (pushes a `MapWithContentTemplate` list of saved places) and
+  toggles for street names, traffic, and road alerts (API 2+; API 1 puts zoom/recenter in the main strip). Map action strip (API 2+): PAN, zoom in/out, recenter.
 - The `androidx.car.app.action.NAVIGATE` intent (`geo:` scheme) is handled in `Session.onCreateScreen/onNewIntent`:
   `geo:lat,lon` and `geo:0,0?q=lat,lon(label)` show the place with the search pin and a "doesn't give directions" toast;
   `geo:0,0?q=text` runs a Photon search and lists the results.

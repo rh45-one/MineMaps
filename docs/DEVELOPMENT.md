@@ -26,7 +26,7 @@ tools/render/     Desktop CLI renderer and benchmark
 tools/art/        make_atlas.py (original textures, icons, app icon),
                   make_android_icons.py (launcher icons), and
                   import_minecraft.py (local Minecraft texture importer)
-tools/ci/         CI verification scripts (verify-apk.sh)
+tools/ci/         CI verification scripts (verify-apk.sh, test-verify-apk.sh)
 tools/            Helper scripts for physical phone (phone.sh), Android Auto DHU
                   (head-unit.sh), and one-command local Minecraft builds (build-minecraft.sh)
 docs/             Architecture, engine spec, assets, releasing, status, licences
@@ -200,7 +200,7 @@ python3 tools/art/make_android_icons.py     # if the launcher icon changed
 
 ### Building an APK with bundled Minecraft textures (personal use only)
 
-End users can import Minecraft textures directly inside the app (**Settings → Textures → Include Minecraft textures**), which uses the pure-JVM importer in `mapengine/src/main/kotlin/app/minemaps/engine/art/importer/`.
+End users can import Minecraft textures or custom resource packs directly inside the app (**Settings → Textures & Appearance → Textures**), which uses the pure-JVM importer in `mapengine/src/main/kotlin/app/minemaps/engine/art/importer/`.
 
 If you are building from source for your own devices, you can also bundle the pack at compile time into `mapengine/src/main/resources/minemaps/packs/vanilla/` (git-ignored):
 

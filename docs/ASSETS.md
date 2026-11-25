@@ -20,7 +20,7 @@ All artwork is original and generated reproducibly; no Minecraft files are used.
 | `ORIGINAL` | `minemaps/atlas.png` + `atlas.json` (classpath) | `tools/art/make_atlas.py` (original art, committed) |
 | `VANILLA` | `minemaps/packs/vanilla/` (classpath, local self-builds) or `filesDir/packs/vanilla/` (imported in-app) | `MinecraftImporter` on device (pinned client jar 26.3 or user file) or `tools/art/import_minecraft.py` locally (never committed or shipped in releases) |
 
-Both atlases use the same texture names, icon names and JSON keys; variant counts may differ. `MapEngine` resolves `VANILLA` from the bundled classpath copy first, then from the validated pack in `filesDir/packs/vanilla/`, and falls back to `ORIGINAL` when neither is present (in which case Settings offers *Include Minecraft textures* / *Import from file…*).
+Both atlases use the same texture names, icon names and JSON keys; variant counts may differ. `MapEngine` resolves `VANILLA` from the bundled classpath copy first, then from the validated pack in `filesDir/packs/vanilla/`, and falls back to `ORIGINAL` when neither is present (in which case **Settings → Textures & Appearance → Textures** offers *Minecraft textures* / *Import resource pack (.zip) / JAR…*).
 
 The importer (`MinecraftImporter` in `:mapengine` and `tools/art/import_minecraft.py`) feeds the atlas names from these game files (`assets/minecraft/textures/...`): grass/park: `block/grass_block_top` tinted from `colormap/grass`
 (plains / lusher biome), park flowers also `block/poppy`, `block/dandelion`; leaves: `block/oak_leaves` tinted from `colormap/foliage`; water: `block/water_still`
@@ -29,8 +29,8 @@ stone_bricks `block/stone_bricks` + `cracked_stone_bricks`; dirt_path `block/dir
 wetland `block/mud` + swamp-tinted grass; roofs: `bricks`, `oak_planks`, `spruce_planks`, `polished_andesite` (or `stone`), `white_concrete`, `terracotta`;
 rail: gravel + `block/rail`; grave: grass + stone_bricks headstone. Icons come from `item/*` (apple, bread, cooked_beef, emerald, gold_ingot, coal, potion + overlay, book,
 minecart, honey_bottle, iron_pickaxe/axe/sword/shovel, compass_00, bell, cod, diamond, iron_ingot, redstone, golden_apple, cake, cookie, filled_map/map, clock_00, bow, lantern,
-oak_boat, bucket, nether_star), `block/oak_sapling`, `block/torch`, `block/poppy`; `pin` = `map/decorations/red_banner`, `player` = `map/decorations/player` (horizontally centred in its 16×16 cell).
-`bed` and `chest` have no 2D item texture in the game and keep the MineMaps drawing (see `SOURCE.txt`). Exact mapping: `recipes()` in `tools/art/import_minecraft.py` and `MinecraftImporter.kt`.
+oak_boat, bucket, nether_star), `block/oak_sapling`, `block/torch`, `block/poppy`; `pin` = `map/decorations/red_banner`, `player` = `map/decorations/player` (centred in its 16×16 cell), `chest` = `entity/chest/normal` (lid, base, and lock composited from the entity texture).
+`bed` has no 2D item texture in the game and keeps the MineMaps drawing (see `SOURCE.txt`). Exact mapping: `recipes()` in `tools/art/import_minecraft.py` and `MinecraftImporter.kt`.
 
 ## Anchors
 
