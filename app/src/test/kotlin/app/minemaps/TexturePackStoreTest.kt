@@ -191,28 +191,42 @@ class TexturePackStoreTest {
         failure.get()?.let { throw it }
 
         // Now verify remove() racing with install() never resurrects vanilla.old
+        val tmpDir = File(filesDir, "packs/vanilla.tmp")
         val inStaging = CountDownLatch(1)
         val allowFinish = CountDownLatch(1)
+        val threadFailure = AtomicReference<Throwable?>(null)
         val installer = Thread {
-            store.install(packB, "Imported from: Pack B\n", metaB) {
-                if (inStaging.count > 0) {
-                    inStaging.countDown()
-                    assertTrue(allowFinish.await(5, TimeUnit.SECONDS))
+            try {
+                store.install(packB, "Imported from: Pack B\n", metaB) {
+                    if (tmpDir.exists() && inStaging.count > 0) {
+                        inStaging.countDown()
+                        assertTrue(allowFinish.await(5, TimeUnit.SECONDS))
+                    }
                 }
+            } catch (t: Throwable) {
+                threadFailure.compareAndSet(null, t)
             }
         }
         installer.start()
         assertTrue(inStaging.await(5, TimeUnit.SECONDS))
         val removerDone = CountDownLatch(1)
         val remover = Thread {
-            store.remove()
-            removerDone.countDown()
+            try {
+                store.remove()
+            } catch (t: Throwable) {
+                threadFailure.compareAndSet(null, t)
+            } finally {
+                removerDone.countDown()
+            }
         }
         remover.start()
         allowFinish.countDown()
         installer.join(5000)
+        assertFalse(installer.isAlive)
         assertTrue(removerDone.await(5, TimeUnit.SECONDS))
         remover.join(5000)
+        assertFalse(remover.isAlive)
+        threadFailure.get()?.let { throw it }
 
         assertFalse(File(filesDir, "packs/vanilla").exists())
         assertFalse(File(filesDir, "packs/vanilla.tmp").exists())
